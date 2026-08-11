@@ -819,6 +819,9 @@ TENANT_TABLES = [
     # к моменту работы с кодом школа уже названа (слаг приходит в запросе входа),
     # то есть app.tenant_id выставлен.
     "auth_code", "auth_attempt",
+    # Заявки из кабинета родителя (db/011_family_requests.sql). Тенант к этому
+    # моменту известен из сессии — обычная политика, без исключений.
+    "family_request",
 ]
 
 # Связующие таблицы без собственного tenant_id: их закрывает подзапрос
@@ -917,7 +920,7 @@ def test_first_school_sees_nothing_of_the_second(sql) -> None:
     # она работает через код приложения напрямую, а не через HTTP, поэтому
     # ни кодов, ни попыток входа в её истории нет.
     unexpected_empty = set(empty) - {"study_group", "lesson_series", "task", "lesson_note",
-                                     "auth_code", "auth_attempt"}
+                                     "auth_code", "auth_attempt", "family_request"}
     assert unexpected_empty == set(), f"под тенантом не видно и своих данных: {unexpected_empty}"
 
 

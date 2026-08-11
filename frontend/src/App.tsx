@@ -15,6 +15,7 @@ import { useTheme } from './lib/useTheme';
 import { initials, money, plural, signedMoney } from './lib/format';
 import { TODAY } from './lib/today';
 import { LoginScreen } from './features/auth/LoginScreen';
+import { FamilyCabinet } from './features/family/FamilyCabinet';
 import { ScheduleScreen } from './features/schedule/ScheduleScreen';
 import { AttendancePanel, type AppliedResult, type RevokedResult } from './features/attendance/AttendancePanel';
 import { StudentsScreen } from './features/students/StudentsScreen';
@@ -63,12 +64,23 @@ export default function App() {
     );
   }
 
-  return (
-    // key по пользователю: вход другой ролью обязан начинать с чистого
-    // состояния, иначе на экране останутся филиал и открытая карточка
-    // предыдущего — то есть ровно те данные, которые новой роли не положены.
-    <Workspace key={session.me.user_id} me={session.me} onSignOut={session.signOut} />
-  );
+  // key по пользователю: вход другой ролью обязан начинать с чистого
+  // состояния, иначе на экране останутся филиал и открытая карточка
+  // предыдущего — то есть ровно те данные, которые новой роли не положены.
+  const key = session.me.user_id;
+
+  /**
+   * Родитель и взрослый ученик попадают в отдельный кабинет, а не в урезанное
+   * рабочее пространство. Это не вопрос прав — права закрывает `access.ts`, —
+   * а вопрос работы: у администратора смена и десятки действий, у родителя
+   * один вопрос за раз. Общий макет, ужатый до двух пунктов меню, остался бы
+   * административным по ритму: плотным, табличным и рассчитанным на стол.
+   */
+  if (accessFor(session.me).familyCabinet) {
+    return <FamilyCabinet key={key} me={session.me} onSignOut={session.signOut} />;
+  }
+
+  return <Workspace key={key} me={session.me} onSignOut={session.signOut} />;
 }
 
 /** Пока не известно, кто вошёл, показывать нечего — но и мигать пустотой нельзя. */

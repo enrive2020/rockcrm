@@ -42,6 +42,14 @@ export interface Access {
   sell: boolean;
   /** Переключатель филиалов имеет смысл только там, где есть сетка филиала. */
   branchSwitch: boolean;
+  /**
+   * Ресурсы `/me/*` → роли `guardian` и `student`. Это не «урезанный
+   * административный интерфейс», а другой макет целиком: у родителя один
+   * вопрос за раз — когда вести, сколько осталось, что задали, — и плотные
+   * таблицы с фильтрами ему мешают. Взрослый ученик платит за себя сам
+   * и должен видеть то же, что родитель видит про ребёнка.
+   */
+  familyCabinet: boolean;
 }
 
 const STAFF: Role[] = ['owner', 'admin', 'teacher'];
@@ -62,6 +70,7 @@ export function accessFor(me: Me): Access {
     myPayroll: role === 'teacher' && me.staff_id !== null,
     sell: isAdminOrOwner,
     branchSwitch: isStaff,
+    familyCabinet: role === 'guardian' || role === 'student',
   };
 }
 

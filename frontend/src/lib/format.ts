@@ -121,6 +121,32 @@ export const monthBounds = (date: string): { from: string; to: string } => {
   return { from: `${y}-${mm}-01`, to: `${y}-${mm}-${String(last).padStart(2, '0')}` };
 };
 
+/**
+ * Границы недели, в которую попадает дата: понедельник — воскресенье
+ * включительно. Неделя начинается с понедельника, потому что расписание
+ * музыкальной школы живёт учебной неделей, а не календарём США.
+ */
+export const weekBounds = (date: string): { from: string; to: string } => {
+  const d = parseDate(date);
+  // getUTCDay(): 0 — воскресенье, поэтому оно и есть последний день недели
+  const shift = (d.getUTCDay() + 6) % 7;
+  const from = shiftDate(date, -shift);
+  return { from, to: shiftDate(from, 6) };
+};
+
+/**
+ * «Сегодня», «Завтра», «Вчера» — иначе календарной датой. Родитель читает
+ * ближайшее занятие на ходу, и «Завтра, 11:00» он понимает без пересчёта,
+ * а «13 августа» требует вспомнить, какое сегодня число.
+ */
+export const relativeDay = (date: string, today: string): string => {
+  const diff = daysBetween(today, date);
+  if (diff === 0) return 'Сегодня';
+  if (diff === 1) return 'Завтра';
+  if (diff === -1) return 'Вчера';
+  return longDate(date);
+};
+
 /** Сдвиг на календарные месяцы: «прошлый месяц» в переключателе периода. */
 export const shiftMonth = (date: string, months: number): string => {
   const [y, m, d] = date.split('-').map(Number);

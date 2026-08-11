@@ -1066,6 +1066,217 @@ class LoggedOut(BaseModel):
     message: str
 
 
+# ---------------------------------------------------------------------------
+# Кабинет родителя
+#
+# Модели объявлены отдельно от административных НАМЕРЕННО, хотя половина полей
+# совпадает по именам. Наследоваться от `StudentCard` было бы короче ровно
+# до того дня, когда в неё добавят поле: наследник получил бы его молча,
+# и родитель увидел бы долг семьи. Здесь состав перечислен целиком,
+# и добавить в него что-то можно только руками.
+# ---------------------------------------------------------------------------
+
+
+class FamilySubscription(BaseModel):
+    lessons_balance: int
+    lessons_total: int
+    makeups_balance: int
+    valid_until: str
+    status: str
+    # Считает сервер: порог «мало» — правило школы, а не число в интерфейсе.
+    ends_soon: bool
+
+
+class NextLesson(BaseModel):
+    lesson_id: str
+    starts_at: str
+    room: str | None = None
+
+
+class TeacherName(BaseModel):
+    """Только имя. Ставки здесь нет и не будет."""
+
+    name: str
+
+
+class FamilyBranch(BaseModel):
+    name: str
+    address: str | None = None
+
+
+class Child(BaseModel):
+    student_id: str
+    name: str = Field(examples=["Амина"], description="Как зовут дома")
+    full_name: str = Field(examples=["Амина Сагындык"])
+    age: int | None = None
+    discipline: str | None = None
+    teacher: TeacherName | None = None
+    branch: FamilyBranch | None = None
+    # null — не ошибка, а повод показать «нужно продление».
+    subscription: FamilySubscription | None = None
+    next_lesson: NextLesson | None = None
+
+
+class PendingRequest(BaseModel):
+    request_id: str
+    status: str
+
+
+class FamilyLesson(BaseModel):
+    lesson_id: str
+    student_id: str
+    student_name: str
+    starts_at: str
+    ends_at: str
+    duration_min: int
+    teacher: str | None = None
+    branch: str | None = None
+    room: str | None = None
+    kind: LessonKind
+    # Отменённые занятия показываются: родитель должен видеть, что урок
+    # отменён, а не обнаружить пустоту в расписании.
+    status: LessonStatus
+    attendance: Mark | None = None
+    can_request_reschedule: bool
+    reschedule_request: PendingRequest | None = None
+
+
+class SchedulePeriod(BaseModel):
+    from_: str = Field(alias="from")
+    to: str
+
+    model_config = {"populate_by_name": True}
+
+
+class FamilySchedule(BaseModel):
+    period: SchedulePeriod
+    lessons: list[FamilyLesson]
+
+
+class FamilyNote(BaseModel):
+    """Заметка преподавателя. Сюда попадают только `visible_to_family = true` —
+    за это отвечает выборка, а не фильтр поверх ответа."""
+
+    body: str
+    homework: str | None = None
+    tags: list[str] = []
+
+
+class FamilyMakeup(BaseModel):
+    expires_on: str
+    days_left: int
+
+
+class FamilyHistoryRow(BaseModel):
+    date: str
+    starts_at: str | None = None
+    title: str
+    attendance: Mark | None = None
+    lessons_delta: int
+    makeups_delta: int
+    note: FamilyNote | None = None
+
+
+class Progress(BaseModel):
+    lessons_attended: int
+    months: int
+    # То, ради чего родитель платит и чего не видно в цифрах остатка.
+    repertoire: list[str] = []
+
+
+class ChildCard(BaseModel):
+    student_id: str
+    name: str
+    age: int | None = None
+    discipline: str | None = None
+    teacher: str | None = None
+    started_on: str
+    subscription: FamilySubscription | None = None
+    makeups: list[FamilyMakeup] = []
+    history: list[FamilyHistoryRow] = []
+    progress: Progress
+
+
+class RescheduleRequest(BaseModel):
+    reason: str | None = Field(default=None, examples=["уезжаем к бабушке"])
+    # Пожелание, а не бронь: слот к моменту рассмотрения может быть занят.
+    preferred: list[datetime] = []
+
+
+class RescheduleCreated(BaseModel):
+    request_id: str
+    status: str
+    lesson: dict[str, Any]
+    message: str
+
+
+class RenewRequest(BaseModel):
+    comment: str | None = Field(default=None, examples=["хотим 2 раза в неделю"])
+
+
+class RenewCreated(BaseModel):
+    request_id: str
+    status: str
+    student: dict[str, Any]
+    message: str
+
+
+class RequestStudent(BaseModel):
+    student_id: str
+    name: str
+
+
+class RequestAuthor(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+
+
+class RequestLesson(BaseModel):
+    lesson_id: str
+    starts_at: str
+    status: LessonStatus
+    teacher: str | None = None
+    branch: str | None = None
+    room: str | None = None
+
+
+class FamilyRequest(BaseModel):
+    request_id: str
+    kind: Literal["reschedule", "renew"]
+    status: Literal["pending", "accepted", "declined"]
+    created_at: str
+    student: RequestStudent
+    requested_by: RequestAuthor
+    lesson: RequestLesson | None = None
+    reason: str | None = None
+    preferred: list[str] = []
+    answer: str | None = None
+    answered_by: str | None = None
+    answered_at: str | None = None
+    moved_to: str | None = None
+    # Готовая фраза для тоста — только в ответе на PATCH.
+    message: str | None = None
+
+
+class RequestCounts(BaseModel):
+    pending: int
+    reschedule: int
+    renew: int
+
+
+class FamilyRequests(BaseModel):
+    counts: RequestCounts
+    requests: list[FamilyRequest]
+
+
+class RequestDecision(BaseModel):
+    status: Literal["accepted", "declined"]
+    # Обязателен при отказе: отказ без объяснения хуже отказа.
+    answer: str | None = None
+    # Чем закончился перенос: на какое занятие переставили.
+    moved_to: str | None = None
+
+
 class ErrorBody(BaseModel):
     code: str
     message: str

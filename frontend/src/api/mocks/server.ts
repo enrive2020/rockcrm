@@ -32,9 +32,19 @@ import type {
   LessonCard,
   LessonConflict,
   LessonParticipant,
+  LessonStatus,
   LostReason,
   MarkEffect,
   MarkEffects,
+  MeChild,
+  MeChildCard,
+  MeHistoryEntry,
+  MeMakeup,
+  MeNote,
+  MeProgress,
+  MeSchedule,
+  MeScheduleLesson,
+  MeSubscription,
   MoneySummary,
   PatchLeadRequest,
   PaymentMethod,
@@ -46,6 +56,10 @@ import type {
   PayrollTotals,
   PeriodClosed,
   Plan,
+  RenewCreated,
+  RenewRequest,
+  RescheduleCreated,
+  RescheduleRequest,
   RevenueReport,
   RevenueSlice,
   RoomLoad,
@@ -874,7 +888,15 @@ const delay = <T,>(value: T): Promise<T> =>
 /** Идентификаторы того же вида, что и остальные мок-данные. */
 const authUid = (n: number) => `aaaaaaaa-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
-const MOCK_TENANT: TenantRef = { id: authUid(10), name: 'RockSchool Алматы' };
+const MOCK_TENANT: TenantRef = {
+  id: authUid(10),
+  name: 'RockSchool Алматы',
+  // Контакты школы: в кабинете родителя оплаты нет намеренно, поэтому телефон
+  // и WhatsApp — не украшение, а единственный выход из тупика «надо продлить».
+  // Ни один контракт их не описывает (пробел 36) — мок отдаёт то, что должен
+  // отдавать сервер, чтобы кабинет проверялся целиком.
+  contacts: { phone: '+77273550101', whatsapp: '+77015550101' },
+};
 
 /** Код и пароль фиксированы: очереди уведомлений в моках нет, читать неоткуда. */
 const MOCK_CODE = '123456';
@@ -985,6 +1007,306 @@ function visibleStudentIds(): string[] | null {
   if (!me || me.role === 'owner' || me.role === 'admin' || me.role === 'teacher') return null;
   return me.student_ids;
 }
+
+/* ==========================================================================
+   Этап 5: кабинет родителя (docs/contract-v5.md).
+
+   Ресурсы `/me/*` собираются СЛОЖЕНИЕМ: в ответ кладётся только то, что
+   положили осознанно. Здесь нет ни долга семьи, ни риска оттока, ни ставки
+   преподавателя, ни внутренних заметок — и появиться они могут лишь тогда,
+   когда кто-то допишет их сюда руками, а не молча, вслед за новым полем
+   в общей карточке ученика.
+
+   Состав детей мок берёт из сессии, как и сервер: параметр, которым клиент
+   называет себя сам, — это параметр, которым он однажды назовётся чужим.
+   ========================================================================== */
+
+/**
+ * Порог отмены. У живого сервера это правило школы (`cancel_notice_hours`),
+ * и считает его он же: на клиенте этого числа нет нигде.
+ */
+const ME_NOTICE_HOURS = 24;
+
+/** Кому вообще открыт кабинет. Сотрудник видит то же самое в карточке ученика. */
+function familyStudentIds(): string[] {
+  const me = mockSession;
+  if (!me) throw new ApiError(401, 'unauthenticated', 'Нужен вход. Запросите код на телефон.');
+  if (me.role !== 'guardian' && me.role !== 'student') {
+    throw new ApiError(
+      403,
+      'forbidden',
+      'Кабинет открыт родителю и ученику. Сотрудник видит эти данные в карточке ученика.',
+    );
+  }
+  return me.student_ids;
+}
+
+/** Чужой ребёнок — 404, а не 403: по тому же правилу, что и везде. */
+function familyChildOr404(studentId: string): MockStudent {
+  const ids = familyStudentIds();
+  const student = ids.includes(studentId) ? STUDENTS.find((s) => s.id === studentId) : undefined;
+  if (!student) {
+    throw new ApiError(404, 'student_not_found', 'Ученик не найден. Проверьте, что открываете карточку своего ребёнка.');
+  }
+  return student;
+}
+
+/** 0 — воскресенье. Через UTC, иначе день недели поползёт от пояса браузера. */
+function weekdayOf(date: string): number {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+interface MePatternSlot {
+  weekday: number;
+  start: string;
+  duration_min: number;
+  room_id: string;
+}
+
+/**
+ * Недельный рисунок занятий. Фикстуры расписания покрывают два дня — 11 и 12
+ * августа, — а кабинету нужна неделя вперёд и назад: без неё ни «ближайшее
+ * занятие», ни заявку на перенос проверить нечем.
+ */
+const ME_PATTERN: Record<string, MePatternSlot[]> = {
+  [studentIdByName('Амина Сагындык')]: [
+    { weekday: 3, start: '11:00', duration_min: 55, room_id: ROOMS[0].id },
+    { weekday: 5, start: '11:00', duration_min: 55, room_id: ROOMS[0].id },
+  ],
+  [studentIdByName('Тимур Сагындык')]: [
+    { weekday: 2, start: '17:00', duration_min: 55, room_id: ROOMS[1].id },
+    { weekday: 4, start: '17:00', duration_min: 55, room_id: ROOMS[1].id },
+  ],
+  [studentIdByName('Дмитрий Со')]: [{ weekday: 3, start: '20:00', duration_min: 55, room_id: ROOMS[1].id }],
+};
+
+/**
+ * Отменённое занятие. Оно обязано быть в фикстурах: родитель должен увидеть
+ * в расписании «отменено», а не обнаружить пустоту и приехать к закрытой двери.
+ */
+const ME_CANCELLED = new Set([`${studentIdByName('Тимур Сагындык')}|2026-08-13`]);
+
+/** Идентификаторы сгенерированных занятий стабильны в пределах вкладки. */
+const meLessonIds = new Map<string, string>();
+let meLessonSeq = 0;
+const meLessonId = (key: string): string => {
+  let id = meLessonIds.get(key);
+  if (!id) {
+    id = `eeeeeeee-0000-4000-8000-${String(++meLessonSeq).padStart(12, '0')}`;
+    meLessonIds.set(key, id);
+  }
+  return id;
+};
+
+/** Правило переноса целиком на сервере: до занятия больше порога и оно не проведено. */
+const meCanReschedule = (startsAt: string, status: LessonStatus): boolean =>
+  status === 'planned' && Date.parse(startsAt) - MOCK_NOW > ME_NOTICE_HOURS * HOUR;
+
+/** «Амина Сагындык» → «Амина». */
+const shortName = (name: string): string => name.split(' ')[0];
+
+const meBranchOf = (branchId: string) => BRANCHES.find((b) => b.id === branchId) ?? BRANCHES[0];
+
+/** Занятие из фикстур — то же самое, что видит администратор в сетке филиала. */
+function meLessonFromFixture(lesson: MockLesson, student: MockStudent): MeScheduleLesson {
+  const startMin = toMinutes(lesson.start);
+  const startsAt = iso(lesson.date, startMin);
+  const attendance = markOf(lesson.id, student.id);
+  const status: LessonStatus = attendance ? 'held' : 'planned';
+  return {
+    lesson_id: lesson.id,
+    student_id: student.id,
+    // Короткое имя: в списке недели родитель ищет глазами «Амина», а не
+    // «Сагындык А.» — фамилию он и так знает, она у него своя.
+    student_name: shortName(student.name),
+    starts_at: startsAt,
+    ends_at: iso(lesson.date, startMin + lesson.duration_min),
+    duration_min: lesson.duration_min,
+    teacher: findTeacher(lesson.teacher_id).name,
+    branch: meBranchOf(lesson.branch_id).name,
+    room: findRoom(lesson.room_id).name,
+    kind: lesson.kind,
+    status,
+    attendance,
+    can_request_reschedule: meCanReschedule(startsAt, status),
+    reschedule_request: meRequestFor(lesson.id),
+  };
+}
+
+function meLessonFromPattern(student: MockStudent, date: string, slot: MePatternSlot): MeScheduleLesson {
+  const startMin = toMinutes(slot.start);
+  const startsAt = iso(date, startMin);
+  const cancelled = ME_CANCELLED.has(`${student.id}|${date}`);
+  // Прошедшее занятие уже отмечено, будущее — ещё нет. Отметку ставит
+  // преподаватель, поэтому у сегодняшнего прошедшего её может и не быть.
+  const attendance: AttendanceMark | null = cancelled ? 'cancelled_teacher' : Date.parse(startsAt) < MOCK_NOW ? 'came' : null;
+  const status: LessonStatus = cancelled ? 'cancelled' : attendance ? 'held' : 'planned';
+  const id = meLessonId(`${student.id}|${date}|${slot.start}`);
+  return {
+    lesson_id: id,
+    student_id: student.id,
+    student_name: shortName(student.name),
+    starts_at: startsAt,
+    ends_at: iso(date, startMin + slot.duration_min),
+    duration_min: slot.duration_min,
+    teacher: findTeacher(student.teacher_id).name,
+    branch: meBranchOf(student.branch_id).name,
+    room: findRoom(slot.room_id).name,
+    kind: 'regular',
+    status,
+    attendance,
+    can_request_reschedule: meCanReschedule(startsAt, status),
+    reschedule_request: meRequestFor(id),
+  };
+}
+
+/** Занятия всех своих детей за период, по времени. Родителю нужно «когда вести кого». */
+function meLessons(ids: string[], from: string, to: string): MeScheduleLesson[] {
+  const out: MeScheduleLesson[] = [];
+  if (from > to) return out;
+  for (const studentId of ids) {
+    const student = STUDENTS.find((s) => s.id === studentId);
+    if (!student) continue;
+    const covered = new Set<string>();
+    for (const lesson of LESSONS) {
+      if (!lesson.student_ids.includes(studentId) || lesson.date < from || lesson.date > to) continue;
+      covered.add(lesson.date);
+      out.push(meLessonFromFixture(lesson, student));
+    }
+    for (let date = from; date <= to; date = addDays(date, 1)) {
+      if (covered.has(date)) continue;
+      for (const slot of ME_PATTERN[studentId] ?? []) {
+        if (weekdayOf(date) === slot.weekday) out.push(meLessonFromPattern(student, date, slot));
+      }
+    }
+  }
+  return out.sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+}
+
+function toMeSubscription(subscription: MockSubscription | null): MeSubscription | null {
+  if (!subscription) return null;
+  return {
+    lessons_balance: subscription.lessons_balance,
+    lessons_total: subscription.lessons_total,
+    makeups_balance: subscription.makeups_balance,
+    valid_until: subscription.valid_until,
+    status: subscription.status,
+    // Порог «мало» считает сервер: это правило школы, а не число в интерфейсе.
+    ends_soon: subscription.lessons_balance <= 2 || daysBetween(MOCK_TODAY, subscription.valid_until) <= 7,
+  };
+}
+
+function toMeChild(student: MockStudent): MeChild {
+  const branch = meBranchOf(student.branch_id);
+  const next = meLessons([student.id], MOCK_TODAY, addDays(MOCK_TODAY, 30)).find(
+    (lesson) => lesson.status === 'planned' && Date.parse(lesson.starts_at) > MOCK_NOW,
+  );
+  return {
+    student_id: student.id,
+    // Родитель зовёт ребёнка по имени, а не по фамилии с инициалами.
+    name: shortName(student.name),
+    full_name: student.name,
+    age: student.age,
+    discipline: student.discipline,
+    teacher: { name: findTeacher(student.teacher_id).name },
+    branch: { name: branch.name, address: branch.name },
+    subscription: toMeSubscription(student.subscription),
+    next_lesson: next ? { lesson_id: next.lesson_id, starts_at: next.starts_at, room: next.room } : null,
+  };
+}
+
+/** Отметка восстанавливается из формулировки журнала — в фикстурах её нет отдельно. */
+function meAttendanceOf(title: string): AttendanceMark {
+  if (title.includes('Прогул')) return 'no_show';
+  if (title.includes('Отмена')) return 'cancelled_early';
+  if (title.includes('Опозд')) return 'late';
+  return 'came';
+}
+
+/** Во сколько было занятие в этот день — из фикстур, иначе из недельного рисунка. */
+function meStartsAt(student: MockStudent, date: string): string | null {
+  const fixture = LESSONS.find((l) => l.date === date && l.student_ids.includes(student.id));
+  if (fixture) return iso(date, toMinutes(fixture.start));
+  const slot = (ME_PATTERN[student.id] ?? []).find((s) => s.weekday === weekdayOf(date));
+  return slot ? iso(date, toMinutes(slot.start)) : null;
+}
+
+/**
+ * История посещений: движение абонемента вместе с занятием и заметкой.
+ * Родитель видит, за что списано, а не только сколько осталось.
+ *
+ * Внутренние заметки отсеиваются здесь, потому что мок — это и хранилище,
+ * и выборка сразу. На сервере условие видимости обязано стоять В ЗАПРОСЕ:
+ * фильтр поверх ответа рано или поздно забудут при добавлении поля.
+ */
+function meHistory(student: MockStudent): MeHistoryEntry[] {
+  const rows = new Map<string, MeHistoryEntry>();
+  for (const entry of LEDGER[student.id] ?? []) {
+    if (entry.kind !== 'charge' && entry.kind !== 'makeup_grant' && entry.kind !== 'makeup_use') continue;
+    rows.set(entry.date, {
+      date: entry.date,
+      starts_at: meStartsAt(student, entry.date),
+      // Формулировку берём из журнала: пересказ своими словами завёл бы
+      // второй источник правды рядом с движением абонемента.
+      title: entry.title,
+      attendance: meAttendanceOf(entry.title),
+      lessons_delta: entry.lessons_delta,
+      makeups_delta: entry.makeups_delta,
+      note: null,
+    });
+  }
+  for (const note of NOTES[student.id] ?? []) {
+    if (note.internal) continue;
+    const visible: MeNote = { body: note.body, homework: note.homework || null, tags: note.tags };
+    const row = rows.get(note.date);
+    if (row) {
+      row.note = visible;
+      continue;
+    }
+    // Заметка есть, а движения нет — занятие оплачено прошлым абонементом.
+    // Выбрасывать её нельзя: заметка и есть то, ради чего кабинет открывают.
+    rows.set(note.date, {
+      date: note.date,
+      starts_at: meStartsAt(student, note.date),
+      title: 'Занятие проведено',
+      attendance: 'came',
+      lessons_delta: 0,
+      makeups_delta: 0,
+      note: visible,
+    });
+  }
+  return [...rows.values()].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/** Репертуар собирается из тегов заметок — тех же, что видит родитель. */
+function meProgress(student: MockStudent, history: MeHistoryEntry[]): MeProgress {
+  const repertoire: string[] = [];
+  for (const entry of history) {
+    for (const tag of entry.note?.tags ?? []) if (!repertoire.includes(tag)) repertoire.push(tag);
+  }
+  return {
+    lessons_attended: history.filter((e) => e.attendance === 'came' || e.attendance === 'late').length,
+    months: monthsSince(student.started_on),
+    repertoire,
+  };
+}
+
+const meMakeups = (student: MockStudent): MeMakeup[] =>
+  (MAKEUPS[student.id] ?? [])
+    .filter((m) => m.used_at === null)
+    .map((m) => ({ expires_on: m.expires_on, days_left: daysBetween(MOCK_TODAY, m.expires_on) }));
+
+/**
+ * Заявки живут в памяти вкладки: повторная на то же занятие обязана дать 409.
+ * Занятие носит заявку с собой (`reschedule_request`), поэтому «уже отправлена»
+ * переживает перезагрузку — иначе родитель нажал бы второй раз и решил,
+ * что первая заявка потерялась.
+ */
+const meRescheduleRequests = new Map<string, { request_id: string; status: string }>();
+const meRequestFor = (lessonId: string) => meRescheduleRequests.get(lessonId) ?? null;
+let meRequestSeq = 0;
+const meRequestId = (): string => `dddddddd-0000-4000-8000-${String(++meRequestSeq).padStart(12, '0')}`;
 
 /* ---------- API ---------- */
 
@@ -2123,6 +2445,92 @@ export const mockApi = {
         makeups_open: subscriptions.reduce((sum, s) => sum + s.makeups_balance, 0),
         frozen_now: subscriptions.filter((s) => s.holds.some((h) => h.from <= MOCK_TODAY && MOCK_TODAY < h.to)).length,
       },
+    });
+  },
+
+  /* ---------- этап 5: кабинет родителя ---------- */
+
+  meChildren: async (): Promise<MeChild[]> => {
+    const ids = familyStudentIds();
+    return delay(ids.map((id) => STUDENTS.find((s) => s.id === id)).filter((s): s is MockStudent => Boolean(s)).map(toMeChild));
+  },
+
+  meSchedule: async (from?: string | null, to?: string | null): Promise<MeSchedule> => {
+    const ids = familyStudentIds();
+    // Без периода — неделя вперёд от сегодня, как в контракте.
+    const start = from || MOCK_TODAY;
+    const end = to || addDays(start, 6);
+    return delay({ period: { from: start, to: end }, lessons: meLessons(ids, start, end) });
+  },
+
+  meChild: async (studentId: string): Promise<MeChildCard> => {
+    const student = familyChildOr404(studentId);
+    const history = meHistory(student);
+    return delay({
+      student_id: student.id,
+      name: student.name,
+      age: student.age,
+      discipline: student.discipline,
+      teacher: findTeacher(student.teacher_id).name,
+      started_on: student.started_on,
+      subscription: toMeSubscription(student.subscription),
+      makeups: meMakeups(student),
+      history,
+      progress: meProgress(student, history),
+    });
+  },
+
+  /**
+   * Заявка, а не перенос. `reason` и `preferred` уходят в задачу администратору
+   * и родителю не возвращаются: он их только что написал.
+   */
+  requestReschedule: async (lessonId: string, payload: RescheduleRequest): Promise<RescheduleCreated> => {
+    void payload;
+    const ids = familyStudentIds();
+    const lesson = meLessons(ids, addDays(MOCK_TODAY, -90), addDays(MOCK_TODAY, 90)).find(
+      (l) => l.lesson_id === lessonId,
+    );
+    // Чужое занятие — 404, а не 403: ответ не должен подтверждать, что оно есть.
+    if (!lesson) {
+      throw new ApiError(404, 'lesson_not_found', 'Занятие не найдено. Обновите расписание и попробуйте снова.');
+    }
+    if (lesson.status !== 'planned') {
+      throw new ApiError(
+        422,
+        'lesson_not_reschedulable',
+        lesson.status === 'cancelled'
+          ? 'Занятие уже отменено — переносить нечего. О новом времени договоритесь со школой.'
+          : 'Занятие уже проведено, перенести его нельзя. По отработке позвоните в школу.',
+      );
+    }
+    if (Date.parse(lesson.starts_at) - MOCK_NOW <= ME_NOTICE_HOURS * HOUR) {
+      // Текст называет и порог, и что делать: отказ без выхода бесполезен.
+      throw new ApiError(
+        422,
+        'too_late_to_reschedule',
+        `До занятия меньше ${ME_NOTICE_HOURS} часов — заявку на перенос школа уже не примет. Позвоните администратору, он решит на месте.`,
+      );
+    }
+    if (meRescheduleRequests.has(lessonId)) {
+      throw new ApiError(409, 'request_exists', 'Заявка на это занятие уже отправлена. Администратор ответит сообщением.');
+    }
+    const request = { request_id: meRequestId(), status: 'pending' };
+    meRescheduleRequests.set(lessonId, request);
+    return delay({
+      ...request,
+      lesson: { starts_at: lesson.starts_at, student_name: lesson.student_name },
+      message: 'Заявка передана администратору. Ответ придёт сообщением.',
+    });
+  },
+
+  requestRenew: async (studentId: string, payload: RenewRequest): Promise<RenewCreated> => {
+    const student = familyChildOr404(studentId);
+    void payload;
+    return delay({
+      request_id: meRequestId(),
+      status: 'pending',
+      student: { student_id: student.id, name: student.name },
+      message: `Заявка на продление принята. Администратор свяжется с вами и примет оплату — ученик: ${student.name}.`,
     });
   },
 };

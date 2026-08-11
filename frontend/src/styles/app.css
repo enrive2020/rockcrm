@@ -641,6 +641,203 @@ tr.carried td { background: var(--accent-wash); }
   .money-ctl { padding: 0 16px 12px; }
 }
 
+/* ==========================================================================
+   Кабинет родителя (этап 5).
+
+   ОТДЕЛЬНЫЙ МАКЕТ, а не урезанный административный: ни рельса на пять
+   экранов, ни таблиц, ни фильтров. Токены те же — кабинет обязан читаться
+   как тот же продукт, — но ритм другой: крупнее кегль, больше воздуха,
+   меньше элементов на экране.
+
+   МОБИЛЬНЫЙ ВИД ПЕРВИЧЕН, и написан он первым: правила ниже — это узкий
+   экран, а медиазапрос внизу правит их для широкого, а не наоборот.
+   Родитель открывает кабинет с телефона в дверях, одной рукой.
+   ========================================================================== */
+
+.fam { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+
+/* Шапка: школа и контакты. Порядок задаётся явно, потому что на широком
+   экране навигация уезжает наверх — низ окна к рукам там не ближе */
+.fam-top {
+  order: 0; flex: none; background: var(--panel); border-bottom: 1px solid var(--line);
+  padding: 10px 14px 8px;
+}
+.fam-top-row { display: flex; align-items: center; gap: 10px; }
+.fam-top-brand { min-width: 0; }
+.fam-top-brand b {
+  display: block; font-family: var(--f-display); font-size: 16px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fam-top-brand small { font-size: 11.5px; color: var(--ink-3); }
+.fam-account { position: relative; margin-left: auto; flex: none; }
+.fam-avatar { width: 36px; height: 36px; border-radius: 5px; font-size: 13px; }
+.fam-menu { left: auto; right: 0; bottom: auto; top: calc(100% + 6px); width: 220px; }
+
+/* Телефон и WhatsApp на каждом экране: оплаты в кабинете нет намеренно,
+   и без этой строки «абонемент заканчивается» упирается в тупик */
+.fam-contacts { display: flex; gap: 8px; margin-top: 8px; }
+.fam-contact {
+  flex: 1; padding: 9px 8px; text-align: center; text-decoration: none;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2);
+  color: var(--ink-2); font-size: 12.5px; font-weight: 600;
+}
+.fam-contact:hover { border-color: var(--accent-bright); color: var(--accent); }
+
+.fam-body {
+  order: 2; flex: 1; min-height: 0; overflow-y: auto;
+  width: min(600px, 100%); margin: 0 auto; padding: 14px 14px 24px;
+}
+.fam-list { display: flex; flex-direction: column; gap: 14px; }
+.fam-card { padding: 16px; }
+.fam-card.slim { padding: 2px 0; }
+
+/* Навигация внизу — под большой палец. Три раздела, и больше их не будет:
+   у родителя один вопрос за раз */
+.fam-nav {
+  order: 3; flex: none; display: flex;
+  background: var(--panel); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.fam-nav button {
+  flex: 1; min-height: 56px; padding: 8px 6px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-3);
+}
+.fam-nav button[aria-current="true"] { color: var(--accent); box-shadow: inset 0 2px 0 var(--accent-bright); }
+.fam-nav button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------- ребёнок и ближайшее занятие ---------- */
+.fam-child-h { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.fam-child-h h2 { margin: 0; font-family: var(--f-display); font-size: 21px; font-weight: 600; }
+.fam-child-h p { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); }
+.fam-since { margin: 0 0 6px; font-size: 13px; color: var(--ink-3); }
+
+/* Ближайшее занятие — самый крупный кегль на экране: это и есть ответ
+   на главный вопрос, ради которого кабинет открывают */
+.fam-next {
+  padding: 14px; margin-bottom: 18px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2);
+}
+.fam-next-day { margin: 8px 0 0; font-size: 15px; font-weight: 600; }
+.fam-next-time { margin: 2px 0 0; font-size: 46px; line-height: 1.05; font-weight: 600; }
+.fam-next-where { margin: 6px 0 0; font-size: 14.5px; color: var(--ink-2); }
+.fam-next-addr { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); }
+.fam-next-empty { margin: 8px 0 0; font-family: var(--f-display); font-size: 19px; color: var(--ink-2); }
+.fam-next.fam-next-none { background: var(--panel); border-style: dashed; }
+
+/* ---------- абонемент ---------- */
+.fam-abon-count { display: flex; align-items: baseline; gap: 9px; margin: 8px 0 0; }
+.fam-abon-count b { font-size: 34px; font-weight: 600; line-height: 1; }
+.fam-abon-count span { font-size: 14px; color: var(--ink-3); }
+.fam-abon-foot { margin: 6px 0 0; font-size: 13px; color: var(--ink-3); }
+.fam-abon-none b { display: block; font-size: 15px; margin-top: 8px; }
+.fam-abon-none p { margin: 5px 0 0; font-size: 13.5px; color: var(--ink-2); }
+
+/* Латунный — «требует внимания, но ошибкой не является»: тот же смысл,
+   что у правок за прошлые месяцы на экране денег */
+.fam-warn {
+  margin-top: 14px; padding: 12px 13px; border-radius: 6px;
+  background: var(--accent-wash);
+  border: 1px solid color-mix(in srgb, var(--accent-bright) 42%, transparent);
+}
+.fam-warn > b { display: block; font-size: 14.5px; color: var(--accent); }
+.fam-warn p { margin: 5px 0 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+.fam-sent {
+  margin: 12px 0 0; padding: 10px 12px; border-radius: 6px;
+  background: var(--ok-wash); color: var(--ok); font-size: 13px;
+  border: 1px solid color-mix(in srgb, var(--ok) 32%, transparent);
+}
+
+/* Кнопка во всю ширину и высотой в палец: промах по кнопке на ходу
+   стоит дороже, чем лишние 20 пикселей высоты */
+.fam-btn { display: block; width: 100%; flex: none; margin-top: 12px; padding: 12px 14px; font-size: 14.5px; text-align: center; text-decoration: none; }
+.fam-quiet-link { display: block; width: 100%; margin-top: 10px; padding: 6px 0; text-align: left; font-size: 13px; color: var(--ink-3); text-decoration: none; }
+.fam-quiet-link:hover { color: var(--accent); }
+
+/* ---------- неделя ---------- */
+.fam-weeknav { display: flex; align-items: center; gap: 10px; }
+.fam-weeknav .btn { flex: none; width: 44px; height: 44px; padding: 0; font-size: 20px; }
+.fam-weeknav-title { flex: 1; min-width: 0; text-align: center; }
+.fam-weeknav-title b { display: block; font-family: var(--f-display); font-size: 16px; font-weight: 600; }
+.fam-weeknav-title small { font-size: 12px; color: var(--ink-3); }
+.fam-weeknav-title .fam-quiet-link { margin: 0; text-align: center; }
+
+.fam-day-h { margin: 0 0 8px; font-family: var(--f-display); font-size: 15px; font-weight: 600; color: var(--ink-2); }
+.fam-day-h.now { color: var(--accent); }
+.fam-lesson {
+  display: flex; gap: 12px; width: 100%; text-align: left; align-items: flex-start;
+  padding: 13px 14px; border-bottom: 1px solid var(--line-soft);
+}
+.fam-lesson:last-child { border-bottom: none; }
+.fam-lesson:hover { background: var(--panel-2); }
+.fam-lesson-time { flex: none; width: 50px; font-size: 16px; font-weight: 600; }
+.fam-lesson-main { flex: 1; min-width: 0; }
+.fam-lesson-main b { display: block; font-size: 14.5px; font-weight: 600; }
+.fam-lesson-main small { display: block; font-size: 12.5px; color: var(--ink-3); line-height: 1.45; }
+.fam-lesson-mark { flex: none; }
+/* Отменённое занятие остаётся на месте зачёркнутым: пустота в расписании
+   читается как «я перепутал» и заканчивается поездкой к закрытой двери */
+.fam-lesson.off .fam-lesson-time,
+.fam-lesson.off .fam-lesson-main b { color: var(--ink-3); text-decoration: line-through; }
+
+/* ---------- история и репертуар ---------- */
+.fam-makeups { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.fam-makeup { margin: 6px 0 0; font-size: 13.5px; }
+.fam-makeup small { display: block; font-size: 12px; color: var(--ink-3); }
+.fam-tags { margin-top: 4px; }
+.fam-seg { width: 100%; }
+.fam-seg button { flex: 1; padding: 10px 8px; font-size: 13.5px; }
+.fam-empty-h { margin: 0 0 6px; font-family: var(--f-display); font-size: 18px; font-weight: 600; }
+
+.fam-hist { padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
+.fam-hist:last-child { border-bottom: none; padding-bottom: 0; }
+.fam-hist header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 7px; }
+.fam-hist header time { font-size: 13px; font-weight: 600; }
+.fam-hist-body { margin: 0; font-size: 14px; line-height: 1.55; }
+/* Домашнее задание выделено полосой: за ним в кабинет заходят вечером,
+   и искать его в абзаце заметки родитель не должен */
+.fam-hw {
+  margin: 9px 0 0; padding: 9px 11px; border-radius: 5px;
+  background: var(--panel-2); border-left: 3px solid var(--accent-bright);
+  font-size: 13.5px; color: var(--ink-2); line-height: 1.5;
+}
+.fam-hw b { color: var(--ink); }
+.fam-hist-delta { margin: 9px 0 0; font-size: 12px; color: var(--ink-3); }
+
+/* ---------- формы кабинета ---------- */
+.fam-dlg-note { margin: 0 0 14px; font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+.fam-field { margin-bottom: 16px; }
+.fam-field > .lbl { display: block; margin-bottom: 4px; }
+.fam-area { height: auto; padding: 9px; resize: vertical; line-height: 1.5; }
+.fam-slot { display: flex; gap: 8px; margin-top: 8px; }
+.fam-contact-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.fam-contact-row .fam-btn { flex: 1 1 150px; width: auto; margin-top: 0; }
+/* Поля в кабинете выше административных: 34 пикселя — это размер под мышь */
+.fam .inp { height: 44px; font-size: 15px; }
+.fam .fam-area { height: auto; }
+
+/* Уведомление не должно висеть под панелью навигации. Селектор с `.wide`
+   намеренно: базовое правило `.toasts.wide` стоит ниже по файлу и при равной
+   специфичности победило бы — на телефоне уведомление уехало бы за край */
+.fam .toasts, .fam .toasts.wide { right: 14px; left: 14px; bottom: 74px; align-items: stretch; }
+.fam .toast { min-width: 0; max-width: none; }
+.fam .toast li { display: block; font-family: var(--f-ui); }
+.fam .toast li em { text-align: left; color: #AEB6C1; }
+
+@media (min-width: 760px) {
+  /* Широкий экран: навигация переезжает под шапку — низ окна к рукам
+     здесь не ближе, а полоса внизу экрана выглядела бы мобильной вставкой */
+  .fam-nav { order: 1; border-top: none; border-bottom: 1px solid var(--line); justify-content: center; }
+  .fam-nav button { flex: 0 0 auto; min-width: 170px; min-height: 46px; }
+  .fam-nav button[aria-current="true"] { box-shadow: inset 0 -2px 0 var(--accent-bright); }
+  .fam-top { padding: 12px 22px 10px; }
+  .fam-top-row { max-width: 600px; margin: 0 auto; }
+  .fam-contacts { max-width: 600px; margin: 8px auto 0; justify-content: flex-start; }
+  .fam-contact { flex: 0 0 auto; padding: 8px 16px; }
+  .fam-body { padding: 18px 22px 32px; }
+  .fam .toasts, .fam .toasts.wide { left: auto; right: 20px; bottom: 20px; }
+  .fam .toast { min-width: 300px; max-width: min(380px, calc(100vw - 40px)); }
+}
+
 /* ---------- уведомления ---------- */
 .toasts {
   position: fixed; right: 416px; bottom: 20px; z-index: 40;

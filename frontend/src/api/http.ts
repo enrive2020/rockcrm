@@ -33,6 +33,13 @@ import type {
   StudentSearchItem,
   TrialRequest,
   TrialResponse,
+  MeChild,
+  MeChildCard,
+  MeSchedule,
+  RenewCreated,
+  RenewRequest,
+  RescheduleCreated,
+  RescheduleRequest,
   ApiErrorBody,
   CodeSent,
   LoggedIn,
@@ -255,6 +262,35 @@ export const httpApi = {
   debtsReport: (limit = 50) => request<DebtsReport>(`/reports/debts?limit=${limit}`),
   moneySummary: (from: string, to: string, branchId?: string | null) =>
     request<MoneySummary>(`/reports/summary${periodQuery(from, to, branchId)}`),
+
+  /* ---------- этап 5: кабинет родителя ---------- */
+
+  /**
+   * Ни один из этих вызовов не принимает ни тенанта, ни списка детей:
+   * и то, и другое сервер берёт из сессии. Параметр, которым клиент называет
+   * себя сам, — это параметр, которым он однажды назовётся чужим именем.
+   */
+  meChildren: () => request<MeChild[]>('/me/children'),
+  /** Без периода сервер отдаёт неделю вперёд от сегодня. */
+  meSchedule: (from?: string | null, to?: string | null) => {
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    const query = params.toString();
+    return request<MeSchedule>(`/me/schedule${query ? `?${query}` : ''}`);
+  },
+  meChild: (studentId: string) => request<MeChildCard>(`/me/children/${encodeURIComponent(studentId)}`),
+  /** Заявка на перенос: 404 — чужое занятие, 422 — поздно или проведено, 409 — уже есть. */
+  requestReschedule: (lessonId: string, payload: RescheduleRequest) =>
+    request<RescheduleCreated>(`/me/lessons/${encodeURIComponent(lessonId)}/reschedule-request`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  requestRenew: (studentId: string, payload: RenewRequest) =>
+    request<RenewCreated>(`/me/children/${encodeURIComponent(studentId)}/renew-request`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 };
 
 /** Период плюс необязательный филиал — одинаковый хвост у пяти эндпоинтов этапа 4. */

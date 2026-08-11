@@ -2564,3 +2564,498 @@ def attention_counts(cur: psycopg.Cursor, low_threshold: int) -> dict[str, Any]:
         {"low": low_threshold},
     )
     return cur.fetchone()
+
+
+# ---------------------------------------------------------------------------
+# Кабинет родителя (issue #5)
+#
+# Запросы здесь НАМЕРЕННО не переиспользуют выборки административных экранов,
+# хотя половина колонок совпадает. Карточка ученика собирается вычитанием —
+# берём всё и убираем лишнее, — и ошибка в ней молчит: добавленное завтра поле
+# уедет родителю, если про него забыли. Здесь состав перечислен поимённо,
+# и ошибка выглядит как отсутствующее поле, а не как утечка долга семьи,
+# риска оттока или ставки преподавателя.
+#
+# Все `student_ids` приезжают из сессии (authz.visible_student_ids), а не
+# из параметров запроса: идентификатор в пути только сверяется со списком.
+# ---------------------------------------------------------------------------
+
+# Ученик глазами семьи. Ни семьи, ни плательщика, ни скидки, ни долга,
+# ни риска оттока — их нет даже в выборке, чтобы неоткуда было просочиться.
+_FAMILY_STUDENT_COLUMNS = """
+  s.id,
+  s.started_on,
+  p.first_name AS name,
+  btrim(concat_ws(' ', p.first_name, p.last_name)) AS full_name,
+  CASE WHEN p.birth_date IS NULL THEN NULL
+       ELSE date_part('year', age(p.birth_date))::int END AS age,
+  d.name AS discipline,
+  b.name    AS branch_name,
+  b.address AS branch_address,
+  coalesce(b.timezone, t.timezone) AS timezone,
+  -- Имя преподавателя и только имя: ставка сюда не выбирается вовсе.
+  coalesce(
+    nullif(btrim(concat_ws(' ', mtp.first_name, mtp.last_name)), ''),
+    lt.teacher_name
+  ) AS teacher
+"""
+
+_FAMILY_STUDENT_JOINS = """
+  FROM student s
+  JOIN person  p ON p.id = s.person_id
+  JOIN tenant  t ON t.id = s.tenant_id
+  LEFT JOIN discipline d ON d.id = s.discipline_id
+  LEFT JOIN branch     b ON b.id = s.branch_id
+  LEFT JOIN staff    mt  ON mt.id  = s.main_teacher_id
+  LEFT JOIN person   mtp ON mtp.id = mt.person_id
+  LEFT JOIN LATERAL (
+    SELECT btrim(concat_ws(' ', tp2.first_name, tp2.last_name)) AS teacher_name
+    FROM lesson l2
+    JOIN staff  st2 ON st2.id = l2.teacher_id
+    JOIN person tp2 ON tp2.id = st2.person_id
+    WHERE l2.student_id = s.id
+    ORDER BY l2.starts_at DESC
+    LIMIT 1
+  ) lt ON true
+"""
+
+
+def family_children(cur: psycopg.Cursor, student_ids: list[str]) -> list[dict[str, Any]]:
+    """Шапки своих детей. Порядок — по имени: список короткий и постоянный."""
+    if not student_ids:
+        return []
+    cur.execute(
+        f"""
+        SELECT {_FAMILY_STUDENT_COLUMNS}
+        {_FAMILY_STUDENT_JOINS}
+        WHERE s.id = ANY(%(ids)s::uuid[])
+        ORDER BY p.first_name, p.last_name
+        """,
+        {"ids": student_ids},
+    )
+    return cur.fetchall()
+
+
+def family_child(cur: psycopg.Cursor, student_id: str) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT {_FAMILY_STUDENT_COLUMNS}
+        {_FAMILY_STUDENT_JOINS}
+        WHERE s.id = %(id)s
+        """,
+        {"id": student_id},
+    )
+    return cur.fetchone()
+
+
+# Занятие глазами семьи. Заголовка чужого ученика здесь нет: имя приезжает
+# из подзапроса по СВОИМ детям, а групповое занятие даёт строку на своего
+# ребёнка и ни одной на соседей по ансамблю.
+_FAMILY_LESSON_SOURCE = """
+  FROM lesson l
+  JOIN branch b ON b.id = l.branch_id
+  JOIN tenant t ON t.id = l.tenant_id
+  JOIN room   r ON r.id = l.room_id
+  JOIN staff  st ON st.id = l.teacher_id
+  JOIN person tp ON tp.id = st.person_id
+  -- LATERAL идёт последним: он ссылается на b и t, а SQL позволяет боковому
+  -- подзапросу видеть только то, что стоит в FROM выше него.
+  JOIN LATERAL (
+    SELECT s.id AS student_id,
+           btrim(concat_ws(' ', p.first_name, p.last_name)) AS student_name
+    FROM student s
+    JOIN person p ON p.id = s.person_id
+    WHERE s.id = ANY(%(ids)s::uuid[])
+      AND (
+        l.student_id = s.id
+        OR EXISTS (
+          SELECT 1 FROM group_member gm
+          WHERE gm.group_id = l.group_id
+            AND gm.student_id = s.id
+            AND gm.joined_on <= (l.starts_at AT TIME ZONE coalesce(b.timezone, t.timezone))::date
+            AND (gm.left_on IS NULL
+                 OR gm.left_on >= (l.starts_at AT TIME ZONE coalesce(b.timezone, t.timezone))::date)
+        )
+      )
+  ) ch ON true
+"""
+
+
+def family_lessons(
+    cur: psycopg.Cursor,
+    student_ids: list[str],
+    start: dt.datetime,
+    end: dt.datetime,
+) -> list[dict[str, Any]]:
+    """Занятия всех своих детей за период, включая отменённые.
+
+    Отменённые не прячутся, в отличие от расписания филиала: родитель должен
+    увидеть, что урок отменён, а не обнаружить пустоту в сетке и приехать зря.
+    """
+    if not student_ids:
+        return []
+    cur.execute(
+        f"""
+        SELECT l.id AS lesson_id,
+               ch.student_id,
+               ch.student_name,
+               l.starts_at,
+               l.ends_at,
+               (extract(epoch FROM (l.ends_at - l.starts_at)) / 60)::int AS duration_min,
+               l.kind,
+               l.status,
+               btrim(concat_ws(' ', tp.first_name, tp.last_name)) AS teacher,
+               b.name AS branch,
+               r.name AS room,
+               coalesce(b.timezone, t.timezone) AS timezone,
+               a.mark AS attendance
+        {_FAMILY_LESSON_SOURCE}
+        LEFT JOIN attendance a
+               ON a.lesson_id = l.id AND a.student_id = ch.student_id
+              AND a.revoked_at IS NULL
+        WHERE l.starts_at >= %(start)s AND l.starts_at < %(end)s
+        ORDER BY l.starts_at, ch.student_name
+        """,
+        {"ids": student_ids, "start": start, "end": end},
+    )
+    return cur.fetchall()
+
+
+def family_next_lessons(
+    cur: psycopg.Cursor, student_ids: list[str], now: dt.datetime
+) -> dict[str, dict[str, Any]]:
+    """Ближайшее занятие каждого ребёнка. Главный вопрос кабинета — «когда вести»."""
+    if not student_ids:
+        return {}
+    cur.execute(
+        f"""
+        SELECT DISTINCT ON (ch.student_id)
+               ch.student_id,
+               l.id AS lesson_id,
+               l.starts_at,
+               r.name AS room,
+               coalesce(b.timezone, t.timezone) AS timezone
+        {_FAMILY_LESSON_SOURCE}
+        WHERE l.status = 'planned' AND l.starts_at >= %(now)s
+        ORDER BY ch.student_id, l.starts_at
+        """,
+        {"ids": student_ids, "now": now},
+    )
+    return {str(row["student_id"]): row for row in cur.fetchall()}
+
+
+def family_lesson(
+    cur: psycopg.Cursor, lesson_id: str, student_ids: list[str]
+) -> dict[str, Any] | None:
+    """Занятие, на котором стоит один из своих детей. Чужое даёт None -> 404.
+
+    Ограничение по детям стоит в этом же запросе, а не проверкой после:
+    занятие чужого ребёнка обязано быть неотличимо от несуществующего.
+    """
+    if not student_ids:
+        return None
+    cur.execute(
+        f"""
+        SELECT l.id AS lesson_id,
+               ch.student_id,
+               ch.student_name,
+               l.starts_at,
+               l.status,
+               coalesce(b.timezone, t.timezone) AS timezone,
+               a.mark AS attendance
+        {_FAMILY_LESSON_SOURCE}
+        LEFT JOIN attendance a
+               ON a.lesson_id = l.id AND a.student_id = ch.student_id
+              AND a.revoked_at IS NULL
+        WHERE l.id = %(lesson)s
+        LIMIT 1
+        """,
+        {"ids": student_ids, "lesson": lesson_id},
+    )
+    return cur.fetchone()
+
+
+def family_history(
+    cur: psycopg.Cursor, student_id: str, tz_name: str, limit: int = 50
+) -> list[dict[str, Any]]:
+    """История: движение по абонементу вместе с занятием и заметкой.
+
+    Условие видимости заметки стоит В УСЛОВИИ СОЕДИНЕНИЯ. Фильтр поверх ответа
+    («выбрали всё, потом убрали невидимое») забудут при первом же добавлении
+    поля — а цена забывчивости здесь в том, что внутренняя пометка
+    преподавателя уезжает родителю.
+    """
+    cur.execute(
+        """
+        SELECT e.id,
+               e.kind,
+               e.lessons_delta,
+               e.makeups_delta,
+               e.reason,
+               coalesce(
+                 (l.starts_at AT TIME ZONE %(tz)s)::date,
+                 (e.created_at AT TIME ZONE %(tz)s)::date
+               ) AS day,
+               l.starts_at,
+               a.mark AS attendance,
+               n.body     AS note_body,
+               n.homework AS note_homework,
+               n.tags     AS note_tags
+        FROM subscription_entry e
+        JOIN subscription sub ON sub.id = e.subscription_id
+        LEFT JOIN lesson     l ON l.id = e.lesson_id
+        LEFT JOIN attendance a ON a.id = e.attendance_id
+        LEFT JOIN lesson_note n
+               ON n.lesson_id  = e.lesson_id
+              AND n.student_id = %(student)s
+              AND n.visible_to_family
+        WHERE sub.student_id = %(student)s
+        ORDER BY e.id DESC
+        LIMIT %(limit)s
+        """,
+        {"student": student_id, "tz": tz_name, "limit": limit},
+    )
+    return cur.fetchall()
+
+
+def family_repertoire(cur: psycopg.Cursor, student_id: str) -> list[str]:
+    """Репертуар из тегов заметок — то, ради чего родитель платит.
+
+    Только видимые семье заметки: тег внутренней пометки — такая же
+    внутренняя пометка, только в одно слово.
+    """
+    cur.execute(
+        """
+        SELECT t.tag, max(n.created_at) AS last_seen
+        FROM lesson_note n, unnest(n.tags) AS t(tag)
+        WHERE n.student_id = %(student)s AND n.visible_to_family
+        GROUP BY t.tag
+        ORDER BY last_seen DESC, t.tag
+        """,
+        {"student": student_id},
+    )
+    return [row["tag"] for row in cur.fetchall()]
+
+
+def family_progress(cur: psycopg.Cursor, student_id: str) -> dict[str, Any]:
+    """Счётные факты о занятиях: сколько посещено и сколько месяцев в школе."""
+    cur.execute(
+        """
+        SELECT
+          (SELECT count(*) FROM attendance a
+            WHERE a.student_id = %(student)s
+              AND a.revoked_at IS NULL
+              AND a.mark IN ('came', 'late'))::int AS lessons_attended,
+          (SELECT (date_part('year', age(s.started_on)) * 12
+                 + date_part('month', age(s.started_on)))::int
+             FROM student s WHERE s.id = %(student)s) AS months
+        """,
+        {"student": student_id},
+    )
+    return cur.fetchone()
+
+
+def family_makeups(cur: psycopg.Cursor, student_id: str) -> list[dict[str, Any]]:
+    """Отработки, которыми ещё можно воспользоваться.
+
+    Потраченные и сгоревшие не показываем: родителю нужен ответ на вопрос
+    «сколько занятий мне ещё должны», а не история движения отработок.
+    """
+    cur.execute(
+        """
+        SELECT mc.expires_on, (mc.expires_on - current_date) AS days_left
+        FROM makeup_credit mc
+        WHERE mc.student_id = %(student)s
+          AND mc.used_at IS NULL
+          AND mc.expired_at IS NULL
+        ORDER BY mc.expires_on
+        """,
+        {"student": student_id},
+    )
+    return cur.fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Заявки из кабинета: перенос занятия и продление абонемента
+# ---------------------------------------------------------------------------
+
+# Заявка целиком — для очереди администратора и для ответа на создание.
+_REQUEST_COLUMNS = """
+  fr.id,
+  fr.kind,
+  fr.status,
+  fr.reason,
+  fr.preferred,
+  fr.answer,
+  fr.answered_at,
+  fr.created_at,
+  fr.student_id,
+  fr.lesson_id,
+  fr.moved_to,
+  btrim(concat_ws(' ', sp.first_name, sp.last_name)) AS student_name,
+  -- nullif обязателен: concat_ws на сплошных NULL отдаёт пустую строку,
+  -- и «заявку рассмотрел никто» приезжало бы в интерфейс как имя без букв.
+  nullif(btrim(concat_ws(' ', rp.first_name, rp.last_name)), '') AS requested_by_name,
+  rp.phone AS requested_by_phone,
+  nullif(btrim(concat_ws(' ', ap.first_name, ap.last_name)), '') AS answered_by_name,
+  l.starts_at AS lesson_starts_at,
+  l.status    AS lesson_status,
+  r.name      AS lesson_room,
+  b.name      AS lesson_branch,
+  nullif(btrim(concat_ws(' ', tp.first_name, tp.last_name)), '') AS lesson_teacher,
+  coalesce(b.timezone, t.timezone) AS timezone
+"""
+
+_REQUEST_JOINS = """
+  FROM family_request fr
+  JOIN tenant  t  ON t.id = fr.tenant_id
+  JOIN student s  ON s.id = fr.student_id
+  JOIN person  sp ON sp.id = s.person_id
+  LEFT JOIN app_user au  ON au.id = fr.requested_by
+  LEFT JOIN person   rp  ON rp.id = au.person_id
+  LEFT JOIN app_user ans ON ans.id = fr.answered_by
+  LEFT JOIN person   ap  ON ap.id = ans.person_id
+  LEFT JOIN lesson l  ON l.id = fr.lesson_id
+  LEFT JOIN room   r  ON r.id = l.room_id
+  LEFT JOIN branch b  ON b.id = l.branch_id
+  LEFT JOIN staff  st ON st.id = l.teacher_id
+  LEFT JOIN person tp ON tp.id = st.person_id
+"""
+
+
+def create_family_request(
+    cur: psycopg.Cursor,
+    tenant_id: str,
+    *,
+    kind: str,
+    requested_by: str,
+    student_id: str,
+    lesson_id: str | None,
+    reason: str | None,
+    preferred: list[dt.datetime],
+) -> str:
+    cur.execute(
+        """
+        INSERT INTO family_request
+          (tenant_id, kind, requested_by, student_id, lesson_id, reason, preferred)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (tenant_id, kind, requested_by, student_id, lesson_id, reason, preferred),
+    )
+    return str(cur.fetchone()["id"])
+
+
+def get_family_request(cur: psycopg.Cursor, request_id: str) -> dict[str, Any] | None:
+    cur.execute(
+        f"SELECT {_REQUEST_COLUMNS} {_REQUEST_JOINS} WHERE fr.id = %s",
+        (request_id,),
+    )
+    return cur.fetchone()
+
+
+def list_family_requests(
+    cur: psycopg.Cursor,
+    status: str | None,
+    kind: str | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Очередь администратора. Нерассмотренные — старые сверху: заявка, которую
+    не заметили три дня, важнее пришедшей минуту назад."""
+    cur.execute(
+        f"""
+        SELECT {_REQUEST_COLUMNS} {_REQUEST_JOINS}
+        WHERE (%(status)s::text IS NULL OR fr.status = %(status)s)
+          AND (%(kind)s::text   IS NULL OR fr.kind   = %(kind)s)
+        ORDER BY (fr.status = 'pending') DESC,
+                 CASE WHEN fr.status = 'pending' THEN fr.created_at END ASC,
+                 fr.created_at DESC
+        LIMIT %(limit)s
+        """,
+        {"status": status, "kind": kind, "limit": limit},
+    )
+    return cur.fetchall()
+
+
+def family_request_counts(cur: psycopg.Cursor) -> dict[str, Any]:
+    cur.execute(
+        """
+        SELECT count(*) FILTER (WHERE status = 'pending')::int AS pending,
+               count(*) FILTER (WHERE status = 'pending'
+                                  AND kind = 'reschedule')::int AS reschedule,
+               count(*) FILTER (WHERE status = 'pending'
+                                  AND kind = 'renew')::int      AS renew
+        FROM family_request
+        """
+    )
+    return cur.fetchone()
+
+
+def pending_family_request(
+    cur: psycopg.Cursor, kind: str, student_id: str, lesson_id: str | None
+) -> dict[str, Any] | None:
+    """Открытая заявка того же вида. Повторная почти всегда двойное нажатие."""
+    cur.execute(
+        """
+        SELECT id, created_at FROM family_request
+        WHERE status = 'pending'
+          AND kind = %(kind)s
+          AND student_id = %(student)s
+          AND (%(lesson)s::uuid IS NULL OR lesson_id = %(lesson)s::uuid)
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        {"kind": kind, "student": student_id, "lesson": lesson_id},
+    )
+    return cur.fetchone()
+
+
+def open_reschedule_requests(
+    cur: psycopg.Cursor, lesson_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    """Открытые заявки на перенос по списку занятий — для расписания кабинета."""
+    if not lesson_ids:
+        return {}
+    cur.execute(
+        """
+        SELECT id, lesson_id, status, created_at
+        FROM family_request
+        WHERE kind = 'reschedule'
+          AND status = 'pending'
+          AND lesson_id = ANY(%s::uuid[])
+        """,
+        (lesson_ids,),
+    )
+    return {str(row["lesson_id"]): row for row in cur.fetchall()}
+
+
+def answer_family_request(
+    cur: psycopg.Cursor,
+    request_id: str,
+    *,
+    status: str,
+    answer: str | None,
+    moved_to: str | None,
+    answered_by: str,
+) -> bool:
+    """Рассмотрение заявки. Условие `status = 'pending'` и есть ключ гонки:
+    два администратора, открывшие очередь одновременно, не ответят дважды."""
+    cur.execute(
+        """
+        UPDATE family_request
+        SET status = %(status)s,
+            answer = %(answer)s,
+            moved_to = %(moved_to)s,
+            answered_by = %(by)s,
+            answered_at = now()
+        WHERE id = %(id)s AND status = 'pending'
+        """,
+        {
+            "id": request_id,
+            "status": status,
+            "answer": answer,
+            "moved_to": moved_to,
+            "by": answered_by,
+        },
+    )
+    return cur.rowcount > 0
