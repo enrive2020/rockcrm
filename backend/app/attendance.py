@@ -98,28 +98,29 @@ def apply_mark(
         raise ApiError(409, "lesson_cancelled", "Занятие отменено — отмечать нечего.")
     _require_participant(cur, lesson, student_id)
 
-    # Уникальный индекс attendance (lesson_id, student_id) не частичный: отменённая
-    # отметка продолжает занимать место. Ловим это заранее — сообщение «сначала
-    # отмените прежнюю» сразу после отмены звучало бы издевательством.
+    # Действующая отметка — ровно одна на пару (занятие, ученик); это же
+    # держит частичный индекс attendance_active_uniq. Проверяем и здесь,
+    # чтобы в ответе была прежняя отметка: «уже отмечен» без «чем именно»
+    # не говорит администратору, надо ли вообще что-то менять.
+    #
+    # Отменённые строки в условие не входят намеренно. Пока индекс был
+    # сплошным, отменённая отметка продолжала занимать ключ, и после отмены
+    # ошибочной отметки занятие оставалось неотмеченным навсегда — тупик,
+    # из которого приложение умело только вежливо объясниться.
     cur.execute(
-        "SELECT id, mark, revoked_at FROM attendance WHERE lesson_id = %s AND student_id = %s",
+        """
+        SELECT id, mark FROM attendance
+        WHERE lesson_id = %s AND student_id = %s AND revoked_at IS NULL
+        """,
         (lesson_id, student_id),
     )
     existing = cur.fetchone()
     if existing is not None:
-        if existing["revoked_at"] is None:
-            raise ApiError(
-                409,
-                "already_marked",
-                "Ученик уже отмечен на этом занятии. Сначала отмените прежнюю отметку.",
-                {"attendance_id": str(existing["id"]), "mark": existing["mark"]},
-            )
         raise ApiError(
             409,
-            "mark_revoked",
-            "Отметка по этому ученику на этом занятии уже отменялась. Повторно "
-            "отметить то же занятие база не даёт — проведите его как отработку.",
-            {"attendance_id": str(existing["id"])},
+            "already_marked",
+            "Ученик уже отмечен на этом занятии. Сначала отмените прежнюю отметку.",
+            {"attendance_id": str(existing["id"]), "mark": existing["mark"]},
         )
 
     # Блокируем абонемент до конца транзакции: без этого два одновременных
@@ -138,8 +139,9 @@ def apply_mark(
             {"subscription_id": subscription.id if subscription else None},
         )
 
-    # 1. Отметка. Уникальный индекс (lesson_id, student_id) ловит двойной клик
-    #    и повторную доставку запроса — ошибка переводится в 409 выше по стеку.
+    # 1. Отметка. Частичный индекс attendance_active_uniq ловит двойной клик
+    #    и повторную доставку запроса в гонке, когда проверка выше прошла
+    #    у обоих запросов, — ошибка переводится в 409 выше по стеку.
     cur.execute(
         """
         INSERT INTO attendance (tenant_id, lesson_id, student_id, mark, marked_by)

@@ -21,7 +21,14 @@ import psycopg
 
 from . import journal, repository as repo
 from .errors import ApiError, not_found
-from .rules import DEFAULT_RULES, days_word, freeze_reason, lessons_word, unfreeze_reason
+from .rules import (
+    DEFAULT_RULES,
+    days_word,
+    freeze_reason,
+    lessons_word,
+    makeup_expire_reason,
+    unfreeze_reason,
+)
 
 
 def _charged(price: Decimal, discount_pct: Decimal) -> int:
@@ -607,6 +614,158 @@ def sync_statuses(cur: psycopg.Cursor, today: dt.date) -> list[dict[str, Any]]:
         RETURNING s.id, s.student_id, s.status
         """,
         {"today": today},
+    )
+    return cur.fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Сгорание отработок по сроку
+#
+# У каждой отработки есть expires_on, но до сих пор его никто не гасил:
+# просроченные висели в балансе вечно, и школа продолжала быть должна
+# занятия, право на которые истекло полгода назад. Срок без задания,
+# которое его применяет, — это не срок, а строчка в договоре.
+# ---------------------------------------------------------------------------
+
+# За сколько дней предупредить родителя (spec.md §8: «Отработка сгорает —
+# родителю, WhatsApp, за 5 дней»). Пять дней — это ещё выходные плюс будний
+# день: успеть договориться о слоте и прийти.
+MAKEUP_WARN_DAYS = 5
+
+
+def expire_makeups(
+    cur: psycopg.Cursor, tenant_id: str, today: dt.date
+) -> list[dict[str, Any]]:
+    """Гасит просроченные отработки школы. Возвращает сгоревшие.
+
+    Идемпотентность держится на самой отработке, а не на отметке «задание
+    отработало»: ключ — `expired_at`. UPDATE выбирает только строки, где он
+    пустой, и возвращает ровно те, которые изменил, поэтому запись в журнал
+    делается на то же множество, что и списание. Второй прогон подряд
+    не находит ничего и не пишет ничего; прогон после сбоя безопасен.
+
+    Сгорает отработка на следующий день после `expires_on`, а не в сам этот
+    день: «действует до 1 сентября» родитель понимает как «первого ещё можно»,
+    и карточка ученика показывает `days_left = 0` как последний день, а не
+    как вчерашний. Отсюда строгое `<`.
+
+    Число сгораний ограничено остатком отработок абонемента. В согласованных
+    данных ограничение не срабатывает — остаток и есть число непогашенных
+    отработок, — но если журнал и таблица разошлись, задание не имеет права
+    увести баланс в минус и показать родителю «−1 отработка».
+    """
+    cur.execute(
+        """
+        WITH due AS (
+          SELECT mc.id,
+                 mc.subscription_id,
+                 mc.student_id,
+                 mc.expires_on,
+                 s.makeups_balance,
+                 row_number() OVER (
+                   PARTITION BY mc.subscription_id ORDER BY mc.expires_on, mc.id
+                 ) AS rn
+          FROM makeup_credit mc
+          JOIN subscription s ON s.id = mc.subscription_id
+          WHERE mc.used_at IS NULL
+            AND mc.expired_at IS NULL
+            AND mc.expires_on < %(today)s
+        )
+        UPDATE makeup_credit mc
+        SET expired_at = now()
+        FROM due
+        WHERE mc.id = due.id AND due.rn <= due.makeups_balance
+        RETURNING mc.id, mc.subscription_id, mc.student_id, due.expires_on
+        """,
+        {"today": today},
+    )
+    burned = cur.fetchall()
+
+    for row in burned:
+        # Строка журнала обязательна: остаток отработок ведёт триггер от
+        # журнала, и погасить кредит, не записав движение, значило бы
+        # оставить баланс прежним, а отработку — исчезнувшей.
+        #
+        # lesson_id намеренно пустой, хотя занятие известно (granted_for):
+        # с ним журнал датировал бы сгорание днём пропущенного урока —
+        # месяцем раньше того, когда отработка действительно сгорела.
+        journal.add_entry(
+            cur,
+            tenant_id,
+            str(row["subscription_id"]),
+            kind="makeup_expire",
+            lessons_delta=0,
+            makeups_delta=-1,
+            reason=makeup_expire_reason(row["expires_on"]),
+            # Автора нет: сгорание — следствие календаря, а не чьего-то
+            # решения. Приписать его администратору, запустившему задание,
+            # значило бы соврать в единственном месте, где ищут виноватого.
+            actor_id=None,
+        )
+        journal.audit(
+            cur,
+            tenant_id,
+            None,
+            "makeup.expire",
+            "makeup_credit",
+            str(row["id"]),
+            {
+                "subscription_id": str(row["subscription_id"]),
+                "student_id": str(row["student_id"]),
+                "expires_on": row["expires_on"].isoformat(),
+            },
+        )
+    return burned
+
+
+def warn_expiring_makeups(
+    cur: psycopg.Cursor, tenant_id: str, today: dt.date
+) -> list[dict[str, Any]]:
+    """Ставит в очередь предупреждение родителю о скором сгорании отработки.
+
+    Окно, а не ровно пятый день: задание, пропустившее сутки из-за сбоя,
+    иначе молча потеряло бы всех, у кого срок пришёлся на этот день.
+    От повторов бережёт не узость окна, а `dedup_key` — уникальный индекс
+    `notification_dedup` не даст вставить второе сообщение о той же
+    отработке, сколько бы раз задание ни отработало.
+
+    Адрес — телефон плательщика семьи, а не ученика: сообщение получает тот,
+    кто принимает решение и водит ребёнка, а у ребёнка своего телефона
+    обычно и нет. Без телефона строка пропускается: `notification`
+    без адреса — это сообщение, которое никогда не уйдёт.
+    """
+    cur.execute(
+        """
+        INSERT INTO notification
+            (tenant_id, person_id, channel, template, payload, to_address, dedup_key)
+        SELECT %(tenant)s,
+               coalesce(payer.id, sp.id),
+               'whatsapp',
+               'makeup_expiring',
+               jsonb_build_object(
+                 'makeup_id',    mc.id,
+                 'student_id',   mc.student_id,
+                 'student_name', btrim(concat_ws(' ', sp.first_name, sp.last_name)),
+                 'expires_on',   mc.expires_on,
+                 'days_left',    mc.expires_on - %(today)s::date
+               ),
+               coalesce(payer.phone, sp.phone),
+               'makeup_expiring:' || mc.id
+        FROM makeup_credit mc
+        JOIN student st ON st.id = mc.student_id
+        JOIN person  sp ON sp.id = st.person_id
+        LEFT JOIN family f     ON f.id = st.family_id
+        LEFT JOIN person payer ON payer.id = f.payer_id
+        WHERE mc.used_at IS NULL
+          AND mc.expired_at IS NULL
+          AND st.archived_at IS NULL
+          AND mc.expires_on >= %(today)s::date
+          AND mc.expires_on <= %(today)s::date + %(lead)s
+          AND coalesce(payer.phone, sp.phone) IS NOT NULL
+        ON CONFLICT (tenant_id, dedup_key) WHERE dedup_key IS NOT NULL DO NOTHING
+        RETURNING id
+        """,
+        {"tenant": tenant_id, "today": today, "lead": MAKEUP_WARN_DAYS},
     )
     return cur.fetchall()
 

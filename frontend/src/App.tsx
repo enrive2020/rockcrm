@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { USE_MOCKS, api, type Branch, type ScheduleLesson, type ScheduleResponse } from './api';
 import { useAsync } from './lib/useAsync';
 import { useTheme } from './lib/useTheme';
-import { initials, money, plural } from './lib/format';
+import { initials, money, plural, signedMoney } from './lib/format';
 import { TODAY } from './lib/today';
 import { ScheduleScreen } from './features/schedule/ScheduleScreen';
-import { AttendancePanel, type AppliedResult } from './features/attendance/AttendancePanel';
+import { AttendancePanel, type AppliedResult, type RevokedResult } from './features/attendance/AttendancePanel';
 import { StudentsScreen } from './features/students/StudentsScreen';
 import { StudentCardScreen } from './features/students/StudentCardScreen';
 import { LeadsScreen } from './features/leads/LeadsScreen';
@@ -82,6 +82,39 @@ export default function App() {
       }
       schedule.reload();
       setSelectedId(null);
+    },
+    [pushToast, schedule],
+  );
+
+  /**
+   * Отмена отметки: показываем то, что вернул сервер, и перечитываем день.
+   * Панель при этом остаётся открытой — после исправления ошибки почти всегда
+   * ставят правильную отметку тут же, и закрывать её значило бы заставить
+   * администратора искать занятие в расписании заново.
+   */
+  const handleRevoked = useCallback(
+    ({ participant, response }: RevokedResult) => {
+      const reverted = response.reverted;
+      const rows = [
+        { label: 'Была отметка', value: MARK_LABELS[response.mark] },
+        {
+          label: 'Абонемент',
+          value:
+            reverted.lessons_delta === 0
+              ? 'списания не было'
+              : `+${reverted.lessons_delta}${reverted.lessons_after === null ? '' : ` → ${reverted.lessons_after}`}`,
+        },
+        { label: 'Преподавателю', value: signedMoney(reverted.teacher_amount) },
+      ];
+      if (reverted.makeups_delta !== 0) {
+        rows.push({ label: 'Отработки', value: String(reverted.makeups_delta) });
+      }
+      rows.push({
+        label: 'Занятие',
+        value: response.lesson_status === 'planned' ? 'снова запланировано' : 'остаётся проведённым',
+      });
+      pushToast({ title: `Отметка отменена · ${participant.name}`, rows });
+      schedule.reload();
     },
     [pushToast, schedule],
   );
@@ -224,6 +257,7 @@ export default function App() {
         lessonId={selectedId}
         onClose={() => setSelectedId(null)}
         onApplied={handleApplied}
+        onRevoked={handleRevoked}
         onOpenStudent={(id) => openStudent(id, 'schedule')}
       />
       <Toasts items={toasts} onDismiss={dismissToast} shifted={selectedId !== null} />

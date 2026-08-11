@@ -3,6 +3,7 @@ import type {
   AttendanceMark,
   AttendanceRequest,
   AttendanceResponse,
+  AttendanceRevokeResponse,
   BoardColumn,
   BoardLead,
   Branch,
@@ -10,6 +11,9 @@ import type {
   ConvertRequest,
   ConvertResponse,
   CreateLeadRequest,
+  DirectoryRoom,
+  DirectoryTeacher,
+  Discipline,
   Family,
   FunnelReport,
   FunnelSourceRow,
@@ -46,6 +50,7 @@ import {
   BRANCH_AF,
   CURRENT_USER,
   DEFAULT_RULES,
+  DISCIPLINES,
   FAMILIES,
   LEADS,
   LEDGER,
@@ -56,6 +61,7 @@ import {
   PLANS,
   ROOMS,
   STUDENTS,
+  TEACHERS,
   TZ_OFFSET,
   addDays,
   daysBetween,
@@ -88,14 +94,31 @@ import {
 
 /** lesson_id → student_id → отметка. Заполняется из фикстур при первом обращении. */
 const marks = new Map<string, Map<string, AttendanceMark>>();
-/** lesson_id → student_id → attendance_id, чтобы отдать идентификатор отметки. */
+/** `lesson_id:student_id` → attendance_id, чтобы отдать идентификатор отметки. */
 const attendanceIds = new Map<string, string>();
+/** attendance_id → чья это отметка. Обратный путь нужен отмене: DELETE знает только id. */
+const attendanceOwners = new Map<string, { lessonId: string; studentId: string }>();
+/** Уже отменённые отметки: повторный DELETE обязан отвечать 409, а не гасить второй раз. */
+const revokedAttendance = new Set<string>();
 let attendanceSeq = 0;
+
+const newAttendanceId = (lessonId: string, studentId: string): string => {
+  const id = `77777777-0000-4000-8000-${String(++attendanceSeq).padStart(12, '0')}`;
+  attendanceIds.set(`${lessonId}:${studentId}`, id);
+  attendanceOwners.set(id, { lessonId, studentId });
+  return id;
+};
 
 for (const lesson of LESSONS) {
   if (!lesson.initial_marks) continue;
   const perLesson = new Map<string, AttendanceMark>();
-  for (const [studentId, mark] of Object.entries(lesson.initial_marks)) perLesson.set(studentId, mark);
+  for (const [studentId, mark] of Object.entries(lesson.initial_marks)) {
+    perLesson.set(studentId, mark);
+    // Отметки из фикстур тоже получают идентификатор: иначе на уже отмеченном
+    // дне (11 августа) кнопка отмены не появилась бы — а это ровно тот день,
+    // на котором её и проверяют.
+    newAttendanceId(lesson.id, studentId);
+  }
   marks.set(lesson.id, perLesson);
 }
 
@@ -255,6 +278,17 @@ function conflictsFor(lesson: MockLesson, sameDay: MockLesson[]): LessonConflict
   return result;
 }
 
+/* ---------- справочники ---------- */
+
+/**
+ * Филиалы преподавателя. В фикстурах нет отдельной таблицы `staff_branch`,
+ * поэтому берём их из занятий — но, в отличие от прежнего сбора списков
+ * в диалоге пробного, здесь это весь набор занятий, а не выбранный день.
+ */
+const teacherBranches = (teacherId: string): string[] => [
+  ...new Set(LESSONS.filter((l) => l.teacher_id === teacherId).map((l) => l.branch_id)),
+];
+
 /* ---------- сборка ответов ---------- */
 
 /** Статус занятия: held, как только появилась хотя бы одна отметка (контракт). */
@@ -289,6 +323,7 @@ function toParticipant(lesson: MockLesson, studentId: string): LessonParticipant
     student_id: student.id,
     name: student.name,
     attendance: markOf(lesson.id, studentId),
+    attendance_id: markOf(lesson.id, studentId) ? attendanceIds.get(`${lesson.id}:${studentId}`) ?? null : null,
     subscription: s
       ? {
           id: s.id,
@@ -842,8 +877,7 @@ export const mockApi = {
     perLesson.set(student.id, payload.mark);
     marks.set(lessonId, perLesson);
 
-    const attendanceId = `77777777-0000-4000-8000-${String(++attendanceSeq).padStart(12, '0')}`;
-    attendanceIds.set(`${lessonId}:${student.id}`, attendanceId);
+    const attendanceId = newAttendanceId(lessonId, student.id);
 
     const alerts =
       subscription && effect.lessons_delta < 0 && effect.lessons_after <= 2
@@ -870,6 +904,97 @@ export const mockApi = {
       alerts,
     });
   },
+
+  /**
+   * Отмена ошибочной отметки. Настоящий бэкенд журнал не правит, а добавляет
+   * компенсирующие записи (`refund` в абонемент, `correction` в зарплату);
+   * мок повторяет только видимый результат: остаток возвращается, начисление
+   * снимается, занятие без отметок снова становится запланированным.
+   */
+  revokeAttendance: async (attendanceId: string): Promise<AttendanceRevokeResponse> => {
+    const owner = attendanceOwners.get(attendanceId);
+    if (!owner) {
+      throw new ApiError(404, 'attendance_not_found', 'Отметка не найдена. Обновите расписание и повторите.');
+    }
+    const mark = markOf(owner.lessonId, owner.studentId);
+    if (revokedAttendance.has(attendanceId) || !mark) {
+      throw new ApiError(409, 'already_revoked', 'Эта отметка уже отменена. Обновите карточку занятия.');
+    }
+
+    const lesson = LESSONS.find((l) => l.id === owner.lessonId)!;
+    const student = findStudent(owner.studentId);
+    const teacher = findTeacher(lesson.teacher_id);
+    const subscription = student.subscription;
+
+    // Гасим ровно то, что списала отметка. Дельты от остатка не зависят,
+    // поэтому расчёт по тем же правилам возвращает те же числа, что списывал.
+    const effect = computeEffect(mark, subscription, teacher.rate);
+    if (subscription) {
+      subscription.lessons_balance -= effect.lessons_delta;
+      subscription.makeups_balance -= effect.makeups_delta;
+    }
+
+    // Отметка снимается целиком, а не помечается отозванной: сразу после
+    // отмены ученик обязан снова стать доступным для отметки. Живая база
+    // это пока запрещает уникальным индексом — задача #2 бэкенда как раз
+    // про это, и мок описывает состояние после её исправления.
+    const perLesson = marks.get(owner.lessonId);
+    perLesson?.delete(owner.studentId);
+    if (perLesson && perLesson.size === 0) marks.delete(owner.lessonId);
+    attendanceIds.delete(`${owner.lessonId}:${owner.studentId}`);
+    revokedAttendance.add(attendanceId);
+
+    return delay({
+      attendance_id: attendanceId,
+      mark,
+      revoked_at: nowIso(),
+      reverted: {
+        lessons_delta: -effect.lessons_delta,
+        lessons_after: subscription ? subscription.lessons_balance : null,
+        makeups_delta: -effect.makeups_delta,
+        makeups_after: subscription ? subscription.makeups_balance : null,
+        teacher_amount: -effect.teacher_amount,
+        teacher_id: teacher.id,
+        subscription_id: subscription?.id ?? null,
+      },
+      lesson_status: statusOf(lesson),
+    });
+  },
+
+  /* ---------- справочники (задача #1) ---------- */
+
+  teachers: async (branchId?: string | null): Promise<DirectoryTeacher[]> =>
+    delay(
+      TEACHERS.filter((t) => {
+        const branches = teacherBranches(t.id);
+        // Преподаватель без единого занятия считается доступным везде:
+        // справочник обязан показывать и тех, у кого расписание пустое, —
+        // ради этого он и нужен вместо среза дня.
+        return !branchId || branches.length === 0 || branches.includes(branchId);
+      }).map((t) => ({
+        id: t.id,
+        name: t.name,
+        disciplines: [...t.disciplines],
+        branch_ids: teacherBranches(t.id),
+        color: t.color,
+        rate: t.rate,
+      })),
+    ),
+
+  rooms: async (branchId?: string | null): Promise<DirectoryRoom[]> =>
+    delay(
+      ROOMS.filter((r) => !branchId || r.branch_id === branchId).map((r) => ({
+        id: r.id,
+        name: r.name,
+        branch_id: r.branch_id,
+        features: { ...r.features },
+      })),
+    ),
+
+  disciplines: async (): Promise<Discipline[]> =>
+    delay(
+      DISCIPLINES.map((d) => ({ id: d.id, name: d.name, min_age: d.min_age, room_reqs: { ...d.room_reqs } })),
+    ),
 
   /* ---------- этап 2 ---------- */
 

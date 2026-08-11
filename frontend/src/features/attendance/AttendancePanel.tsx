@@ -6,17 +6,23 @@ import {
   api,
   type AttendanceMark,
   type AttendanceResponse,
+  type AttendanceRevokeResponse,
   type LessonCard,
   type LessonParticipant,
   type MarkEffect,
 } from '../../api';
-import { lessonsWord, money, wallTime } from '../../lib/format';
+import { lessonsWord, money, signedMoney, wallTime } from '../../lib/format';
 import { useAsync } from '../../lib/useAsync';
 import { ErrorState } from '../../components/States';
 
 export interface AppliedResult {
   participant: LessonParticipant;
   response: AttendanceResponse;
+}
+
+export interface RevokedResult {
+  participant: LessonParticipant;
+  response: AttendanceRevokeResponse;
 }
 
 /**
@@ -28,22 +34,31 @@ export function AttendancePanel({
   lessonId,
   onClose,
   onApplied,
+  onRevoked,
   onOpenStudent,
 }: {
   lessonId: string | null;
   onClose: () => void;
   onApplied: (results: AppliedResult[]) => void;
+  onRevoked: (result: RevokedResult) => void;
   onOpenStudent: (studentId: string) => void;
 }) {
   const card = useAsync<LessonCard>(() => api.lesson(lessonId as string), [lessonId], lessonId !== null);
   const [chosen, setChosen] = useState<Record<string, AttendanceMark>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<ApiError | null>(null);
+  /** Кого сейчас переспрашиваем об отмене отметки — student_id, иначе null. */
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  /** Ошибка отмены живёт рядом с участником: на группе иначе непонятно, чья она. */
+  const [revokeError, setRevokeError] = useState<{ studentId: string; error: ApiError } | null>(null);
 
   // Смена занятия обнуляет выбор: показать чужой предпросмотр опаснее, чем ничего
   useEffect(() => {
     setChosen({});
     setSaveError(null);
+    setConfirming(null);
+    setRevokeError(null);
   }, [lessonId]);
 
   const lesson = card.data;
@@ -62,7 +77,10 @@ export function AttendancePanel({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose();
+        // Esc сначала снимает вопрос об отмене и только потом закрывает панель:
+        // иначе рефлекторное «нет» закрыло бы карточку целиком.
+        if (confirming) setConfirming(null);
+        else onClose();
         return;
       }
       // Пока карточка грузится, участники в памяти относятся к прошлому занятию
@@ -74,7 +92,35 @@ export function AttendancePanel({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [pending, pick, onClose, card.loading]);
+  }, [pending, pick, onClose, card.loading, confirming]);
+
+  /**
+   * Отмена ошибочной отметки. Числа для уведомления берутся из ответа сервера,
+   * а не из предпросмотра: клиент показал ожидание, сервер отдаёт факт.
+   */
+  const revoke = async (participant: LessonParticipant) => {
+    if (!participant.attendance_id) return;
+    setRevoking(participant.student_id);
+    setRevokeError(null);
+    try {
+      const response = await api.revokeAttendance(participant.attendance_id);
+      setConfirming(null);
+      onRevoked({ participant, response });
+      // Перечитываем карточку: участник снова без отметки, и его можно
+      // отметить заново — ровно то, ради чего отмена и нужна.
+      card.reload();
+    } catch (error) {
+      setRevokeError({
+        studentId: participant.student_id,
+        error:
+          error instanceof ApiError
+            ? error
+            : new ApiError(0, 'unexpected', 'Отметку отменить не удалось. Повторите попытку.'),
+      });
+    } finally {
+      setRevoking(null);
+    }
+  };
 
   const submit = async () => {
     if (!lesson) return;
@@ -163,6 +209,17 @@ export function AttendancePanel({
                   onPick={(mark) => pick(participant.student_id, mark)}
                   showKeys={pending.length === 1}
                   onOpenStudent={onOpenStudent}
+                  confirming={confirming === participant.student_id}
+                  onConfirmRevoke={() => {
+                    setRevokeError(null);
+                    setConfirming(participant.student_id);
+                  }}
+                  onCancelRevoke={() => setConfirming(null)}
+                  onRevoke={() => revoke(participant)}
+                  revoking={revoking === participant.student_id}
+                  revokeError={
+                    revokeError && revokeError.studentId === participant.student_id ? revokeError.error : null
+                  }
                 />
               ))}
             </div>
@@ -209,16 +266,40 @@ function ParticipantBlock({
   onPick,
   showKeys,
   onOpenStudent,
+  confirming,
+  onConfirmRevoke,
+  onCancelRevoke,
+  onRevoke,
+  revoking,
+  revokeError,
 }: {
   participant: LessonParticipant;
   chosen: AttendanceMark | null;
   onPick: (mark: AttendanceMark) => void;
   showKeys: boolean;
   onOpenStudent: (studentId: string) => void;
+  confirming: boolean;
+  onConfirmRevoke: () => void;
+  onCancelRevoke: () => void;
+  onRevoke: () => void;
+  revoking: boolean;
+  revokeError: ApiError | null;
 }) {
   const subscription = participant.subscription;
   const effect = chosen ? participant.mark_effects[chosen] : null;
-  const applied = participant.attendance ? participant.mark_effects[participant.attendance] : null;
+  const preview = participant.attendance ? participant.mark_effects[participant.attendance] : null;
+  /**
+   * У уже отмеченного участника `lessons_after` из `mark_effects` врёт: сервер
+   * считает предпросмотр от текущего остатка, а списание по этой отметке
+   * уже прошло — получается «спишется ещё раз». Фактический остаток после
+   * отметки и есть остаток абонемента сейчас, его и показываем. Дельты
+   * при этом серверные: их пересчитывать нельзя.
+   */
+  const applied =
+    preview && subscription ? { ...preview, lessons_after: subscription.lessons_balance } : preview;
+  // Кнопка отмены появляется только когда есть чем вызвать DELETE: без
+  // `attendance_id` (старый бэкенд) отмены просто нет, а не есть неработающая.
+  const revocable = participant.attendance !== null && participant.attendance_id !== null;
 
   return (
     <div className="participant">
@@ -243,11 +324,30 @@ function ParticipantBlock({
         <Meter
           total={subscription.lessons_total}
           balance={subscription.lessons_balance}
-          after={effect ? effect.lessons_after : subscription.lessons_balance}
+          // Пока переспрашиваем об отмене, счётчик показывает возвращённое занятие:
+          // администратор видит будущий остаток до нажатия, как и при отметке.
+          after={
+            confirming && applied
+              ? subscription.lessons_balance - applied.lessons_delta
+              : effect
+                ? effect.lessons_after
+                : subscription.lessons_balance
+          }
         />
       )}
 
-      {participant.attendance ? (
+      {participant.attendance && confirming ? (
+        <div className="rule">
+          <strong>Отменить отметку «{MARK_LABELS[participant.attendance]}»?</strong>
+          {applied && <RevertRows effect={applied} subscriptionBalance={subscription?.lessons_balance ?? null} />}
+          {/* Имя в этой фразе не подставляем: род не выведешь из строки,
+              а «Амина снова доступен» на ресепшене читают вслух родителю */}
+          <p style={{ margin: '8px 0 0' }}>
+            Записи журнала не удаляются — сервер добавит компенсирующие: возврат по абонементу и корректировку
+            в зарплате. После отмены ученика снова можно отметить.
+          </p>
+        </div>
+      ) : participant.attendance ? (
         <div className="rule applied">
           <strong>Отмечено: {MARK_LABELS[participant.attendance]}</strong>
           {applied && <EffectRows effect={applied} />}
@@ -282,7 +382,75 @@ function ParticipantBlock({
           )}
         </>
       )}
+
+      {revocable && (
+        <div className="row-actions">
+          {confirming ? (
+            <>
+              <button className="btn slim" onClick={onCancelRevoke} disabled={revoking}>
+                Не отменять
+              </button>
+              <button className="btn slim pri" onClick={onRevoke} disabled={revoking}>
+                {revoking ? 'Отменяем…' : 'Отменить отметку'}
+              </button>
+            </>
+          ) : (
+            <button className="btn slim" onClick={onConfirmRevoke} title="Отменить ошибочную отметку">
+              Отменить отметку
+            </button>
+          )}
+        </div>
+      )}
+
+      {revokeError && (
+        <div className="err-inline" role="alert">
+          <strong>{revokeError.message}</strong>
+        </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * Что вернётся при отмене. Эндпоинта предпросмотра отмены контракт не даёт,
+ * поэтому здесь не расчёт правил, а разворот знака: дельты уже посчитаны
+ * сервером в `mark_effects`, клиент лишь показывает их обратной стороной.
+ * Точные числа приходят в ответе DELETE и повторяются уведомлением —
+ * тот же приём, что у продажи и заморозки во втором этапе.
+ */
+function RevertRows({
+  effect,
+  subscriptionBalance,
+}: {
+  effect: MarkEffect;
+  subscriptionBalance: number | null;
+}) {
+  const lessonsBack = -effect.lessons_delta;
+  const makeupsBack = -effect.makeups_delta;
+  return (
+    <ul>
+      <li>
+        <span>Вернётся на абонемент</span>
+        <em>
+          {lessonsBack === 0
+            ? 'ничего не списывалось'
+            : `+${lessonsBack} → ${lessonsWord((subscriptionBalance ?? 0) + lessonsBack)}`}
+        </em>
+      </li>
+      {makeupsBack !== 0 && (
+        <li>
+          <span>Отработки</span>
+          <em>
+            {makeupsBack > 0 ? '+' : ''}
+            {makeupsBack}
+          </em>
+        </li>
+      )}
+      <li>
+        <span>Снимется с преподавателя</span>
+        <em>{effect.teacher_amount > 0 ? signedMoney(-effect.teacher_amount) : 'начисления не было'}</em>
+      </li>
+    </ul>
   );
 }
 
