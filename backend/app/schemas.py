@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -183,6 +184,210 @@ class AttendanceRevoked(BaseModel):
     revoked_at: str
     reverted: Reverted
     lesson_status: LessonStatus
+
+
+# ---------------------------------------------------------------------------
+# Этап 2: ученики, тарифы, абонементы, заморозки
+# ---------------------------------------------------------------------------
+
+PlanFormat = Literal["individual", "pair", "group", "trial"]
+PaymentMethod = Literal["kaspi", "card", "cash", "transfer", "other"]
+
+
+class Payer(BaseModel):
+    name: str
+    phone: str | None = None
+
+
+class SubscriptionInList(BaseModel):
+    lessons_balance: int
+    lessons_total: int
+    valid_until: str
+    status: str
+
+
+class StudentInList(BaseModel):
+    id: str
+    name: str
+    age: int | None = None
+    discipline: str | None = None
+    teacher: str | None = None
+    branch: str | None = None
+    subscription: SubscriptionInList | None = None
+    payer: Payer | None = None
+
+
+class FamilyMember(BaseModel):
+    student_id: str
+    name: str
+    age: int | None = None
+    discipline: str | None = None
+    lessons_balance: int
+
+
+class Family(BaseModel):
+    id: str
+    payer: Payer | None = None
+    discount_pct: float
+    members: list[FamilyMember]
+    paid_this_month: int
+    debt: int
+
+
+class Hold(BaseModel):
+    id: str
+    # from — ключевое слово Python, поэтому поле объявляется через псевдоним:
+    # наружу уходит имя из контракта, внутри живёт from_.
+    from_: str = Field(alias="from")
+    to: str
+    days: int
+    reason: str | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class SubscriptionCard(BaseModel):
+    id: str
+    plan_name: str
+    lessons_total: int
+    lessons_balance: int
+    makeups_balance: int
+    price: int
+    lesson_price: int
+    valid_from: str
+    valid_until: str
+    status: str
+    rules: dict[str, Any]
+    holds: list[Hold] = []
+    freeze_days_used: int
+    freeze_days_left: int
+
+
+class Makeup(BaseModel):
+    id: str
+    granted_for: str | None = None
+    expires_on: str
+    days_left: int
+    used_at: str | None = None
+
+
+class LedgerRow(BaseModel):
+    id: int
+    date: str
+    kind: str
+    title: str
+    teacher: str | None = None
+    lessons_delta: int
+    makeups_delta: int
+    amount: int | None = None
+    # Сверх контракта: исходная причина записи как её сохранил журнал.
+    # Нужна для спорных случаев, когда человеческого заголовка мало.
+    reason: str | None = None
+
+
+class StudentNote(BaseModel):
+    date: str
+    author: str | None = None
+    body: str
+    homework: str | None = None
+    tags: list[str] = []
+
+
+class ChurnRisk(BaseModel):
+    level: Literal["low", "medium", "high"]
+    score: int
+    reasons: list[str]
+
+
+class StudentCard(BaseModel):
+    id: str
+    name: str
+    age: int | None = None
+    discipline: str | None = None
+    teacher: str | None = None
+    branch: str | None = None
+    started_on: str
+    status: str
+    family: Family | None = None
+    subscription: SubscriptionCard | None = None
+    makeups: list[Makeup] = []
+    ledger: list[LedgerRow] = []
+    notes: list[StudentNote] = []
+    churn_risk: ChurnRisk
+
+
+class Plan(BaseModel):
+    id: str
+    name: str
+    discipline: str | None = None
+    format: PlanFormat
+    duration_min: int
+    lessons_count: int
+    valid_days: int
+    price: int
+
+
+class PaymentIn(BaseModel):
+    amount: int = Field(gt=0, description="Сумма в целых тенге")
+    method: PaymentMethod
+
+
+class SellRequest(BaseModel):
+    plan_id: str
+    starts_on: date | None = Field(
+        default=None, description="Первый день действия; по умолчанию сегодня"
+    )
+    discount_pct: float | None = Field(default=None, ge=0, le=100)
+    promo_code: str | None = None
+    payment: PaymentIn | None = None
+    carry_over: bool = False
+
+
+class SoldSubscription(BaseModel):
+    subscription_id: str
+    lessons_total: int
+    lessons_balance: int
+    valid_from: str
+    valid_until: str
+    price: int
+    discount_pct: float
+    charged: int
+    carried_over: int
+    # Сверх контракта: почему перенос не состоялся. Контракт требует показать
+    # это явно, а голый ноль ничего не объясняет.
+    carry_over_note: str | None = None
+    payment_id: str | None = None
+    debt: int
+
+
+class HoldRequest(BaseModel):
+    from_: date = Field(alias="from")
+    to: date
+    reason: str | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class HoldCreated(BaseModel):
+    hold_id: str
+    days: int
+    valid_until_before: str
+    valid_until_after: str
+    lessons_cancelled: int
+    freeze_days_left: int
+    # Сверх контракта: та же информация одной фразой для тоста в интерфейсе.
+    message: str
+
+
+class HoldReleased(BaseModel):
+    hold_id: str
+    days_returned: int
+    valid_until_before: str
+    valid_until_after: str
+    lessons_cancelled: int
+    lessons_restored: int
+    freeze_days_left: int
+    message: str
 
 
 class ErrorBody(BaseModel):
