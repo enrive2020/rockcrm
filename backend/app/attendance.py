@@ -181,14 +181,34 @@ def apply_mark(
             )
             # Отработка — отдельная валюта с собственным сроком: без поштучного
             # учёта «сгорает через 30 дней» не с чего отсчитывать.
+            #
+            # Срок считается от даты пропущенного занятия, а не от current_date.
+            # «Сгорает через 30 дней» родитель понимает как 30 дней от урока,
+            # который не состоялся, — эта дата есть в договоре и он может её
+            # проверить. От даты ввода отметки срок зависел бы от расторопности
+            # администратора: отметка, внесённая через неделю, давала бы
+            # отработке лишнюю неделю жизни, и двум родителям с одинаково
+            # пропущенным уроком назвали бы разные даты.
+            #
+            # Дата берётся в поясе филиала: занятие 20:00 в Алматы для сервера
+            # в UTC приходится ещё на предыдущие сутки, и срок начинался бы
+            # на день раньше, чем стоит в расписании.
             ttl = int(subscription.rule("makeup_ttl_days"))
             cur.execute(
                 """
                 INSERT INTO makeup_credit
                     (tenant_id, subscription_id, student_id, granted_for, expires_on)
-                VALUES (%s, %s, %s, %s, current_date + %s)
+                VALUES (%s, %s, %s, %s, (%s::timestamptz AT TIME ZONE %s)::date + %s)
                 """,
-                (tenant_id, subscription.id, student_id, lesson_id, ttl),
+                (
+                    tenant_id,
+                    subscription.id,
+                    student_id,
+                    lesson_id,
+                    lesson["starts_at"],
+                    lesson["branch_timezone"] or "Asia/Almaty",
+                    ttl,
+                ),
             )
 
     # 3. Зарплата. Нулевое начисление не пишем — это шум в ведомости.
@@ -313,35 +333,53 @@ def revoke_mark(
                 reverses_id=entry["id"],
             )
             lessons_back += -entry["lessons_delta"]
-        if entry["makeups_delta"]:
-            # Обратной операции для makeup_grant в перечне kind нет: makeup_use
-            # означает «отработку потратили на занятие», а здесь её отзывают.
-            # Ближайшее честное — adjust с явной причиной.
-            _add_entry(
-                cur,
-                tenant_id,
-                subscription_id,
-                kind="adjust",
-                lessons_delta=0,
-                makeups_delta=-entry["makeups_delta"],
-                attendance_id=None,
-                lesson_id=str(att["lesson_id"]),
-                reason="Отмена ошибочной отметки: отработка отозвана",
-                actor_id=actor_id,
-                reverses_id=entry["id"],
-            )
-            makeups_back += -entry["makeups_delta"]
-            # Неиспользованная отработка, выданная по ошибке, удаляется:
-            # её срок жизни иначе продолжал бы тикать, а сама она осталась бы
+        if entry["makeups_delta"] > 0:
+            # Сначала отзываем сами отработки, и только потом пишем журнал:
+            # компенсировать можно ровно то, что удалось отозвать. Отработка,
+            # уже потраченная на занятие или сгоревшая по сроку, из баланса
+            # ушла — вычесть её второй раз значит увести баланс в минус
+            # и показать родителю «−1 отработка», которой никогда не было.
+            #
+            # Неиспользованная отработка при этом удаляется, а не помечается:
+            # иначе её срок продолжал бы тикать, а сама она осталась бы
             # доступной для записи на занятие.
+            #
+            # LIMIT по числу выданных: одна отметка отзывает ровно столько
+            # отработок, сколько сама начислила, даже если по этому занятию
+            # их в базе почему-то больше.
             cur.execute(
                 """
                 DELETE FROM makeup_credit
-                WHERE subscription_id = %s AND granted_for = %s
-                  AND used_at IS NULL AND expired_at IS NULL
+                WHERE ctid IN (
+                    SELECT ctid FROM makeup_credit
+                    WHERE subscription_id = %s AND granted_for = %s
+                      AND used_at IS NULL AND expired_at IS NULL
+                    ORDER BY expires_on DESC, created_at DESC
+                    LIMIT %s
+                )
+                RETURNING id
                 """,
-                (subscription_id, att["lesson_id"]),
+                (subscription_id, att["lesson_id"], int(entry["makeups_delta"])),
             )
+            revoked = len(cur.fetchall())
+            if revoked:
+                # Обратной операции для makeup_grant в перечне kind нет:
+                # makeup_use означает «отработку потратили на занятие»,
+                # а здесь её отзывают. Ближайшее честное — adjust с причиной.
+                _add_entry(
+                    cur,
+                    tenant_id,
+                    subscription_id,
+                    kind="adjust",
+                    lessons_delta=0,
+                    makeups_delta=-revoked,
+                    attendance_id=None,
+                    lesson_id=str(att["lesson_id"]),
+                    reason="Отмена ошибочной отметки: отработка отозвана",
+                    actor_id=actor_id,
+                    reverses_id=entry["id"],
+                )
+                makeups_back += -revoked
 
     # Зарплата гасится корректировкой, а не удалением строки: закрытый период
     # не пересчитывается, правки уходят следующим (spec.md §6.2).

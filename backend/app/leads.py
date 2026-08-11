@@ -33,6 +33,13 @@ from .rules import (
 # не переставят день.
 TRIAL_REMINDER_LEAD_TIME = dt.timedelta(days=1)
 
+# Сколько карточек отдаётся в одной колонке доски. Полсотни — это заведомо
+# больше, чем помещается на экран, и заведомо меньше, чем пятьсот отказов,
+# которые никто не пролистывает. Верхняя граница есть, чтобы ?limit=100000
+# не возвращал ту же выборку без ограничения, ради которой всё затевалось.
+DEFAULT_PAGE = 50
+MAX_PAGE = 200
+
 
 # ---------------------------------------------------------------------------
 # Сборка ответов
@@ -54,18 +61,30 @@ def _assigned(row: dict[str, Any]) -> dict[str, str] | None:
 
 
 def _trial_brief(
-    cur: psycopg.Cursor, row: dict[str, Any], tz: ZoneInfo
+    cur: psycopg.Cursor,
+    row: dict[str, Any],
+    tz: ZoneInfo,
+    occupied: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any] | None:
+    """Краткое описание пробного вместе с конфликтами по кабинету и педагогу.
+
+    occupied — занятость, посчитанная заранее одним запросом на всю доску.
+    Если её не передали (карточка одной заявки), спрашиваем по этому слоту:
+    ради единственной заявки собирать пакетный запрос смысла нет.
+    """
     if row["lesson_id"] is None:
         return None
-    occupants = repo.slot_occupants(
-        cur,
-        str(row["trial_room_id"]),
-        str(row["trial_teacher_id"]),
-        row["trial_starts_at"],
-        row["trial_ends_at"],
-        exclude_lesson_id=str(row["lesson_id"]),
-    )
+    if occupied is not None:
+        occupants = occupied.get(str(row["lesson_id"]), [])
+    else:
+        occupants = repo.slot_occupants(
+            cur,
+            str(row["trial_room_id"]),
+            str(row["trial_teacher_id"]),
+            row["trial_starts_at"],
+            row["trial_ends_at"],
+            exclude_lesson_id=str(row["lesson_id"]),
+        )
     return {
         "lesson_id": str(row["lesson_id"]),
         "starts_at": repo.iso(row["trial_starts_at"], tz),
@@ -110,10 +129,15 @@ def _flags(row: dict[str, Any], trial: dict[str, Any] | None, now: dt.datetime) 
     return flags
 
 
-def _card(cur: psycopg.Cursor, row: dict[str, Any], now: dt.datetime) -> dict[str, Any]:
+def _card(
+    cur: psycopg.Cursor,
+    row: dict[str, Any],
+    now: dt.datetime,
+    occupied: dict[str, list[dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
     """Карточка заявки на доске и в отдельном экране — одна и та же сборка."""
     tz = _tz(row)
-    trial = _trial_brief(cur, row, tz)
+    trial = _trial_brief(cur, row, tz, occupied)
     return {
         "id": str(row["id"]),
         "name": row["name"],
@@ -196,43 +220,86 @@ def board(
     source: str | None,
     assigned_to: str | None,
     branch_id: str | None,
+    limit: int = DEFAULT_PAGE,
+    offset: int = 0,
 ) -> dict[str, Any]:
+    """Доска воронки: по странице карточек в каждой колонке.
+
+    Раньше отдавалась вся воронка целиком — 688 заявок и 1,3 секунды на живой
+    школе, потому что колонка «Отказ» тянула пятьсот карточек, которые никто
+    не читает. Теперь колонка отдаёт `limit` верхних, а `count` продолжает
+    показывать, сколько их всего; `has_more` и `next_offset` (оба сверх
+    контракта и необязательные) говорят интерфейсу, что можно долистать.
+    """
     if stage is not None and stage not in STAGES:
         raise ApiError(
             400, "bad_stage", f"Неизвестная стадия «{stage}». Допустимые: {', '.join(STAGES)}."
         )
+    limit = max(1, min(int(limit), MAX_PAGE))
+    offset = max(0, int(offset))
 
     now = dt.datetime.now(dt.timezone.utc)
-    rows = repo.list_leads(cur, stage, source, assigned_to, branch_id)
+    rows = repo.list_leads(cur, stage, source, assigned_to, branch_id, limit, offset)
+    counts = repo.lead_stage_counts(cur, stage, source, assigned_to, branch_id)
+
+    # Занятость слотов — один запрос на всю доску вместо запроса на карточку.
+    occupied = repo.slot_occupants_bulk(
+        cur,
+        [
+            {
+                "lesson_id": row["lesson_id"],
+                "room_id": row["trial_room_id"],
+                "teacher_id": row["trial_teacher_id"],
+                "starts_at": row["trial_starts_at"],
+                "ends_at": row["trial_ends_at"],
+            }
+            for row in rows
+            if row["lesson_id"] is not None
+        ],
+    )
+
     cards: dict[str, list[dict[str, Any]]] = {name: [] for name in STAGES}
     for row in rows:
-        cards[row["stage"]].append(_card(cur, row, now))
+        cards[row["stage"]].append(_card(cur, row, now, occupied))
 
     # Фильтр по стадии возвращает одну колонку, а не шесть, из которых пять
     # пустые: пустая колонка на доске означает «здесь ничего нет», а не
     # «сюда не смотрели».
     shown = [stage] if stage is not None else list(STAGES)
-    columns = [
-        {
-            "stage": name,
-            "title": STAGE_TITLES[name],
-            "count": len(cards[name]),
-            "leads": cards[name],
-        }
-        for name in shown
-    ]
-    return {"columns": columns, "summary": _summary(cur, cards)}
+    columns = []
+    for name in shown:
+        total = counts.get(name, {}).get("total", 0)
+        loaded = offset + len(cards[name])
+        columns.append(
+            {
+                "stage": name,
+                "title": STAGE_TITLES[name],
+                # Счётчик колонки — сколько заявок в этой стадии всего,
+                # а не сколько уместилось на странице. Иначе администратор
+                # решил бы, что отказов пятьдесят, и перестал бы искать
+                # причины в тех четырёхстах, которых доска не показала.
+                "count": total,
+                "leads": cards[name],
+                "has_more": loaded < total,
+                "next_offset": loaded if loaded < total else None,
+            }
+        )
+    return {"columns": columns, "summary": _summary(cur, counts)}
 
 
-def _summary(cur: psycopg.Cursor, cards: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+def _summary(cur: psycopg.Cursor, counts: dict[str, dict[str, int]]) -> dict[str, Any]:
     """Шапка доски. Конверсия и средний путь берутся из истории, а не с доски.
 
     На доске лежат текущие стадии, и заявка, дошедшая до покупки, в колонке
     «пробный проведён» уже не лежит: считать конверсию по колонкам значило бы
     делить на тех, кто ещё не решил, и занижать её ровно на купивших.
+
+    `total` и `overdue` считает база по всей выборке, а не страница: шапка
+    отвечает на «сколько всего» и «сколько горит», и оба числа обязаны
+    остаться верными, сколько бы карточек ни было загружено.
     """
-    total = sum(len(items) for items in cards.values())
-    overdue = sum(1 for items in cards.values() for c in items if "overdue" in c["flags"])
+    total = sum(item["total"] for item in counts.values())
+    overdue = sum(item["overdue"] for item in counts.values())
 
     # Период — год: конверсия по трём заявкам за неделю не значит ничего.
     until = dt.datetime.now(dt.timezone.utc)

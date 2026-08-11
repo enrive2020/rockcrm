@@ -6,9 +6,12 @@
 """
 from __future__ import annotations
 
+import datetime as dt
+
 import pytest
 
-from conftest import HEADERS, get_card, lesson, participant, student, subscription
+from conftest import HEADERS, TENANT, get_card, lesson, participant, student, subscription
+from scripts import seed_demo
 
 ALL_MARKS = ["came", "late", "no_show", "cancelled_early", "cancelled_late", "cancelled_teacher"]
 
@@ -273,6 +276,101 @@ def test_revoke_takes_makeup_back(client, sql):
         "SELECT makeups_balance FROM subscription WHERE id = %s", (subscription(STUDENT),)
     ).fetchone()
     assert balance["makeups_balance"] == 1  # столько же, сколько было до отметки
+
+
+def test_makeup_expires_counting_from_the_lesson_not_from_the_mark(client, sql):
+    """«Сгорает через 30 дней» — это 30 дней от занятия, а не от ввода отметки.
+
+    Родитель читает правило по дате пропущенного урока: она есть в договоре
+    и он может её проверить. Если считать от current_date, срок отработки
+    начинает зависеть от того, когда администратор дошёл до журнала, —
+    отметка через неделю после урока даёт лишнюю неделю жизни.
+    """
+    lesson_id = seed_demo._id("4b1")  # занятие Амины 19 августа, ещё не отмечено
+    row = sql.execute(
+        """SELECT (l.starts_at AT TIME ZONE 'Asia/Almaty')::date AS day,
+                  current_date AS today,
+                  (s.rules ->> 'makeup_ttl_days')::int AS ttl
+             FROM lesson l, subscription s
+            WHERE l.id = %s AND s.id = %s""",
+        (lesson_id, subscription(STUDENT)),
+    ).fetchone()
+    assert row["day"] != row["today"], (
+        "тест бессмыслен, если занятие приходится на сегодня: "
+        "дата занятия и дата ввода отметки обязаны различаться"
+    )
+
+    response = client.post(
+        f"/api/v1/lessons/{lesson_id}/attendance",
+        json={"student_id": student(STUDENT), "mark": "cancelled_early"},
+        headers=HEADERS,
+    )
+    assert response.status_code == 201, response.text
+
+    credit = sql.execute(
+        "SELECT expires_on FROM makeup_credit WHERE granted_for = %s", (lesson_id,)
+    ).fetchone()
+    assert credit["expires_on"] == row["day"] + dt.timedelta(days=row["ttl"])
+    assert credit["expires_on"] != row["today"] + dt.timedelta(days=row["ttl"])
+
+
+@pytest.mark.parametrize("outcome", ["used", "expired"])
+def test_revoke_does_not_take_back_a_makeup_that_is_already_gone(client, sql, outcome):
+    """Компенсируется ровно то, что удалось отозвать.
+
+    Отработку, потраченную на занятие или сгоревшую по сроку, вернуть нечем:
+    из баланса она уже ушла. Компенсирующая запись «−1 отработка» вычла бы её
+    второй раз, и родитель увидел бы в журнале минус, которого не было.
+    """
+    applied = mark(client, LESSON, STUDENT, "cancelled_early").json()
+    assert applied["applied"]["makeups_delta"] == 1
+    balance_with_makeup = applied["applied"]["makeups_after"]
+
+    # Расхода отработок в приложении ещё нет — воспроизводим его в журнале
+    # ровно так, как его сделает будущая операция: запись kind и метка
+    # на самой отработке. Дефект живёт именно на этом стыке.
+    kind, column = ("makeup_use", "used_at") if outcome == "used" else ("makeup_expire", "expired_at")
+    sql.execute(
+        f"UPDATE makeup_credit SET {column} = now() WHERE granted_for = %s",
+        (lesson(LESSON),),
+    )
+    sql.execute(
+        """INSERT INTO subscription_entry
+             (tenant_id, subscription_id, kind, makeups_delta, lesson_id, reason)
+           VALUES (%s, %s, %s, -1, %s, 'Отработка израсходована')""",
+        (TENANT, subscription(STUDENT), kind, lesson(LESSON)),
+    )
+    sql.commit()
+    spent = sql.execute(
+        "SELECT makeups_balance FROM subscription WHERE id = %s", (subscription(STUDENT),)
+    ).fetchone()
+    assert spent["makeups_balance"] == balance_with_makeup - 1
+
+    response = client.delete(f"/api/v1/attendance/{applied['attendance_id']}", headers=HEADERS)
+    assert response.status_code == 200, response.text
+
+    after = sql.execute(
+        "SELECT makeups_balance FROM subscription WHERE id = %s", (subscription(STUDENT),)
+    ).fetchone()
+    assert after["makeups_balance"] == spent["makeups_balance"], (
+        "отзывать было нечего — баланс отработок обязан остаться прежним"
+    )
+    assert response.json()["reverted"]["makeups_delta"] == 0
+    assert response.json()["reverted"]["makeups_after"] == spent["makeups_balance"]
+
+    # И в журнале нет записи о том, чего не произошло.
+    revoked = sql.execute(
+        """SELECT count(*) AS n FROM subscription_entry
+            WHERE subscription_id = %s AND kind = 'adjust' AND makeups_delta < 0""",
+        (subscription(STUDENT),),
+    ).fetchone()
+    assert revoked["n"] == 0
+    # Сама отработка остаётся на месте: она была потрачена или сгорела,
+    # и удалять её задним числом значило бы стирать историю.
+    left = sql.execute(
+        "SELECT count(*) AS n FROM makeup_credit WHERE granted_for = %s", (lesson(LESSON),)
+    ).fetchone()
+    assert left["n"] == 1
 
 
 def test_double_revoke_is_409(client):

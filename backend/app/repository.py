@@ -883,26 +883,64 @@ _LEAD_COLUMNS = """
   tr.teacher_id AS trial_teacher_id
 """
 
-_LEAD_JOINS = """
+_LEAD_JOINS_HEAD = """
   FROM lead l
   JOIN tenant t ON t.id = l.tenant_id
   LEFT JOIN discipline d ON d.id = l.discipline_id
   LEFT JOIN branch     b ON b.id = l.branch_id
   LEFT JOIN app_user  au ON au.id = l.assigned_to
   LEFT JOIN person    ap ON ap.id = au.person_id
-  LEFT JOIN LATERAL (
-    SELECT le.id AS lesson_id, le.starts_at, le.ends_at, le.status,
-           le.room_id, le.teacher_id,
-           r.name AS room_name,
-           btrim(concat_ws(' ', tp.first_name, tp.last_name)) AS teacher_name
+"""
+
+# Последний назначенный пробный: колонки и таблицы у него одни, а способ
+# доставки — два. Держим их рядом, чтобы правка колонки не задела только один.
+_TRIAL_COLUMNS = """
+    le.id AS lesson_id, le.starts_at, le.ends_at, le.status,
+    le.room_id, le.teacher_id,
+    r.name AS room_name,
+    btrim(concat_ws(' ', tp.first_name, tp.last_name)) AS teacher_name
+"""
+_TRIAL_FROM = """
     FROM lesson le
     JOIN staff  st ON st.id = le.teacher_id
     JOIN person tp ON tp.id = st.person_id
     JOIN room   r  ON r.id  = le.room_id
+"""
+
+# Одна заявка: боковое соединение ищет её пробный по lead_id.
+_TRIAL_LATERAL = f"""
+  LEFT JOIN LATERAL (
+    SELECT {_TRIAL_COLUMNS}
+    {_TRIAL_FROM}
     WHERE le.lead_id = l.id AND le.status <> 'cancelled'
     ORDER BY le.starts_at DESC
     LIMIT 1
   ) tr ON true
+"""
+
+# Список заявок: то же самое, но один проход по занятиям на всю выборку.
+# Индекса по lesson.lead_id в схеме нет, поэтому боковое соединение читает
+# таблицу занятий заново для каждой строки: на доске это 124 полных прохода
+# и 60 мс из 75. DISTINCT ON даёт тот же «последний пробный», прочитав
+# занятия один раз. Для одной заявки такой обмен невыгоден — там остаётся
+# LATERAL. Настоящее решение — частичный индекс по lead_id, но это миграция.
+_TRIAL_GROUPED = f"""
+  LEFT JOIN (
+    SELECT DISTINCT ON (le.lead_id) le.lead_id, {_TRIAL_COLUMNS}
+    {_TRIAL_FROM}
+    WHERE le.lead_id IS NOT NULL AND le.status <> 'cancelled'
+    ORDER BY le.lead_id, le.starts_at DESC
+  ) tr ON tr.lead_id = l.id
+"""
+
+_LEAD_JOINS = _LEAD_JOINS_HEAD + _TRIAL_LATERAL
+
+
+_LEAD_FILTERS = """
+  (%(stage)s::text  IS NULL OR l.stage = %(stage)s::text)
+  AND (%(source)s::text IS NULL OR l.source = %(source)s::text)
+  AND (%(user)s::uuid   IS NULL OR l.assigned_to = %(user)s::uuid)
+  AND (%(branch)s::uuid IS NULL OR l.branch_id = %(branch)s::uuid)
 """
 
 
@@ -912,20 +950,85 @@ def list_leads(
     source: str | None,
     assigned_to: str | None,
     branch_id: str | None,
+    limit: int,
+    offset: int = 0,
 ) -> list[dict[str, Any]]:
+    """Страница карточек — по `limit` штук в КАЖДОЙ колонке доски.
+
+    Ограничение обязано быть постадийным, а не общим: колонка «Отказ» на живой
+    школе набирает пятьсот заявок и при общем LIMIT съела бы всю выборку,
+    оставив остальные колонки пустыми. Целиком её всё равно не открывает никто.
+
+    Номер строки считается по дешёвой выборке из одной таблицы, и только
+    отобранные идентификаторы догружаются со всеми join'ами: боковое
+    соединение за пробным уроком иначе отработало бы на всех 688 заявках,
+    чтобы 638 из них тут же выбросить.
+
+    Сортировка — по created_at DESC, id DESC: без второго ключа две заявки,
+    заведённые в одну миллисекунду, могли бы поменяться местами между
+    страницами, и одна из них не показалась бы ни на одной.
+    """
+    params = {
+        "stage": stage, "source": source, "user": assigned_to, "branch": branch_id,
+        "limit": limit, "offset": offset,
+    }
     cur.execute(
         f"""
+        WITH page AS (
+          SELECT l.id,
+                 row_number() OVER (
+                   PARTITION BY l.stage ORDER BY l.created_at DESC, l.id DESC
+                 ) AS rn
+          FROM lead l
+          WHERE {_LEAD_FILTERS}
+        )
         SELECT {_LEAD_COLUMNS}
-        {_LEAD_JOINS}
-        WHERE (%(stage)s::text  IS NULL OR l.stage = %(stage)s::text)
-          AND (%(source)s::text IS NULL OR l.source = %(source)s::text)
-          AND (%(user)s::uuid   IS NULL OR l.assigned_to = %(user)s::uuid)
-          AND (%(branch)s::uuid IS NULL OR l.branch_id = %(branch)s::uuid)
-        ORDER BY l.created_at DESC
+        {_LEAD_JOINS_HEAD}
+        {_TRIAL_GROUPED}
+        JOIN page ON page.id = l.id
+        WHERE page.rn > %(offset)s AND page.rn <= %(offset)s + %(limit)s
+        ORDER BY l.created_at DESC, l.id DESC
+        """,
+        params,
+    )
+    return cur.fetchall()
+
+
+def lead_stage_counts(
+    cur: psycopg.Cursor,
+    stage: str | None,
+    source: str | None,
+    assigned_to: str | None,
+    branch_id: str | None,
+) -> dict[str, dict[str, int]]:
+    """Сколько заявок в каждой колонке и сколько из них просрочено.
+
+    Считается по всей воронке, а не по загруженной странице: счётчик колонки
+    и «просрочено» в шапке — это ответ на вопрос «сколько всего», и подменять
+    его размером страницы значит врать администратору тем сильнее, чем
+    больше у школы заявок.
+
+    Условие просрочки повторяет leads._flags(): напоминание в прошлом
+    у незакрытой заявки. Оба места обязаны говорить одно и то же — иначе
+    в шапке будет одно число, а помеченных карточек на доске другое.
+    """
+    cur.execute(
+        f"""
+        SELECT l.stage,
+               count(*) AS total,
+               count(*) FILTER (
+                 WHERE l.next_action_at < now() AND l.stage NOT IN ('won', 'lost')
+               ) AS overdue
+        FROM lead l
+        WHERE {_LEAD_FILTERS}
+        GROUP BY l.stage
         """,
         {"stage": stage, "source": source, "user": assigned_to, "branch": branch_id},
     )
-    return cur.fetchall()
+    return {
+        row["stage"]: {"total": int(row["total"]), "overdue": int(row["overdue"])}
+        for row in cur.fetchall()
+    }
 
 
 def get_lead(cur: psycopg.Cursor, lead_id: str, for_update: bool = False) -> dict[str, Any] | None:
@@ -1090,6 +1193,87 @@ def slot_occupants(
         },
     )
     return cur.fetchall()
+
+
+def slot_occupants_bulk(
+    cur: psycopg.Cursor, slots: list[dict[str, Any]]
+) -> dict[str, list[dict[str, Any]]]:
+    """Занятость слотов сразу по многим занятиям: один запрос на всю доску.
+
+    Тот же вопрос, что и у slot_occupants, но заданный оптом. По запросу
+    на карточку доска воронки делала 395 запросов на 688 заявках — и почти
+    все они были вот этим. Ответ раскладывается по lesson_id того занятия,
+    ради которого спрашивали.
+
+    Слоты приезжают через VALUES с явными приведениями типов: без них
+    PostgreSQL не знает типа колонок списка значений и не может сравнить
+    их с uuid и timestamptz занятия.
+    """
+    if not slots:
+        return {}
+
+    values = ", ".join(
+        "(%s::uuid, %s::uuid, %s::uuid, %s::timestamptz, %s::timestamptz)"
+        for _ in slots
+    )
+    params: list[Any] = []
+    for slot in slots:
+        params += [
+            slot["lesson_id"], slot["room_id"], slot["teacher_id"],
+            slot["starts_at"], slot["ends_at"],
+        ]
+
+    # Условие «тот же кабинет ИЛИ тот же преподаватель» разбито на две ветки
+    # с UNION. С OR внутри соединения планировщик не может опереться ни на один
+    # индекс и сводит слоты с занятиями перебором: 78 слотов × 3 528 занятий —
+    # 275 тысяч проверок. Две ветки с равенством по одной колонке дают
+    # хеш-соединение и на порядок меньше работы, а UNION заодно снимает
+    # задвоение занятия, которое конфликтует и кабинетом, и педагогом сразу.
+    cur.execute(
+        f"""
+        WITH slot (lesson_id, room_id, teacher_id, starts_at, ends_at) AS (
+          VALUES {values}
+        ),
+        clash AS (
+          SELECT slot.lesson_id AS for_lesson, le.id AS lesson_id
+          FROM slot
+          JOIN lesson le ON le.room_id = slot.room_id
+           AND le.starts_at < slot.ends_at AND le.ends_at > slot.starts_at
+          WHERE le.status <> 'cancelled' AND le.id <> slot.lesson_id
+          UNION
+          SELECT slot.lesson_id AS for_lesson, le.id AS lesson_id
+          FROM slot
+          JOIN lesson le ON le.teacher_id = slot.teacher_id
+           AND le.starts_at < slot.ends_at AND le.ends_at > slot.starts_at
+          WHERE le.status <> 'cancelled' AND le.id <> slot.lesson_id
+        )
+        SELECT clash.for_lesson,
+               le.id, le.room_id, le.teacher_id, le.starts_at, le.ends_at,
+               r.name AS room_name,
+               btrim(concat_ws(' ', tp.first_name, tp.last_name)) AS teacher_name,
+               coalesce(
+                 nullif(btrim(concat_ws(' ', sp.first_name, sp.last_name)), ''),
+                 g.name,
+                 nullif(btrim(coalesce(ld.student_name, ld.name)), '')
+               ) AS title
+        FROM clash
+        JOIN lesson le ON le.id = clash.lesson_id
+        JOIN room   r  ON r.id  = le.room_id
+        JOIN staff  st ON st.id = le.teacher_id
+        JOIN person tp ON tp.id = st.person_id
+        LEFT JOIN student     s  ON s.id  = le.student_id
+        LEFT JOIN person      sp ON sp.id = s.person_id
+        LEFT JOIN study_group g  ON g.id  = le.group_id
+        LEFT JOIN lead        ld ON ld.id = le.lead_id
+        ORDER BY clash.for_lesson, le.starts_at
+        """,
+        params,
+    )
+
+    found: dict[str, list[dict[str, Any]]] = {str(s["lesson_id"]): [] for s in slots}
+    for row in cur.fetchall():
+        found[str(row.pop("for_lesson"))].append(row)
+    return found
 
 
 def person_by_phone(cur: psycopg.Cursor, phone: str) -> dict[str, Any] | None:
