@@ -2,9 +2,9 @@
 
 Каждая операция — одна транзакция. Абонемент без записи `purchase` в журнале
 означал бы остаток, взявшийся ниоткуда, а весь смысл журнала в том, что он
-объясняет каждое занятие. Заморозка без сдвига срока или без отмены занятий
-внутри интервала — то же самое с другой стороны: половина операции, которую
-никто потом не восстановит.
+объясняет каждое занятие. Заморозка без записи в журнале, без сдвига срока
+или без отмены занятий внутри интервала — то же самое с другой стороны:
+половина операции, которую никто потом не восстановит.
 
 Остаток здесь нигде не считается: его ведёт триггер базы от журнала.
 Все ответы читают `lessons_balance` из базы уже после вставки записей.
@@ -21,7 +21,7 @@ import psycopg
 
 from . import journal, repository as repo
 from .errors import ApiError, not_found
-from .rules import DEFAULT_RULES, lessons_word, plural
+from .rules import DEFAULT_RULES, days_word, freeze_reason, lessons_word, unfreeze_reason
 
 
 def _charged(price: Decimal, discount_pct: Decimal) -> int:
@@ -431,7 +431,7 @@ def create_hold(
         raise ApiError(
             422,
             "freeze_limit",
-            f"Лимит заморозки — {limit} {plural(limit, 'день', 'дня', 'дней')} в год. "
+            f"Лимит заморозки — {limit} {days_word(limit)} в год. "
             f"За {body.from_.year} уже использовано {used}, осталось {left}, "
             f"а запрошено {days}.",
             {"limit": limit, "used": used, "days_left": left, "requested": days},
@@ -465,6 +465,21 @@ def create_hold(
 
     cancelled = _cancel_lessons(cur, str(sub["student_id"]), body.from_, body.to, tz)
 
+    # Заморозка идёт в журнал абонемента наравне со списаниями. Баланс она
+    # не двигает (обе дельты нулевые — схема разрешает это только виду
+    # 'freeze'), но родителю, спрашивающему «почему абонемент кончается
+    # позже», отвечают именно журналом, а не аудитом: аудита он не видит.
+    entry_id = journal.add_entry(
+        cur,
+        tenant_id,
+        subscription_id,
+        kind="freeze",
+        lessons_delta=0,
+        makeups_delta=0,
+        reason=freeze_reason(body.from_, body.to, days, body.reason),
+        actor_id=actor_id,
+    )
+
     journal.audit(
         cur,
         tenant_id,
@@ -474,6 +489,7 @@ def create_hold(
         subscription_id,
         {
             "hold_id": hold_id,
+            "entry_id": entry_id,
             "from": body.from_.isoformat(),
             "to": body.to.isoformat(),
             "days": days,
@@ -493,7 +509,7 @@ def create_hold(
         "lessons_cancelled": len(cancelled),
         "freeze_days_left": max(left - days, 0),
         "message": (
-            f"Заморозка на {days} {plural(days, 'день', 'дня', 'дней')}: "
+            f"Заморозка на {days} {days_word(days)}: "
             f"срок сдвинут на {valid_until_after:%d.%m.%Y}, "
             f"отменено занятий — {len(cancelled)}."
         ),
@@ -505,9 +521,9 @@ def _cancel_lessons(
 ) -> list[str]:
     """Отменяет запланированные занятия внутри заморозки — без списания.
 
-    Записи в журнал абонемента не идут: движения нет, а ограничение
-    entry_nonzero_ck не пропустит строку с нулевыми дельтами. След остаётся
-    в аудите — там же, где и остальные подробности заморозки.
+    Отдельной строки журнала на каждое отменённое занятие не пишем: занятия
+    не сгорели, они просто не состоятся, а весь период уже описан одной
+    записью `freeze`. Строка на урок означала бы движение, которого не было.
 
     Границы дня берутся в поясе филиала: в UTC 14 августа для Алматы
     начинается 13-го в 19:00, и занятие вечера 13-го отменилось бы зря.
@@ -574,7 +590,9 @@ def release_hold(
         (hold_id,),
     )
     audited = cur.fetchone()
-    lessons_cancelled = int((audited["payload"] if audited else {}).get("lessons_cancelled", 0))
+    payload = audited["payload"] if audited else {}
+    lessons_cancelled = int(payload.get("lessons_cancelled", 0))
+    frozen_entry_id = payload.get("entry_id")
 
     cur.execute(
         "UPDATE subscription SET valid_until = valid_until - %s WHERE id = %s RETURNING valid_until",
@@ -582,6 +600,26 @@ def release_hold(
     )
     valid_until_after = cur.fetchone()["valid_until"]
 
+    # Строку заморозки в журнале не правим и не удаляем — база бы этого
+    # и не позволила. Снятие гасится компенсирующей записью со ссылкой
+    # на исходную: в истории остаётся и то, что абонемент замораживали,
+    # и то, что заморозку сняли.
+    entry_id = journal.add_entry(
+        cur,
+        tenant_id,
+        subscription_id,
+        kind="freeze",
+        lessons_delta=0,
+        makeups_delta=0,
+        reason=unfreeze_reason(hold["from_day"], hold["to_day"], valid_until_after),
+        actor_id=actor_id,
+        reverses_id=frozen_entry_id,
+    )
+
+    # Сама заморозка из subscription_hold удаляется: это не журнал, а текущее
+    # состояние. Пока строка жива, ограничение исключения держит интервал
+    # занятым, а годовой лимит считает эти дни израсходованными — то есть
+    # снятая заморозка продолжала бы действовать.
     cur.execute("DELETE FROM subscription_hold WHERE id = %s", (hold_id,))
 
     rules = dict(DEFAULT_RULES)
@@ -598,6 +636,8 @@ def release_hold(
         subscription_id,
         {
             "hold_id": hold_id,
+            "entry_id": entry_id,
+            "reverses_id": frozen_entry_id,
             "days": days,
             "valid_until_before": valid_until_before.isoformat(),
             "valid_until_after": valid_until_after.isoformat(),

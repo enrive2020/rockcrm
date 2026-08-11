@@ -141,7 +141,7 @@ def _subscription_block(
 def _ledger_block(cur: psycopg.Cursor, student_id: str, tz_name: str) -> list[dict[str, Any]]:
     out = []
     for row in repo.student_ledger(cur, student_id, tz_name):
-        title = ledger_title(row["kind"], row["mark"])
+        title = ledger_title(row["kind"], row["mark"], row["reason"])
         if row["kind"] == "purchase" and row["payment_method"]:
             title = f"{title} · {row['payment_method']}"
         out.append(

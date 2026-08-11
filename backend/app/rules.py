@@ -338,7 +338,7 @@ LEDGER_TITLES: dict[str, str] = {
     "makeup_grant": "Начислена отработка",
     "makeup_use": "Отработка использована",
     "makeup_expire": "Отработка сгорела по сроку",
-    "freeze": "Занятие в период заморозки",
+    "freeze": "Заморозка абонемента",
     "adjust": "Корректировка администратора",
     "transfer_in": "Перенос остатка с прошлого абонемента",
     "transfer_out": "Перенос остатка на новый абонемент",
@@ -362,15 +362,67 @@ _GRANT_TITLES: dict[str, str] = {
 }
 
 
-def ledger_title(kind: str, mark: str | None = None) -> str:
+def ledger_title(kind: str, mark: str | None = None, reason: str | None = None) -> str:
     """Человеческая формулировка строки журнала."""
     if kind == "charge" and mark:
         return _CHARGE_TITLES.get(mark, LEDGER_TITLES["charge"])
     if kind == "makeup_grant" and mark:
         return _GRANT_TITLES.get(mark, LEDGER_TITLES["makeup_grant"])
+    if kind == "freeze" and reason:
+        # У заморозки заголовок и есть причина: период в колонках
+        # subscription_entry не хранится, и восстановить «14–25 августа»
+        # из строки журнала больше неоткуда. Обе фразы собирают freeze_reason()
+        # и unfreeze_reason(), поэтому в базе и на экране написано дословно
+        # одно и то же — журнал читается и без API.
+        return reason
     # Неизвестный вид лучше показать как есть, чем спрятать за «прочее»:
     # пустая строка в журнале страшнее непереведённого кода.
     return LEDGER_TITLES.get(kind, kind)
+
+
+# Месяцы в родительном падеже: «14–25 августа», а не «14–25 август».
+_MONTHS_GENITIVE = (
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)
+
+
+def days_word(n: int) -> str:
+    return plural(n, "день", "дня", "дней")
+
+
+def date_range_ru(start: date, end: date) -> str:
+    """«14–25 августа» или «28 августа – 3 сентября»."""
+    if (start.year, start.month) == (end.year, end.month):
+        return f"{start.day}–{end.day} {_MONTHS_GENITIVE[start.month - 1]}"
+    return (
+        f"{start.day} {_MONTHS_GENITIVE[start.month - 1]} – "
+        f"{end.day} {_MONTHS_GENITIVE[end.month - 1]}"
+    )
+
+
+def freeze_reason(start: date, end: date, days: int, cause: str | None) -> str:
+    """Строка журнала о заморозке.
+
+    Две недели каникул обязаны быть видны в журнале, а не только в аудите:
+    журналом администратор отвечает на «куда делось занятие», и «в эти дни
+    абонемент стоял» — такой же ответ, как «занятие проведено».
+    """
+    text = f"Заморозка {date_range_ru(start, end)}, {days} {days_word(days)}"
+    return f"{text} · {cause}" if cause else text
+
+
+def unfreeze_reason(start: date, end: date, valid_until: date) -> str:
+    """Строка журнала о снятии заморозки — компенсирующая, а не удаление.
+
+    Записи журнала не правятся и не удаляются, поэтому снятая заморозка
+    остаётся в истории вместе с фактом снятия. Иначе спор «мне говорили,
+    что срок продлили» разрешать было бы нечем.
+    """
+    return (
+        f"Заморозка {date_range_ru(start, end)} снята, "
+        f"срок вернулся на {valid_until:%d.%m.%Y}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -380,6 +432,11 @@ def ledger_title(kind: str, mark: str | None = None) -> str:
 # в reasons должна быть проверяемым фактом («1 прогул за 30 дней»),
 # а не оценкой («ученик демотивирован»): администратор звонит родителю
 # и обязан опираться на то, что можно назвать вслух.
+#
+# Смягчающие факты (стаж, число купленных абонементов) в reasons не попадают:
+# в списке причин риска «занимается 6 месяцев» читается как довод ЗА отток,
+# хотя это довод против. Они снижают счёт и уходят отдельным полем
+# mitigations — тем же проверяемым фактом, но на своей стороне весов.
 # ---------------------------------------------------------------------------
 
 # Вес прогула самый большой осознанно: пропуск без предупреждения — первый
@@ -443,17 +500,18 @@ def churn_risk(
         word = plural(days_since_last_lesson, "день", "дня", "дней")
         reasons.append(f"не было занятий {days_since_last_lesson} {word}")
 
-    # Стаж и число купленных абонементов снижают риск — и тоже остаются
-    # проверяемыми фактами, поэтому попадают в reasons наравне с остальными.
+    # Стаж и число купленных абонементов снижают риск. В reasons они не идут:
+    # там перечислено то, что тревожит, а лояльность — довод в другую сторону.
+    mitigations: list[str] = []
     if months_with_school >= 6:
         score -= _LOYALTY_DISCOUNT
         word = plural(months_with_school, "месяц", "месяца", "месяцев")
-        reasons.append(f"занимается {months_with_school} {word}")
+        mitigations.append(f"занимается {months_with_school} {word} подряд")
     if subscriptions_bought >= 3:
         score -= _LOYALTY_DISCOUNT
         word = plural(subscriptions_bought, "абонемент", "абонемента", "абонементов")
-        reasons.append(f"куплено {subscriptions_bought} {word} подряд")
+        mitigations.append(f"куплено {subscriptions_bought} {word}")
 
     score = max(0, min(100, score))
     level = "high" if score >= RISK_HIGH else "medium" if score >= RISK_MEDIUM else "low"
-    return {"level": level, "score": score, "reasons": reasons}
+    return {"level": level, "score": score, "reasons": reasons, "mitigations": mitigations}

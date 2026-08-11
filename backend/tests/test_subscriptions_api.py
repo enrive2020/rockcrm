@@ -300,6 +300,54 @@ def test_hold_writes_audit(client, sql):
     assert audit["payload"]["reason"] == "каникулы"
 
 
+def entries(sql, subscription_id: str, kind: str):
+    return sql.execute(
+        """SELECT id, lessons_delta, makeups_delta, reason, reverses_id
+           FROM subscription_entry
+           WHERE subscription_id = %s AND kind = %s ORDER BY id""",
+        (subscription_id, kind),
+    ).fetchall()
+
+
+def test_hold_writes_into_the_subscription_journal(client, sql):
+    """Две недели каникул обязаны быть видны в журнале, а не только в аудите."""
+    freeze(client, AMINA_SUB, "2026-08-14", "2026-08-25")
+
+    rows = entries(sql, AMINA_SUB, "freeze")
+    assert len(rows) == 1
+    # Баланс заморозка не двигает — обе дельты нулевые.
+    assert (rows[0]["lessons_delta"], rows[0]["makeups_delta"]) == (0, 0)
+    assert rows[0]["reason"] == "Заморозка 14–25 августа, 11 дней · каникулы"
+    assert rows[0]["reverses_id"] is None
+
+
+def test_hold_row_is_readable_in_the_card_ledger(client):
+    """Строка журнала на экране написана словами, а не кодом вида записи."""
+    freeze(client, AMINA_SUB, "2026-08-14", "2026-08-25")
+
+    ledger = client.get(f"/api/v1/students/{student(AMINA)}", headers=HEADERS).json()["ledger"]
+    frozen = [row for row in ledger if row["kind"] == "freeze"]
+    assert len(frozen) == 1
+    assert frozen[0]["title"] == "Заморозка 14–25 августа, 11 дней · каникулы"
+    assert (frozen[0]["lessons_delta"], frozen[0]["makeups_delta"]) == (0, 0)
+    # Журнал новыми сверху: заморозка оформлена сегодня и стоит первой.
+    assert ledger[0]["kind"] == "freeze"
+    # Нулевая запись не портит сумму журнала — она по-прежнему равна остатку.
+    assert sum(row["lessons_delta"] for row in ledger) == 5
+
+
+def test_hold_without_reason_still_names_the_period(client, sql):
+    freeze(client, AMINA_SUB, "2026-08-14", "2026-08-25", reason=None)
+    assert entries(sql, AMINA_SUB, "freeze")[0]["reason"] == "Заморозка 14–25 августа, 11 дней"
+
+
+def test_hold_across_months_is_named_in_full(client, sql):
+    freeze(client, AMINA_SUB, "2026-08-28", "2026-09-03", reason=None)
+    assert entries(sql, AMINA_SUB, "freeze")[0]["reason"] == (
+        "Заморозка 28 августа – 3 сентября, 6 дней"
+    )
+
+
 def test_overlapping_holds_are_refused_with_409(client):
     """Ограничение исключения базы обязано стать понятным 409, а не 500."""
     assert freeze(client, AMINA_SUB, HOLD_FROM, HOLD_TO).status_code == 201
@@ -392,6 +440,35 @@ def test_release_returns_valid_until_back(client, sql):
     assert sql.execute(
         "SELECT count(*) AS n FROM subscription_hold WHERE id = %s", (hold_id,)
     ).fetchone()["n"] == 0
+
+
+def test_release_compensates_the_journal_instead_of_erasing_it(client, sql):
+    """Записи журнала не правятся и не удаляются — снятие гасится записью."""
+    hold_id = freeze(client, AMINA_SUB, "2026-08-14", "2026-08-25").json()["hold_id"]
+    frozen = entries(sql, AMINA_SUB, "freeze")[0]
+
+    unfreeze(client, AMINA_SUB, hold_id)
+
+    rows = entries(sql, AMINA_SUB, "freeze")
+    assert len(rows) == 2, "исходная запись осталась, к ней добавилась компенсирующая"
+    assert rows[0]["id"] == frozen["id"]
+    assert rows[0]["reason"] == frozen["reason"], "старую строку никто не переписал"
+    assert rows[1]["reverses_id"] == frozen["id"], "компенсация ссылается на то, что гасит"
+    assert rows[1]["reason"] == "Заморозка 14–25 августа снята, срок вернулся на 31.08.2026"
+    assert (rows[1]["lessons_delta"], rows[1]["makeups_delta"]) == (0, 0)
+
+
+def test_release_is_visible_in_the_card_ledger(client):
+    hold_id = freeze(client, AMINA_SUB, "2026-08-14", "2026-08-25").json()["hold_id"]
+    unfreeze(client, AMINA_SUB, hold_id)
+
+    ledger = client.get(f"/api/v1/students/{student(AMINA)}", headers=HEADERS).json()["ledger"]
+    titles = [row["title"] for row in ledger if row["kind"] == "freeze"]
+    assert titles == [
+        "Заморозка 14–25 августа снята, срок вернулся на 31.08.2026",
+        "Заморозка 14–25 августа, 11 дней · каникулы",
+    ]
+    assert sum(row["lessons_delta"] for row in ledger) == 5
 
 
 def test_release_says_lessons_are_not_restored(client, sql):

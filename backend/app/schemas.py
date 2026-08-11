@@ -296,7 +296,12 @@ class StudentNote(BaseModel):
 class ChurnRisk(BaseModel):
     level: Literal["low", "medium", "high"]
     score: int
+    # Только то, что повышает риск. Смягчающие факты живут отдельно: в списке
+    # причин риска «занимается 6 месяцев» читалось бы как довод за отток.
     reasons: list[str]
+    # Сверх контракта: факты, снизившие оценку. Интерфейс показывает их рядом,
+    # как в прототипе, но не путает с причинами.
+    mitigations: list[str] = []
 
 
 class StudentCard(BaseModel):
