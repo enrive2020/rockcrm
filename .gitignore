@@ -1,0 +1,27 @@
+# окружение
+.venv/
+pgvenv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# данные локальной базы
+pgdata/
+*.sqlite
+*.db
+
+# секреты
+.env
+*.pem
+secrets/
+
+# редакторы и ОС
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# сборка фронтенда
+node_modules/
+dist/
+build/

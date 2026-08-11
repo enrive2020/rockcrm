@@ -1,0 +1,766 @@
+<meta charset="utf-8">
+<title>RockCRM — прототип</title>
+<style>
+:root{
+  --bg:#E8EAED; --panel:#FFFFFF; --panel-2:#F4F5F7; --panel-3:#ECEEF1;
+  --line:#D3D7DD; --line-soft:#E3E6EA;
+  --ink:#15181D; --ink-2:#4A515C; --ink-3:#7C838F;
+  --accent:#8A6412; --accent-bright:#B98A24; --accent-wash:#F6EFDD; --on-accent:#FFFFFF;
+  --ok:#257A57; --ok-wash:#E3F0E9;
+  --bad:#B23A31; --bad-wash:#F8E6E4;
+  --rail:#1B1E23; --rail-ink:#C9CFD8; --rail-ink-3:#767F8B; --rail-line:#2B3038;
+  --ch-clay:#A65D3F; --ch-teal:#2F7D7A; --ch-slate:#4B6489; --ch-moss:#4E7A3E; --ch-plum:#7C4A72;
+  --shadow:0 1px 2px rgba(16,18,22,.06), 0 8px 24px -12px rgba(16,18,22,.22);
+  --hw:104px;
+  --f-display:"Bahnschrift","DIN Alternate","Avenir Next Condensed","Segoe UI",system-ui,sans-serif;
+  --f-ui:"Segoe UI",system-ui,-apple-system,"Noto Sans",sans-serif;
+  --f-mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#101216; --panel:#191C21; --panel-2:#21252B; --panel-3:#262A31;
+    --line:#2C313A; --line-soft:#23272E;
+    --ink:#E9ECF1; --ink-2:#A7AFBB; --ink-3:#757E8B;
+    --accent:#D9A73C; --accent-bright:#EFC163; --accent-wash:#2A2318; --on-accent:#15181D;
+    --ok:#4FA97F; --ok-wash:#16291F;
+    --bad:#D9645A; --bad-wash:#2B1917;
+    --rail:#15181C; --rail-ink:#C9CFD8; --rail-ink-3:#6C7683; --rail-line:#242931;
+    --ch-clay:#C97F5E; --ch-teal:#4FA5A1; --ch-slate:#7C97C4; --ch-moss:#7BA766; --ch-plum:#B278A6;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101216; --panel:#191C21; --panel-2:#21252B; --panel-3:#262A31;
+  --line:#2C313A; --line-soft:#23272E;
+  --ink:#E9ECF1; --ink-2:#A7AFBB; --ink-3:#757E8B;
+  --accent:#D9A73C; --accent-bright:#EFC163; --accent-wash:#2A2318; --on-accent:#15181D;
+  --ok:#4FA97F; --ok-wash:#16291F;
+  --bad:#D9645A; --bad-wash:#2B1917;
+  --rail:#15181C; --rail-ink:#C9CFD8; --rail-ink-3:#6C7683; --rail-line:#242931;
+  --ch-clay:#C97F5E; --ch-teal:#4FA5A1; --ch-slate:#7C97C4; --ch-moss:#7BA766; --ch-plum:#B278A6;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
+}
+:root[data-theme="light"]{
+  --bg:#E8EAED; --panel:#FFFFFF; --panel-2:#F4F5F7; --panel-3:#ECEEF1;
+  --line:#D3D7DD; --line-soft:#E3E6EA;
+  --ink:#15181D; --ink-2:#4A515C; --ink-3:#7C838F;
+  --accent:#8A6412; --accent-bright:#B98A24; --accent-wash:#F6EFDD; --on-accent:#FFFFFF;
+  --ok:#257A57; --ok-wash:#E3F0E9;
+  --bad:#B23A31; --bad-wash:#F8E6E4;
+  --rail:#1B1E23; --rail-ink:#C9CFD8; --rail-ink-3:#767F8B; --rail-line:#2B3038;
+  --ch-clay:#A65D3F; --ch-teal:#2F7D7A; --ch-slate:#4B6489; --ch-moss:#4E7A3E; --ch-plum:#7C4A72;
+  --shadow:0 1px 2px rgba(16,18,22,.06), 0 8px 24px -12px rgba(16,18,22,.22);
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent-bright);outline-offset:2px;border-radius:3px}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.lbl{font-family:var(--f-display);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+
+/* ---------- shell ---------- */
+.app{display:grid;grid-template-columns:216px 1fr;height:100vh;overflow:hidden}
+.rail{background:var(--rail);color:var(--rail-ink);display:flex;flex-direction:column;border-right:1px solid var(--rail-line)}
+.brand{padding:18px 18px 16px;border-bottom:1px solid var(--rail-line);display:flex;align-items:baseline;gap:8px}
+.brand b{font-family:var(--f-display);font-size:19px;letter-spacing:.02em;color:#fff;font-weight:600}
+.brand span{font-family:var(--f-display);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-bright)}
+.nav{padding:12px 10px;display:flex;flex-direction:column;gap:2px}
+.nav-h{padding:14px 8px 6px;font-family:var(--f-display);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--rail-ink-3)}
+.nav button{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:4px;text-align:left;color:var(--rail-ink);font-size:13.5px}
+.nav button:hover{background:rgba(255,255,255,.055)}
+.nav button[aria-current="true"]{background:rgba(255,255,255,.085);color:#fff;box-shadow:inset 2px 0 0 var(--accent-bright)}
+.nav .k{width:16px;flex:none;color:var(--rail-ink-3);font-family:var(--f-mono);font-size:11px}
+.nav button[aria-current="true"] .k{color:var(--accent-bright)}
+.rail-foot{margin-top:auto;padding:12px;border-top:1px solid var(--rail-line);display:flex;align-items:center;gap:8px}
+.who{min-width:0}
+.who b{display:block;font-size:12.5px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who span{font-size:11px;color:var(--rail-ink-3)}
+.avatar{width:28px;height:28px;flex:none;border-radius:3px;background:var(--accent);color:#15181D;display:grid;place-items:center;font-family:var(--f-display);font-size:12px;font-weight:600}
+.theme-btn{margin-left:auto;flex:none;width:28px;height:28px;border-radius:3px;border:1px solid var(--rail-line);color:var(--rail-ink-3);display:grid;place-items:center;font-size:13px}
+.theme-btn:hover{color:#fff;border-color:var(--rail-ink-3)}
+
+.main{display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.topbar{flex:none;background:var(--panel);border-bottom:1px solid var(--line);padding:0 18px;height:56px;display:flex;align-items:center;gap:16px}
+.seg-ctl{display:flex;background:var(--panel-3);border:1px solid var(--line);border-radius:4px;padding:2px;gap:2px}
+.seg-ctl button{padding:5px 11px;border-radius:2px;font-size:12.5px;color:var(--ink-2);white-space:nowrap}
+.seg-ctl button[aria-pressed="true"]{background:var(--panel);color:var(--ink);font-weight:600;box-shadow:var(--shadow)}
+.spacer{margin-left:auto}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:99px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.pill.ok{background:var(--ok-wash);color:var(--ok)}
+.pill.bad{background:var(--bad-wash);color:var(--bad)}
+.pill.acc{background:var(--accent-wash);color:var(--accent)}
+.pill.mute{background:var(--panel-3);color:var(--ink-3)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+
+.screen{display:none;flex:1;min-height:0;overflow:auto}
+.screen.on{display:block}
+.pad{padding:20px 22px 40px}
+.h1{font-family:var(--f-display);font-size:22px;font-weight:600;letter-spacing:.01em;margin:0}
+.sub{color:var(--ink-3);font-size:13px;margin:3px 0 0}
+
+/* ---------- timeline ---------- */
+.tl-head{display:flex;align-items:center;gap:14px;padding:14px 22px 12px}
+.daynav{display:flex;align-items:center;gap:2px}
+.daynav button{width:30px;height:30px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--ink-2);display:grid;place-items:center}
+.daynav button:hover{border-color:var(--ink-3)}
+.daynav .today{width:auto;padding:0 12px;font-family:var(--f-display);font-size:13px;letter-spacing:.04em}
+.tl-wrap{margin:0 22px 22px;background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden;box-shadow:var(--shadow)}
+.tl-scroll{overflow-x:auto}
+.tl-inner{min-width:calc(200px + 11*var(--hw))}
+.ruler{display:flex;position:sticky;top:0;z-index:3;background:var(--panel-2);border-bottom:1px solid var(--line)}
+.ruler .gut{width:200px;flex:none;position:sticky;left:0;z-index:4;background:var(--panel-2);border-right:1px solid var(--line);padding:0 12px;display:flex;align-items:center}
+.tick{width:var(--hw);flex:none;padding:7px 0 6px 8px;border-left:1px solid var(--line-soft);font-family:var(--f-mono);font-size:11px;color:var(--ink-3);position:relative}
+.tick::after{content:"";position:absolute;left:calc(50% - .5px);bottom:0;width:1px;height:5px;background:var(--line)}
+.track{display:flex;border-bottom:1px solid var(--line-soft);min-height:60px}
+.track:last-child{border-bottom:none}
+.track .gut{width:200px;flex:none;position:sticky;left:0;z-index:2;background:var(--panel);border-right:1px solid var(--line);padding:9px 12px;display:flex;gap:9px;align-items:flex-start}
+.chan{width:3px;flex:none;align-self:stretch;border-radius:2px;background:var(--ch)}
+.gut b{display:block;font-size:13px;font-weight:600;line-height:1.3}
+.gut small{display:block;font-size:11px;color:var(--ink-3);margin-top:1px}
+.lane{position:relative;flex:1;background-image:repeating-linear-gradient(to right,var(--line-soft) 0 1px,transparent 1px var(--hw));background-position-x:-1px;padding:8px 0}
+.now{position:absolute;top:0;bottom:0;width:1px;background:var(--bad);z-index:2;opacity:.8}
+.now::before{content:"";position:absolute;top:0;left:-3px;width:7px;height:7px;border-radius:50%;background:var(--bad)}
+
+.les{position:absolute;top:8px;height:44px;left:calc(var(--s)*var(--hw));width:calc(var(--d)*var(--hw) - 5px);border:1px solid var(--line);border-left:3px solid var(--ch);border-radius:4px;background:var(--panel);padding:5px 8px;text-align:left;overflow:hidden;display:block;transition:transform .12s ease,box-shadow .12s ease}
+.les:hover{transform:translateY(-1px);box-shadow:var(--shadow);border-color:var(--ink-3)}
+.les[aria-pressed="true"]{border-color:var(--accent-bright);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent-bright) 32%,transparent)}
+.les b{display:block;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
+.les small{display:block;font-size:11px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--f-mono)}
+/* фон кодирует статус, левая полоса — преподавателя; полоса не должна теряться */
+.les.done{background:var(--ok-wash);border-color:color-mix(in srgb,var(--ok) 30%,transparent);border-left-color:var(--ch)}
+.les.done b{color:var(--ok)}
+.les.missed{background:var(--bad-wash);border-color:color-mix(in srgb,var(--bad) 32%,transparent);border-left-color:var(--ch)}
+.les.missed b{color:var(--bad)}
+.les.trial{background:var(--accent-wash);border-color:color-mix(in srgb,var(--accent-bright) 40%,transparent);border-left-color:var(--ch)}
+.les.clash{border-color:var(--bad);background-image:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in srgb,var(--bad) 13%,transparent) 6px 12px)}
+.flag{position:absolute;top:-1px;right:-1px;background:var(--bad);color:#fff;font-family:var(--f-display);font-size:9px;letter-spacing:.06em;padding:1px 5px;border-radius:0 3px 0 4px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;padding:10px 22px 0;color:var(--ink-3);font-size:12px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+/* ---------- inspector ---------- */
+.insp{position:fixed;top:0;right:0;bottom:0;width:372px;background:var(--panel);border-left:1px solid var(--line);z-index:20;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .2s ease;box-shadow:-18px 0 40px -28px rgba(0,0,0,.5)}
+.insp.on{transform:none}
+.insp-h{flex:none;padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:10px}
+.insp-h h2{margin:0;font-family:var(--f-display);font-size:17px;font-weight:600}
+.insp-h p{margin:2px 0 0;font-size:12px;color:var(--ink-3);font-family:var(--f-mono)}
+.x{margin-left:auto;flex:none;width:26px;height:26px;border-radius:4px;color:var(--ink-3);display:grid;place-items:center;font-size:16px}
+.x:hover{background:var(--panel-3);color:var(--ink)}
+.insp-b{flex:1;overflow:auto;padding:16px}
+.blk{margin-bottom:20px}
+.blk>.lbl{display:block;margin-bottom:8px}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line-soft);font-size:13px}
+.kv:last-child{border-bottom:none}
+.kv span{color:var(--ink-3)}
+.kv b{font-weight:600}
+.marks{display:flex;flex-direction:column;gap:6px}
+.mark{display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:5px;background:var(--panel-2);text-align:left;font-size:13px;transition:border-color .12s}
+.mark:hover{border-color:var(--ink-3)}
+.mark[aria-pressed="true"]{border-color:var(--accent-bright);background:var(--accent-wash)}
+.mark .key{font-family:var(--f-mono);font-size:10px;color:var(--ink-3);border:1px solid var(--line);border-radius:3px;padding:0 4px;margin-left:auto;flex:none}
+.rule{margin-top:8px;padding:10px 11px;border-radius:5px;background:var(--panel-2);border:1px dashed var(--line);font-size:12.5px;color:var(--ink-2)}
+.rule strong{color:var(--ink);font-weight:600}
+.rule ul{margin:6px 0 0;padding-left:16px;display:flex;flex-direction:column;gap:3px}
+.insp-f{flex:none;padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px}
+.btn{flex:1;padding:9px 14px;border-radius:5px;font-size:13.5px;font-weight:600;border:1px solid var(--line);background:var(--panel-2);color:var(--ink)}
+.btn:hover{border-color:var(--ink-3)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.pri:hover{background:var(--accent-bright);border-color:var(--accent-bright)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* ---------- cards, grid ---------- */
+.grid{display:grid;gap:14px}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g2{grid-template-columns:1fr 1fr}
+.g-side{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;box-shadow:var(--shadow)}
+.card>.lbl{display:block;margin-bottom:10px}
+.card h3{margin:0 0 3px;font-family:var(--f-display);font-size:16px;font-weight:600}
+.stat{font-family:var(--f-display);font-size:29px;font-weight:600;letter-spacing:.01em;line-height:1.1;font-variant-numeric:tabular-nums}
+.trend{font-size:12px;color:var(--ink-3);margin-top:4px}
+.trend b{font-weight:600}
+.up{color:var(--ok)}.down{color:var(--bad)}
+.bar{height:5px;border-radius:3px;background:var(--panel-3);overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;background:var(--accent-bright);border-radius:3px}
+
+/* segmented abonement meter — count is readable, not estimated */
+.meter{display:flex;gap:3px;margin:10px 0 8px}
+.meter i{flex:1;height:26px;border-radius:2px;background:var(--panel-3);border:1px solid var(--line);position:relative}
+.meter i.on{background:var(--accent-bright);border-color:color-mix(in srgb,var(--accent) 60%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 40%,transparent)}
+.meter i.hold{background:repeating-linear-gradient(135deg,var(--panel-3) 0 4px,var(--line) 4px 8px)}
+
+/* ---------- tables ---------- */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-family:var(--f-display);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:0 10px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid var(--line-soft);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+td.r,th.r{text-align:right}
+tbody tr:hover{background:var(--panel-2)}
+.who-cell{display:flex;align-items:center;gap:9px}
+.chip{width:24px;height:24px;flex:none;border-radius:3px;display:grid;place-items:center;font-family:var(--f-display);font-size:11px;font-weight:600;color:#fff;background:var(--ch)}
+
+/* ---------- kanban ---------- */
+.kb{display:grid;grid-template-columns:repeat(5,minmax(210px,1fr));gap:12px;align-items:start}
+.col{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:10px;min-height:120px}
+.col-h{display:flex;align-items:center;gap:7px;margin-bottom:9px}
+.col-h b{font-family:var(--f-display);font-size:12px;letter-spacing:.05em;text-transform:uppercase;font-weight:600}
+.col-h .n{margin-left:auto;font-family:var(--f-mono);font-size:11px;color:var(--ink-3)}
+.lead{width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:10px;margin-bottom:8px;display:block;transition:transform .12s,box-shadow .12s}
+.lead:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+.lead b{display:block;font-size:13px;font-weight:600}
+.lead small{display:block;font-size:11.5px;color:var(--ink-3);margin-top:2px}
+.lead .row{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
+.src{font-family:var(--f-display);font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--panel-3);color:var(--ink-2)}
+
+/* ---------- notes / repertoire ---------- */
+.note{padding:11px 0;border-bottom:1px solid var(--line-soft)}
+.note:last-child{border-bottom:none}
+.note-h{display:flex;gap:8px;align-items:baseline;margin-bottom:3px}
+.note-h time{font-family:var(--f-mono);font-size:11.5px;color:var(--ink-3)}
+.note-h b{font-size:13px;font-weight:600}
+.note p{margin:0;font-size:13px;color:var(--ink-2)}
+.tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.tag{font-size:11.5px;padding:2px 7px;border-radius:3px;border:1px solid var(--line);color:var(--ink-2);background:var(--panel-2)}
+
+/* ---------- toast ---------- */
+.toasts{position:fixed;right:392px;bottom:20px;z-index:40;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
+.toast{background:var(--rail);color:#EDF0F4;border:1px solid var(--rail-line);border-left:3px solid var(--accent-bright);border-radius:5px;padding:11px 14px;min-width:288px;box-shadow:0 12px 32px -12px rgba(0,0,0,.55);animation:slide .22s ease}
+.toast b{display:block;font-size:13px;font-weight:600;margin-bottom:5px}
+.toast ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:3px}
+.toast li{font-size:12px;color:#AEB6C1;display:flex;justify-content:space-between;gap:14px;font-family:var(--f-mono)}
+.toast li em{font-style:normal;color:var(--accent-bright)}
+@keyframes slide{from{opacity:0;transform:translateX(14px)}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
+
+@media (max-width:1100px){
+  .app{grid-template-columns:60px 1fr}
+  .brand span,.nav button span,.nav-h,.who{display:none}
+  .brand{justify-content:center;padding:18px 8px}
+  .nav button{justify-content:center;padding:9px 0}
+  .rail-foot{justify-content:center}
+  .theme-btn{margin:0}
+  .g3,.g2,.g-side{grid-template-columns:1fr}
+  .insp{width:100%;max-width:372px}
+  .toasts{right:16px}
+}
+</style>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><b>RockCRM</b><span>прототип</span></div>
+    <nav class="nav">
+      <div class="nav-h">Смена</div>
+      <button data-screen="schedule" aria-current="true"><i class="k">1</i><span>Расписание</span></button>
+      <button data-screen="student"><i class="k">2</i><span>Ученики</span></button>
+      <button data-screen="leads"><i class="k">3</i><span>Заявки</span></button>
+      <div class="nav-h">Управление</div>
+      <button data-screen="money"><i class="k">4</i><span>Деньги и ЗП</span></button>
+    </nav>
+    <div class="rail-foot">
+      <div class="avatar">АД</div>
+      <div class="who"><b>Айгерим Дюсенова</b><span>Администратор</span></div>
+      <button class="theme-btn" id="theme" title="Сменить тему">◐</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="seg-ctl" id="branches">
+        <button data-branch="af" aria-pressed="true">Аль-Фараби 53В</button>
+        <button data-branch="ab" aria-pressed="false">Абая 124</button>
+      </div>
+      <span class="pill mute" id="load-pill"><i class="dot"></i>Загрузка кабинетов 74%</span>
+      <div class="spacer"></div>
+      <span class="pill bad" id="clash-pill"><i class="dot"></i>1 конфликт кабинета</span>
+      <span class="pill acc"><i class="dot"></i>3 абонемента заканчиваются</span>
+    </header>
+
+    <!-- ========== РАСПИСАНИЕ ========== -->
+    <section class="screen on" id="s-schedule">
+      <div class="tl-head">
+        <div>
+          <h1 class="h1">Расписание</h1>
+          <p class="sub" id="tl-sub">Вторник, 12 августа · 13 занятий · 2 пробных</p>
+        </div>
+        <div class="spacer"></div>
+        <div class="daynav">
+          <button id="prev" title="Предыдущий день">‹</button>
+          <button class="today" id="daylabel">Вт 12 авг</button>
+          <button id="next" title="Следующий день">›</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--panel);border:1px solid var(--line)"></i>Запланировано</span>
+        <span><i style="background:var(--ok-wash);border:1px solid var(--ok)"></i>Проведено</span>
+        <span><i style="background:var(--bad-wash);border:1px solid var(--bad)"></i>Прогул</span>
+        <span><i style="background:var(--accent-wash);border:1px solid var(--accent-bright)"></i>Пробный урок</span>
+        <span>Полоса слева — преподаватель · клик по занятию открывает отметку</span>
+      </div>
+      <div class="tl-wrap">
+        <div class="tl-scroll">
+          <div class="tl-inner">
+            <div class="ruler" id="ruler"></div>
+            <div id="tracks"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- ========== УЧЕНИК ========== -->
+    <section class="screen" id="s-student">
+      <div class="pad">
+        <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:18px">
+          <div class="chip" style="--ch:var(--ch-clay);width:44px;height:44px;font-size:16px;border-radius:5px">АС</div>
+          <div>
+            <h1 class="h1">Амина Сагындык</h1>
+            <p class="sub">9 лет · Барабаны · Дмитрий Шарапов · Аль-Фараби 53В · с 4 февраля 2026</p>
+          </div>
+          <div class="spacer"></div>
+          <span class="pill ok"><i class="dot"></i>Занимается</span>
+        </div>
+
+        <div class="grid g-side">
+          <div style="display:flex;flex-direction:column;gap:14px">
+
+            <div class="card">
+              <span class="lbl">Абонемент · 8 занятий · 2 раза в неделю · 55 мин</span>
+              <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+                <span class="stat" id="abon-left">5</span>
+                <span style="color:var(--ink-3);font-size:14px">из 8 занятий осталось</span>
+                <div class="spacer"></div>
+                <span class="pill acc"><i class="dot"></i>+1 отработка</span>
+              </div>
+              <div class="meter" id="abon-meter" aria-hidden="true"></div>
+              <div style="display:flex;justify-content:space-between;color:var(--ink-3);font-size:12px">
+                <span>Оплачен 1 авг · 54 000 ₸ · действует до 31 авг</span>
+                <span class="num">6 750 ₸ / занятие</span>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+                <button class="btn pri" style="flex:none" id="sell-btn">Продать продление</button>
+                <button class="btn" style="flex:none" id="freeze-btn">Заморозить</button>
+                <button class="btn" style="flex:none">Перенести занятие</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <span class="lbl">Заметки к урокам и репертуар</span>
+              <div class="note">
+                <div class="note-h"><time>7 авг</time><b>Дмитрий Шарапов</b></div>
+                <p>Разобрали сбивку на 16-х. Правая рука зажимается на скорости выше 90 bpm — держим метроном на 80.</p>
+                <div class="tags"><span class="tag">Nirvana — Smells Like Teen Spirit</span><span class="tag">Рудимент: Single Paradiddle</span><span class="tag">80 bpm</span></div>
+              </div>
+              <div class="note">
+                <div class="note-h"><time>4 авг</time><b>Дмитрий Шарапов</b></div>
+                <p>Впервые сыграла припев целиком под минус. Готовим к отчётному концерту 27 сентября.</p>
+                <div class="tags"><span class="tag">Отчётный концерт</span><span class="tag">Игра под минус</span></div>
+              </div>
+              <div class="note">
+                <div class="note-h"><time>31 июл</time><b>Дмитрий Шарапов</b></div>
+                <p>Постановка правой ноги на кике. Дома — 10 минут в день на восьмые.</p>
+                <div class="tags"><span class="tag">Техника: bass drum</span><span class="tag">ДЗ: 10 мин/день</span></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <span class="lbl">Движение по абонементу</span>
+              <div class="tbl-wrap">
+                <table>
+                  <thead><tr><th>Дата</th><th>Событие</th><th>Преподаватель</th><th class="r">Занятий</th><th class="r">Деньги</th></tr></thead>
+                  <tbody id="ledger">
+                    <tr><td class="num">7 авг</td><td>Занятие проведено</td><td>Шарапов</td><td class="r num">−1</td><td class="r num" style="color:var(--ink-3)">—</td></tr>
+                    <tr><td class="num">5 авг</td><td>Прогул без предупреждения</td><td>Шарапов</td><td class="r num" style="color:var(--bad)">−1</td><td class="r num" style="color:var(--ink-3)">—</td></tr>
+                    <tr><td class="num">4 авг</td><td>Занятие проведено</td><td>Шарапов</td><td class="r num">−1</td><td class="r num" style="color:var(--ink-3)">—</td></tr>
+                    <tr><td class="num">2 авг</td><td>Отмена за 2 дня → отработка</td><td>Шарапов</td><td class="r num" style="color:var(--ok)">0</td><td class="r num" style="color:var(--ink-3)">—</td></tr>
+                    <tr><td class="num">1 авг</td><td>Оплата абонемента · Kaspi</td><td style="color:var(--ink-3)">—</td><td class="r num">+8</td><td class="r num">54 000 ₸</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="card">
+              <span class="lbl">Семья · плательщик</span>
+              <div class="who-cell" style="margin-bottom:12px">
+                <div class="chip" style="--ch:var(--ch-plum)">ГС</div>
+                <div><b style="font-size:13.5px">Гульнара Сагындык</b><br><span class="num" style="font-size:12px;color:var(--ink-3)">+7 701 555-24-18</span></div>
+              </div>
+              <div class="kv"><span>Амина, 9 лет</span><b>Барабаны · 5 занятий</b></div>
+              <div class="kv"><span>Тимур, 12 лет</span><b>Гитара · 3 занятия</b></div>
+              <div class="kv"><span>Скидка «второй ребёнок»</span><b style="color:var(--ok)">−10%</b></div>
+              <div class="kv"><span>Оплачено за август</span><b class="num">97 200 ₸</b></div>
+              <button class="btn" style="width:100%;margin-top:12px">Написать в WhatsApp</button>
+            </div>
+
+            <div class="card">
+              <span class="lbl">Правила абонемента</span>
+              <div class="kv"><span>Прогул без предупреждения</span><b style="color:var(--bad)">Сгорает</b></div>
+              <div class="kv"><span>Отмена более чем за 24 ч</span><b style="color:var(--ok)">В отработки</b></div>
+              <div class="kv"><span>Отменил преподаватель</span><b style="color:var(--ok)">Не списывается</b></div>
+              <div class="kv"><span>Заморозка</span><b>до 14 дней в год</b></div>
+              <div class="kv"><span>Срок жизни отработки</span><b>30 дней</b></div>
+              <p style="margin:12px 0 0;font-size:12px;color:var(--ink-3)">Правила задаются школой при настройке и применяются автоматически при отметке посещаемости.</p>
+            </div>
+
+            <div class="card">
+              <span class="lbl">Риск оттока</span>
+              <div style="display:flex;align-items:baseline;gap:9px"><span class="stat" style="color:var(--accent)">Средний</span></div>
+              <p class="trend">1 прогул за 30 дней · абонемент кончается через <b>2 занятия</b> · продлевала 5 месяцев подряд</p>
+              <div class="bar"><i style="width:46%"></i></div>
+              <button class="btn" style="width:100%;margin-top:12px">Поставить задачу на продление</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- ========== ЗАЯВКИ ========== -->
+    <section class="screen" id="s-leads">
+      <div class="pad">
+        <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:6px">
+          <div>
+            <h1 class="h1">Заявки</h1>
+            <p class="sub">Заявки приходят из Telegram-бота, формы сайта и WhatsApp — попадают сюда автоматически</p>
+          </div>
+          <div class="spacer"></div>
+          <span class="pill ok"><i class="dot"></i>Конверсия пробный → абонемент 61%</span>
+        </div>
+        <div class="legend" style="padding-left:0;margin-bottom:14px">
+          <span>Средний путь от заявки до оплаты — <b class="num">4 дня</b></span>
+          <span>Не дозвонились с первого раза — <b class="num">38%</b></span>
+        </div>
+
+        <div class="kb">
+          <div class="col">
+            <div class="col-h"><b>Новая</b><span class="n">3</span></div>
+            <button class="lead"><b>Алиса Ким</b><small>7 лет · барабаны</small><div class="row"><span class="src">TG-бот</span><span class="pill mute">2 часа назад</span></div></button>
+            <button class="lead"><b>Ержан Оспанов</b><small>взрослый · гитара</small><div class="row"><span class="src">Instagram</span><span class="pill mute">4 часа назад</span></div></button>
+            <button class="lead"><b>Мадина Абишева</b><small>10 лет · вокал</small><div class="row"><span class="src">Сайт</span><span class="pill bad"><i class="dot"></i>Не дозвонились ×2</span></div></button>
+          </div>
+          <div class="col">
+            <div class="col-h"><b>Дозвон</b><span class="n">2</span></div>
+            <button class="lead"><b>Санжар Тлеу</b><small>13 лет · барабаны</small><div class="row"><span class="src">WhatsApp</span><span class="pill mute">Ждёт ответа мамы</span></div></button>
+            <button class="lead"><b>Ольга Ким</b><small>взрослая · фортепиано</small><div class="row"><span class="src">Сарафан</span><span class="pill acc"><i class="dot"></i>Перезвонить в 18:00</span></div></button>
+          </div>
+          <div class="col">
+            <div class="col-h"><b>Пробный назначен</b><span class="n">2</span></div>
+            <button class="lead"><b>Алиса Ким</b><small>Мадратов · сегодня 13:00</small><div class="row"><span class="src">TG-бот</span><span class="pill bad"><i class="dot"></i>Кабинет занят</span></div></button>
+            <button class="lead"><b>Ильяс Абен</b><small>Мадратов · сегодня 16:30 · Абая</small><div class="row"><span class="src">Instagram</span><span class="pill mute">2 000 ₸ оплачен</span></div></button>
+          </div>
+          <div class="col">
+            <div class="col-h"><b>Пробный проведён</b><span class="n">2</span></div>
+            <button class="lead"><b>Дамир Ералы</b><small>Шарапов · 10 авг</small><div class="row"><span class="src">Сайт</span><span class="pill acc"><i class="dot"></i>Думают 2 дня</span></div></button>
+            <button class="lead"><b>Айсулу Бек</b><small>Исенова · 9 авг</small><div class="row"><span class="src">Сарафан</span><span class="pill ok"><i class="dot"></i>Готовы платить</span></div></button>
+          </div>
+          <div class="col">
+            <div class="col-h"><b>Абонемент куплен</b><span class="n">3</span></div>
+            <button class="lead"><b>Марк Ли</b><small>85 мин · 3 раза в неделю</small><div class="row"><span class="src">Instagram</span><span class="pill ok"><i class="dot"></i>105 000 ₸</span></div></button>
+            <button class="lead"><b>Даниал Ким</b><small>бас · 2 раза в неделю</small><div class="row"><span class="src">TG-бот</span><span class="pill ok"><i class="dot"></i>54 000 ₸</span></div></button>
+            <button class="lead"><b>Камила Ер</b><small>вокал · абонемент 6 мес</small><div class="row"><span class="src">Сарафан</span><span class="pill ok"><i class="dot"></i>276 000 ₸ · RS25</span></div></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== ДЕНЬГИ ========== -->
+    <section class="screen" id="s-money">
+      <div class="pad">
+        <h1 class="h1">Деньги и зарплаты</h1>
+        <p class="sub" style="margin-bottom:18px">Август 2026 · оба филиала · всё считается из отметок посещаемости</p>
+
+        <div class="grid g3" style="margin-bottom:14px">
+          <div class="card">
+            <span class="lbl">Выручка за август</span>
+            <div class="stat num">4 218 000 ₸</div>
+            <p class="trend"><b class="up">↑ 12%</b> к июлю · план 4 600 000 ₸</p>
+            <div class="bar"><i style="width:92%"></i></div>
+          </div>
+          <div class="card">
+            <span class="lbl">Загрузка кабинетов</span>
+            <div class="stat num">74%</div>
+            <p class="trend">Барабанная A — <b>96%</b> · пора добавлять слоты или кабинет</p>
+            <div class="bar"><i style="width:74%"></i></div>
+          </div>
+          <div class="card">
+            <span class="lbl">Отток за август</span>
+            <div class="stat num" style="color:var(--bad)">7%</div>
+            <p class="trend"><b class="down">4 ученика</b> не продлили · 3 из них у одного преподавателя</p>
+            <div class="bar"><i style="width:7%;background:var(--bad)"></i></div>
+          </div>
+        </div>
+
+        <div class="grid g-side">
+          <div class="card">
+            <span class="lbl">Зарплата преподавателей · начислено по факту проведённых занятий</span>
+            <div class="tbl-wrap">
+              <table>
+                <thead><tr><th>Преподаватель</th><th class="r">Занятий</th><th class="r">Ставка</th><th class="r">Прогулы</th><th class="r">К выплате</th></tr></thead>
+                <tbody id="payroll">
+                  <tr data-t="sharapov"><td><div class="who-cell"><span class="chip" style="--ch:var(--ch-clay)">ДШ</span>Дмитрий Шарапов</div></td><td class="r num">62</td><td class="r num">4 500 ₸</td><td class="r num">3</td><td class="r num" style="font-weight:600" data-pay="sharapov">292 500 ₸</td></tr>
+                  <tr data-t="fedko"><td><div class="who-cell"><span class="chip" style="--ch:var(--ch-teal)">ГФ</span>Глеб Федько</div></td><td class="r num">54</td><td class="r num">4 200 ₸</td><td class="r num">1</td><td class="r num" style="font-weight:600" data-pay="fedko">231 000 ₸</td></tr>
+                  <tr data-t="madratov"><td><div class="who-cell"><span class="chip" style="--ch:var(--ch-slate)">ЕМ</span>Егор Мадратов</div></td><td class="r num">48</td><td class="r num">4 500 ₸</td><td class="r num">2</td><td class="r num" style="font-weight:600" data-pay="madratov">225 000 ₸</td></tr>
+                  <tr data-t="merenkov"><td><div class="who-cell"><span class="chip" style="--ch:var(--ch-moss)">АМ</span>Андрей Меренков</div></td><td class="r num">51</td><td class="r num">4 200 ₸</td><td class="r num">0</td><td class="r num" style="font-weight:600" data-pay="merenkov">214 200 ₸</td></tr>
+                  <tr data-t="isenova"><td><div class="who-cell"><span class="chip" style="--ch:var(--ch-plum)">АИ</span>Алия Исенова</div></td><td class="r num">44</td><td class="r num">4 000 ₸</td><td class="r num">1</td><td class="r num" style="font-weight:600" data-pay="isenova">176 000 ₸</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p style="margin:12px 0 0;font-size:12px;color:var(--ink-3)">Ставка различается для 55 и 85 минут, индивидуальных и групповых. При прогуле ученика преподавателю начисляется 100% — это правило школы, оно настраивается.</p>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="card">
+              <span class="lbl">Требует внимания</span>
+              <div class="kv"><span>Долги по оплате</span><b class="num" style="color:var(--bad)">3 · 87 000 ₸</b></div>
+              <div class="kv"><span>Абонементы кончаются</span><b class="num" style="color:var(--accent)">3 ученика</b></div>
+              <div class="kv"><span>Неотработанные пропуски</span><b class="num">11</b></div>
+              <div class="kv"><span>Заморожено на каникулы</span><b class="num">5</b></div>
+            </div>
+            <div class="card">
+              <span class="lbl">Выручка по направлениям</span>
+              <div class="kv"><span>Барабаны</span><b class="num">1 486 000 ₸</b></div>
+              <div class="kv"><span>Гитара</span><b class="num">1 204 000 ₸</b></div>
+              <div class="kv"><span>Вокал</span><b class="num">742 000 ₸</b></div>
+              <div class="kv"><span>Фортепиано</span><b class="num">508 000 ₸</b></div>
+              <div class="kv"><span>Скрипка и укулеле</span><b class="num">278 000 ₸</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<aside class="insp" id="insp" aria-hidden="true"></aside>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script>
+const H0 = 10, H1 = 21;                    // рабочий день школы
+const TEACHERS = [
+  {id:'sharapov', name:'Дмитрий Шарапов', inst:'Барабаны',            ch:'clay',  ini:'ДШ', rate:4500},
+  {id:'fedko',    name:'Глеб Федько',     inst:'Гитара, укулеле',      ch:'teal',  ini:'ГФ', rate:4200},
+  {id:'madratov', name:'Егор Мадратов',   inst:'Барабаны, перкуссия',  ch:'slate', ini:'ЕМ', rate:4500},
+  {id:'merenkov', name:'Андрей Меренков', inst:'Гитара, бас',          ch:'moss',  ini:'АМ', rate:4200},
+  {id:'isenova',  name:'Алия Исенова',    inst:'Вокал, фортепиано',    ch:'plum',  ini:'АИ', rate:4000},
+];
+const LESSONS = [
+  {id:1,  b:'af', t:'fedko',    s:10,   d:.92, who:'Тимур Ахметов',   room:'Класс 1',      st:'done'},
+  {id:2,  b:'af', t:'sharapov', s:11,   d:.92, who:'Амина Сагындык',  room:'Барабанная A', st:'planned'},
+  {id:3,  b:'af', t:'merenkov', s:11,   d:1.42,who:'Даниал Ким',      room:'Класс 2',      st:'planned'},
+  {id:4,  b:'af', t:'sharapov', s:12.5, d:.92, who:'Ержан Оспанов',   room:'Барабанная A', st:'planned'},
+  {id:5,  b:'af', t:'madratov', s:13,   d:.75, who:'Алиса Ким',       room:'Барабанная A', st:'planned', trial:true},
+  {id:6,  b:'af', t:'fedko',    s:14,   d:.92, who:'Сабина Нурлан',   room:'Класс 1',      st:'missed'},
+  {id:7,  b:'af', t:'isenova',  s:15,   d:.92, who:'Айсулу Бек',      room:'Класс 2',      st:'planned'},
+  {id:8,  b:'af', t:'sharapov', s:16,   d:1.42,who:'Марк Ли',         room:'Барабанная A', st:'planned'},
+  {id:9,  b:'af', t:'merenkov', s:17.5, d:.92, who:'Ансамбль · 4 чел',room:'Класс 1',      st:'planned', group:true},
+  {id:10, b:'af', t:'sharapov', s:18.5, d:.92, who:'Амир Жанат',      room:'Барабанная A', st:'planned'},
+  {id:11, b:'af', t:'fedko',    s:19,   d:.92, who:'Ольга Ким',       room:'Класс 2',      st:'planned'},
+  {id:12, b:'af', t:'isenova',  s:20,   d:.92, who:'Дмитрий Со',      room:'Класс 1',      st:'planned'},
+  {id:13, b:'ab', t:'madratov', s:11,   d:.92, who:'Арай Токтар',     room:'Барабанная B', st:'planned'},
+  {id:14, b:'ab', t:'isenova',  s:12,   d:.92, who:'Камила Ер',       room:'Класс 3',      st:'done'},
+  {id:15, b:'ab', t:'fedko',    s:15,   d:.92, who:'Рустам Ли',       room:'Класс 3',      st:'planned'},
+  {id:16, b:'ab', t:'madratov', s:16.5, d:.75, who:'Ильяс Абен',      room:'Барабанная B', st:'planned', trial:true},
+  {id:17, b:'ab', t:'merenkov', s:18,   d:.92, who:'Данияр Аман',     room:'Класс 3',      st:'planned'},
+];
+const MARKS = {
+  came:    {label:'Пришёл',                  abon:-1, pay:1,  makeup:0},
+  late:    {label:'Опоздал',                 abon:-1, pay:1,  makeup:0},
+  missed:  {label:'Прогул без предупреждения',abon:-1, pay:1,  makeup:0},
+  early:   {label:'Отменил заранее (>24 ч)', abon:0,  pay:0,  makeup:1},
+  teacher: {label:'Отменил преподаватель',   abon:0,  pay:0,  makeup:0},
+};
+const DAYS = ['Пн 11 авг','Вт 12 авг','Ср 13 авг'];
+const PAY = {sharapov:292500, fedko:231000, madratov:225000, merenkov:214200, isenova:176000};
+
+const S = {branch:'af', day:1, sel:null, abon:{total:8, used:3, makeup:1}};
+const $ = s => document.querySelector(s);
+const money = n => n.toLocaleString('ru-RU').replace(/,/g,' ') + ' ₸';
+const hhmm = h => String(Math.floor(h)).padStart(2,'0') + ':' + String(Math.round(h%1*60)).padStart(2,'0');
+const plural = (n, one, few, many) => {              // 1 занятие / 2 занятия / 5 занятий
+  const a = Math.abs(n) % 100, b = a % 10;
+  return a > 10 && a < 20 ? many : b > 1 && b < 5 ? few : b === 1 ? one : many;
+};
+const T = id => TEACHERS.find(t => t.id === id);
+
+// день 0 — вчера (всё проведено), день 2 — завтра (всё запланировано)
+function todays(){
+  let L = LESSONS.filter(l => l.b === S.branch);
+  if (S.day === 0) L = L.filter((_,i) => i % 3 !== 0).map(l => ({...l, st: l.st === 'planned' ? 'done' : l.st}));
+  if (S.day === 2) L = L.filter((_,i) => i % 4 !== 1).map(l => ({...l, st: 'planned'}));
+  return L;
+}
+// конфликт = один кабинет, пересечение по времени
+function clashes(L){
+  const bad = new Set();
+  for (let i=0;i<L.length;i++) for (let j=i+1;j<L.length;j++){
+    const a = L[i], b = L[j];
+    if (a.room === b.room && a.s < b.s + b.d && b.s < a.s + a.d){ bad.add(a.id); bad.add(b.id); }
+  }
+  return bad;
+}
+
+function renderTimeline(){
+  const L = todays(), bad = clashes(L);
+  let ruler = '<div class="gut"><span class="lbl">Преподаватель</span></div>';
+  for (let h = H0; h < H1; h++) ruler += `<div class="tick">${hhmm(h)}</div>`;
+  $('#ruler').innerHTML = ruler;
+
+  $('#tracks').innerHTML = TEACHERS.map(t => {
+    const mine = L.filter(l => l.t === t.id);
+    if (!mine.length) return '';
+    const blocks = mine.map(l => {
+      const cls = ['les', l.st === 'done' ? 'done' : l.st === 'missed' ? 'missed' : l.trial ? 'trial' : ''];
+      if (bad.has(l.id)) cls.push('clash');
+      return `<button class="${cls.join(' ')}" style="--s:${l.s-H0};--d:${l.d};--ch:var(--ch-${t.ch})"
+        data-les="${l.id}" aria-pressed="${S.sel===l.id}">
+        ${bad.has(l.id) ? '<span class="flag">Кабинет занят</span>' : ''}
+        <b>${l.trial ? 'Пробный · ' : ''}${l.who}</b>
+        <small>${hhmm(l.s)}–${hhmm(l.s+l.d)} · ${l.room}</small></button>`;
+    }).join('');
+    return `<div class="track">
+      <div class="gut"><i class="chan" style="--ch:var(--ch-${t.ch})"></i>
+        <div><b>${t.name}</b><small>${t.inst}</small></div></div>
+      <div class="lane">${S.day===1 ? '<div class="now" style="left:calc(4.6*var(--hw))"></div>' : ''}${blocks}</div>
+    </div>`;
+  }).join('');
+
+  const trials = L.filter(l => l.trial).length;
+  $('#tl-sub').textContent = `${['Понедельник, 11','Вторник, 12','Среда, 13'][S.day]} августа`
+    + ` · ${L.length} ${plural(L.length,'занятие','занятия','занятий')}`
+    + (trials ? ` · ${trials} ${plural(trials,'пробный','пробных','пробных')}` : '');
+  $('#daylabel').textContent = DAYS[S.day];
+  const nClash = bad.size ? Math.floor(bad.size/2) : 0;
+  $('#clash-pill').style.display = nClash ? '' : 'none';
+  $('#clash-pill').innerHTML = `<i class="dot"></i>${nClash} конфликт кабинета`;
+}
+
+function renderMeter(){
+  const {total, used} = S.abon;
+  $('#abon-meter').innerHTML = Array.from({length: total},
+    (_, i) => `<i class="${i < used ? '' : 'on'}"></i>`).join('');
+  $('#abon-left').textContent = total - used;
+}
+const leftOf = l => l.trial ? null : (l.id === 2 ? S.abon.total - S.abon.used : 3 + (l.id % 5));
+
+function renderInsp(){
+  const insp = $('#insp');
+  const l = todays().find(x => x.id === S.sel);
+  if (!l){ insp.classList.remove('on'); insp.setAttribute('aria-hidden','true'); return; }
+  const t = T(l.t), left = leftOf(l), marked = l.st === 'done' || l.st === 'missed';
+
+  insp.innerHTML = `
+    <div class="insp-h">
+      <div>
+        <h2>${l.trial ? 'Пробный урок' : l.who}</h2>
+        <p>${hhmm(l.s)}–${hhmm(l.s+l.d)} · ${Math.round(l.d*60)} мин · ${l.room}</p>
+      </div>
+      <button class="x" id="close" title="Закрыть">✕</button>
+    </div>
+    <div class="insp-b">
+      <div class="blk">
+        <div class="kv"><span>Ученик</span><b>${l.who}</b></div>
+        <div class="kv"><span>Преподаватель</span><b>${t.name}</b></div>
+        <div class="kv"><span>Формат</span><b>${l.group ? 'Группа, 4 чел.' : l.trial ? 'Пробный, 45 мин' : 'Индивидуально'}</b></div>
+        <div class="kv"><span>Абонемент</span><b>${left === null ? 'разовая оплата 2 000 ₸' : `осталось ${left} из 8`}</b></div>
+        <div class="kv"><span>Ставка преподавателя</span><b class="num">${money(t.rate)}</b></div>
+      </div>
+      ${marked ? `<div class="blk"><span class="lbl">Отметка</span>
+        <div class="rule"><strong>${l.st === 'done' ? 'Занятие проведено' : 'Прогул без предупреждения'}</strong>
+        <ul><li>Абонемент: списано 1 занятие</li><li>Начислено ${money(t.rate)} преподавателю</li></ul></div></div>`
+      : `<div class="blk">
+          <span class="lbl">Отметить посещаемость</span>
+          <div class="marks">${Object.entries(MARKS).map(([k,m],i) =>
+            `<button class="mark" data-mark="${k}" aria-pressed="false">${m.label}<span class="key">${i+1}</span></button>`).join('')}</div>
+          <div class="rule" id="rule">Выберите отметку — здесь появится, что именно спишется и начислится. Правила заданы школой, считать вручную не нужно.</div>
+        </div>`}
+      <div class="blk">
+        <span class="lbl">Заметка к уроку</span>
+        <div class="rule" style="border-style:solid">Разбираем сбивку на 16-х, метроном 80 bpm. К концерту 27 сентября — припев целиком.</div>
+      </div>
+    </div>
+    <div class="insp-f">
+      ${marked ? '<button class="btn">Отменить отметку</button>'
+      : '<button class="btn" id="move">Перенести</button><button class="btn pri" id="save" disabled>Сохранить</button>'}
+    </div>`;
+
+  insp.classList.add('on'); insp.setAttribute('aria-hidden','false');
+  insp.querySelector('#close').onclick = () => { S.sel = null; renderTimeline(); renderInsp(); };
+
+  let chosen = null;
+  insp.querySelectorAll('[data-mark]').forEach(b => b.onclick = () => {
+    chosen = b.dataset.mark;
+    insp.querySelectorAll('[data-mark]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    const m = MARKS[chosen];
+    $('#rule').innerHTML = `<strong>${m.label}</strong><ul>
+      <li>Абонемент: ${m.abon ? 'списывается 1 занятие' : 'не списывается'}${left !== null && m.abon ? ` → останется ${left - 1}` : ''}</li>
+      <li>Преподавателю: ${m.pay ? `начисляется ${money(t.rate)}` : 'не начисляется'}</li>
+      ${m.makeup ? '<li>Занятие уходит в отработки, срок 30 дней</li>' : ''}</ul>`;
+    $('#save').disabled = false;
+  });
+  const save = insp.querySelector('#save');
+  if (save) save.onclick = () => commit(l, chosen);
+}
+
+function commit(l, key){
+  const m = MARKS[key], t = T(l.t), src = LESSONS.find(x => x.id === l.id);
+  src.st = key === 'missed' ? 'missed' : 'done';
+  if (l.id === 2 && m.abon) S.abon.used += 1;
+  if (l.id === 2 && m.makeup) S.abon.makeup += 1;
+  if (m.pay){
+    PAY[t.id] += t.rate;
+    const cell = document.querySelector(`[data-pay="${t.id}"]`);
+    if (cell) cell.textContent = money(PAY[t.id]);
+  }
+  const left = leftOf(l);
+  const rows = [
+    `<li><span>Отметка</span><em>${m.label}</em></li>`,
+    `<li><span>Абонемент</span><em>${m.abon ? `−1 → ${left} ${plural(left,'занятие','занятия','занятий')}` : 'без списания'}</em></li>`,
+    `<li><span>ЗП · ${t.name.split(' ')[1]}</span><em>${m.pay ? '+' + money(t.rate) : '0 ₸'}</em></li>`,
+    m.makeup ? '<li><span>Отработки</span><em>+1, до 11 сентября</em></li>'
+             : '<li><span>Продление</span><em>напомнить 26 авг</em></li>'];
+  toast(`Отмечено · ${l.who}`, rows.join(''));
+  S.sel = null; renderTimeline(); renderInsp(); renderMeter();
+}
+
+function toast(title, rows){
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<b>${title}</b><ul>${rows}</ul>`;
+  $('#toasts').append(el);
+  setTimeout(() => el.remove(), 5200);
+}
+
+// ---- события ----
+document.addEventListener('click', e => {
+  const les = e.target.closest('[data-les]');
+  if (les){ const id = +les.dataset.les; S.sel = S.sel === id ? null : id; renderTimeline(); renderInsp(); return; }
+  const nav = e.target.closest('[data-screen]');
+  if (nav){
+    document.querySelectorAll('[data-screen]').forEach(b => b.setAttribute('aria-current', String(b === nav)));
+    document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === 's-' + nav.dataset.screen));
+    return;
+  }
+  const br = e.target.closest('[data-branch]');
+  if (br){
+    S.branch = br.dataset.branch; S.sel = null;
+    document.querySelectorAll('[data-branch]').forEach(b => b.setAttribute('aria-pressed', String(b === br)));
+    renderTimeline(); renderInsp();
+  }
+});
+$('#prev').onclick = () => { S.day = Math.max(0, S.day - 1); S.sel = null; renderTimeline(); renderInsp(); };
+$('#next').onclick = () => { S.day = Math.min(2, S.day + 1); S.sel = null; renderTimeline(); renderInsp(); };
+$('#daylabel').onclick = () => { S.day = 1; S.sel = null; renderTimeline(); renderInsp(); };
+$('#theme').onclick = () => {
+  const cur = document.documentElement.getAttribute('data-theme')
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+};
+$('#sell-btn').onclick = () => {
+  S.abon.used = 0;
+  renderMeter();
+  toast('Продление продано · Амина Сагындык', '<li><span>Абонемент</span><em>+8 занятий</em></li><li><span>Оплата</span><em>54 000 ₸ · Kaspi</em></li><li><span>Действует до</span><em>30 сентября</em></li>');
+};
+$('#freeze-btn').onclick = () => toast('Абонемент заморожен', '<li><span>Период</span><em>14–24 августа</em></li><li><span>Срок действия</span><em>+11 дней</em></li><li><span>Занятия</span><em>сохранены</em></li>');
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && S.sel){ S.sel = null; renderTimeline(); renderInsp(); }
+  const m = document.querySelectorAll('#insp [data-mark]');
+  if (m.length && /^[1-5]$/.test(e.key)) m[+e.key - 1]?.click();
+});
+
+renderTimeline(); renderMeter();
+</script>
