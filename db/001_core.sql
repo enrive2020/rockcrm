@@ -64,7 +64,7 @@ CREATE TABLE tenant (
     "no_show_burns": true,
     "cancel_notice_hours": 24,
     "cancel_early_effect": "makeup",
-    "teacher_cancel_effect": "no_charge",
+    "teacher_cancel_effect": "makeup",
     "makeup_ttl_days": 30,
     "freeze_days_per_year": 14,
     "pay_teacher_on_no_show": true

@@ -394,7 +394,7 @@ tbody tr:hover{background:var(--panel-2)}
               <span class="lbl">Правила абонемента</span>
               <div class="kv"><span>Прогул без предупреждения</span><b style="color:var(--bad)">Сгорает</b></div>
               <div class="kv"><span>Отмена более чем за 24 ч</span><b style="color:var(--ok)">В отработки</b></div>
-              <div class="kv"><span>Отменил преподаватель</span><b style="color:var(--ok)">Не списывается</b></div>
+              <div class="kv"><span>Отменил преподаватель</span><b style="color:var(--ok)">В отработки</b></div>
               <div class="kv"><span>Заморозка</span><b>до 14 дней в год</b></div>
               <div class="kv"><span>Срок жизни отработки</span><b>30 дней</b></div>
               <p style="margin:12px 0 0;font-size:12px;color:var(--ink-3)">Правила задаются школой при настройке и применяются автоматически при отметке посещаемости.</p>
@@ -562,7 +562,7 @@ const MARKS = {
   late:    {label:'Опоздал',                 abon:-1, pay:1,  makeup:0},
   missed:  {label:'Прогул без предупреждения',abon:-1, pay:1,  makeup:0},
   early:   {label:'Отменил заранее (>24 ч)', abon:0,  pay:0,  makeup:1},
-  teacher: {label:'Отменил преподаватель',   abon:0,  pay:0,  makeup:0},
+  teacher: {label:'Отменил преподаватель',   abon:0,  pay:0,  makeup:1},
 };
 const DAYS = ['Пн 11 авг','Вт 12 авг','Ср 13 авг'];
 const PAY = {sharapov:292500, fedko:231000, madratov:225000, merenkov:214200, isenova:176000};
