@@ -268,6 +268,31 @@ CREATE TABLE group_member (
 -- Аудит. Пишется на всё, что двигает деньги или баланс абонемента.
 -- Строки только добавляются: правки и удаления запрещены политикой ниже.
 -- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- Запрет на изменение журнальных таблиц.
+--
+-- Одних политик RLS мало: без политики на UPDATE запрос не падает, а меняет
+-- ноль строк. Приложение получает «успех» и спокойно идёт дальше с неверным
+-- предположением. Явная ошибка превращает тихую порчу логики в громкий сбой.
+--
+-- Триггер обязан быть уровня ОПЕРАТОРА, а не строки: RLS отсекает строки
+-- раньше, чем срабатывают строковые триггеры, поэтому под ролью приложения
+-- строковый триггер не вызвался бы ни разу и запрет остался бы декларацией.
+--
+-- Аварийный люк — на случай удаления тенанта, когда каскад обязан пройти:
+--   SET LOCAL app.allow_purge = 'on';
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION deny_journal_mutation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF coalesce(current_setting('app.allow_purge', true), '') = 'on' THEN
+    RETURN NULL;   -- для триггера уровня оператора возвращаемое значение игнорируется
+  END IF;
+  RAISE EXCEPTION 'Таблица % только на добавление: % запрещён', TG_TABLE_NAME, TG_OP
+    USING ERRCODE = 'restrict_violation',
+          HINT = 'Ошибочную запись гасят компенсирующей, а не правят задним числом';
+END $$;
+
 CREATE TABLE audit_log (
   id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   tenant_id   uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
@@ -279,3 +304,7 @@ CREATE TABLE audit_log (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX audit_log_lookup ON audit_log (tenant_id, entity, entity_id, created_at DESC);
+
+CREATE TRIGGER audit_log_immutable
+  BEFORE UPDATE OR DELETE ON audit_log
+  FOR EACH STATEMENT EXECUTE FUNCTION deny_journal_mutation();

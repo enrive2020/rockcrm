@@ -152,6 +152,12 @@ CREATE TRIGGER subscription_entry_recalc
   AFTER INSERT OR UPDATE OR DELETE ON subscription_entry
   FOR EACH ROW EXECUTE FUNCTION subscription_recalc();
 
+-- Журнал неизменяем: правка и удаление падают с ошибкой, а не проходят тихо.
+-- Определение deny_journal_mutation() и аварийный люк — в 001_core.sql.
+CREATE TRIGGER subscription_entry_immutable
+  BEFORE UPDATE OR DELETE ON subscription_entry
+  FOR EACH STATEMENT EXECUTE FUNCTION deny_journal_mutation();
+
 -- ---------------------------------------------------------------------------
 -- Заморозка. Сдвигает срок действия на число замороженных дней;
 -- занятия не сгорают. Лимит дней в году берётся из rules абонемента.
