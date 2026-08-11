@@ -152,6 +152,14 @@ def test_card_churn_reasons_are_checkable_facts(client):
     assert "1 прогул за 30 дней" in risk["reasons"]
 
 
+def test_card_churn_reasons_hold_only_risk_raising_facts(client):
+    """Стаж — довод против оттока, и в списке причин риска ему не место."""
+    risk = ok_card(client, AMINA)["churn_risk"]
+    assert not any("занимается" in r for r in risk["reasons"])
+    # Факт не потерян: он на своей стороне весов и снизил оценку.
+    assert risk["mitigations"] == ["занимается 6 месяцев подряд"]
+
+
 def test_card_without_subscription_says_so(client):
     body = ok_card(client, "zhanat")
     assert body["subscription"] is None
