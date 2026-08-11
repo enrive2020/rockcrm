@@ -157,13 +157,39 @@ class MarkEffectOut(BaseModel):
     blocked_reason: str | None = None
 
 
+class AppliedEffect(BaseModel):
+    """Что действующая отметка уже сделала — из журнала, а не пересчётом правил.
+
+    Сверх контракта. Без этого поля интерфейс, показывая блок «Отмечено»,
+    вынужден был брать числа из `mark_effects`, то есть из предпросмотра,
+    посчитанного от УЖЕ уменьшенного остатка: дельта совпадала, а `lessons_after`
+    отставал ровно на списанное занятие (issue #22).
+    """
+
+    mark: Mark
+    attendance_id: str
+    lessons_delta: int
+    makeups_delta: int
+    # Настоящий текущий остаток абонемента, а не «баланс плюс дельта»:
+    # если после отметки было ещё движение, карточка занятия и карточка
+    # ученика обязаны показывать одно число. У ученика без абонемента — null.
+    lessons_after: int | None = None
+    makeups_after: int | None = None
+    teacher_amount: int
+    summary: str
+
+
 class Participant(BaseModel):
     student_id: str
     name: str
     attendance: Mark | None = None
     attendance_id: str | None = None
     subscription: SubscriptionBrief | None = None
+    # Предпросмотр «что будет, если нажать». У уже отмеченного участника
+    # считается от остатка ДО списания — переотметка начинается с отмены
+    # прежней отметки, и она вернёт занятие назад.
     mark_effects: dict[str, MarkEffectOut]
+    applied_effect: AppliedEffect | None = None
 
 
 class TeacherCard(BaseModel):
@@ -662,6 +688,256 @@ class Funnel(BaseModel):
     sources: list[FunnelSource]
     lost_reasons: list[FunnelLostReason]
     avg_days_to_won: float | None = None
+
+
+# ---------------------------------------------------------------------------
+# Этап 4 — «Деньги и ЗП»
+#
+# Деньги везде целым числом тенге, даты — ISO в поясе филиала: те же правила,
+# что в контрактах этапов 1–3. Периоды в запросе и в ответе задаются парой
+# `from`/`to` включительно — «по 31 июля» человек читает как «июль целиком».
+# ---------------------------------------------------------------------------
+
+
+class Period(BaseModel):
+    from_: str = Field(alias="from")
+    to: str
+
+    model_config = {"populate_by_name": True}
+
+
+class PayrollTeacher(BaseModel):
+    id: str
+    name: str
+    color: str | None = None
+
+
+class PayrollRow(BaseModel):
+    teacher: PayrollTeacher
+    # Занятий и начислений — разные числа: у группы из четырёх человек
+    # начисление на каждого участника.
+    lessons: int
+    entries: int
+    # Самая частая ставка. У преподавателя их несколько (55 и 85 минут,
+    # индивидуальное и группа), поэтому рядом стоит честный флаг.
+    rate: int
+    rate_varies: bool
+    no_shows: int
+    accrued: int
+    corrections: int
+    bonuses: int
+    total: int
+    # Сколько из суммы приехало из уже закрытых месяцев корректировкой.
+    carried_over: int
+    carried_over_entries: int
+
+
+class PayrollTotals(BaseModel):
+    teachers: int
+    lessons: int
+    entries: int
+    no_shows: int
+    accrued: int
+    corrections: int
+    bonuses: int
+    total: int
+    carried_over: int
+    carried_over_entries: int
+
+
+class PayrollSheet(BaseModel):
+    period: Period
+    closed: bool
+    period_id: str | None = None
+    closed_at: str | None = None
+    closed_by: str | None = None
+    branch_id: str | None = None
+    teachers: list[PayrollRow]
+    totals: PayrollTotals
+    note: str
+
+
+class PayrollEntry(BaseModel):
+    id: int
+    date: str
+    starts_at: str | None = None
+    kind: Literal["lesson", "bonus", "correction", "deduction"]
+    lesson_id: str | None = None
+    student: str | None = None
+    discipline: str | None = None
+    branch: str | None = None
+    duration_min: int | None = None
+    mark: Mark | None = None
+    amount: int
+    # Снимок расчёта, сохранённый при отметке. Через полгода объяснить сумму
+    # больше нечем: ставки к тому времени поменяются.
+    calc: dict[str, Any] = {}
+    carried_over: bool = False
+
+
+class PayrollDetail(BaseModel):
+    teacher: PayrollTeacher
+    period: Period
+    closed: bool
+    period_id: str | None = None
+    closed_at: str | None = None
+    closed_by: str | None = None
+    totals: PayrollRow
+    entries: list[PayrollEntry]
+
+
+class PayrollPeriod(BaseModel):
+    id: str
+    period: Period
+    closed: bool
+    closed_at: str | None = None
+    closed_by: str | None = None
+    teachers: int
+    entries: int
+    total: int
+
+
+class ClosePeriodRequest(BaseModel):
+    from_: date = Field(alias="from")
+    to: date
+
+    model_config = {"populate_by_name": True}
+
+
+class PeriodClosed(BaseModel):
+    id: str
+    period: Period
+    closed: bool
+    closed_at: str
+    entries: int
+    teachers: int
+    total: int
+    message: str
+
+
+class RevenueSlice(BaseModel):
+    id: str | None = None
+    name: str
+    amount: int
+    payments: int
+    share_pct: int
+
+
+class RevenueMonth(BaseModel):
+    month: str = Field(examples=["2026-08"])
+    amount: int
+    payments: int
+
+
+class RevenueMethod(BaseModel):
+    method: Literal["kaspi", "card", "cash", "transfer", "other"]
+    amount: int
+    payments: int
+    share_pct: int
+
+
+class Revenue(BaseModel):
+    period: Period
+    branch_id: str | None = None
+    total: int
+    payments: int
+    by_branch: list[RevenueSlice]
+    by_discipline: list[RevenueSlice]
+    by_month: list[RevenueMonth]
+    by_method: list[RevenueMethod]
+
+
+class RoomLoad(BaseModel):
+    room_id: str
+    room: str
+    branch_id: str
+    branch: str
+    lessons: int
+    busy_minutes: int
+    capacity_minutes: int
+    utilization_pct: int
+
+
+class BranchLoad(BaseModel):
+    branch_id: str
+    branch: str
+    rooms: int
+    open_days: int
+    open_minutes_per_day: int
+    busy_minutes: int
+    capacity_minutes: int
+    utilization_pct: int
+
+
+class RoomsReport(BaseModel):
+    period: Period
+    branch_id: str | None = None
+    utilization_pct: int
+    busy_minutes: int
+    capacity_minutes: int
+    capacity_note: str
+    branches: list[BranchLoad]
+    rooms: list[RoomLoad]
+
+
+class ChurnTeacher(BaseModel):
+    teacher_id: str | None = None
+    name: str
+    ended: int
+    churned: int
+    churn_pct: int
+
+
+class ChurnStudent(BaseModel):
+    student_id: str
+    name: str
+    discipline: str | None = None
+    branch: str | None = None
+    teacher: str | None = None
+    teacher_id: str | None = None
+    ended_on: str
+    last_lesson_on: str | None = None
+
+
+class ChurnReport(BaseModel):
+    period: Period
+    grace_days: int
+    ended: int
+    renewed: int
+    churned: int
+    churn_pct: int
+    by_teacher: list[ChurnTeacher]
+    students: list[ChurnStudent]
+    note: str
+
+
+class Debtor(BaseModel):
+    family_id: str
+    payer: str | None = None
+    phone: str | None = None
+    students: list[str] = []
+    charged: int
+    paid: int
+    debt: int
+    since_on: str | None = None
+    last_paid_on: str | None = None
+
+
+class DebtsReport(BaseModel):
+    families: int
+    total: int
+    items: list[Debtor]
+    note: str
+
+
+class MoneySummary(BaseModel):
+    period: Period
+    branch_id: str | None = None
+    revenue: dict[str, Any]
+    rooms: dict[str, Any]
+    churn: dict[str, Any]
+    payroll: dict[str, Any]
+    attention: dict[str, Any]
 
 
 class ErrorBody(BaseModel):
