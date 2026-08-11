@@ -9,6 +9,7 @@ import { AttendancePanel, type AppliedResult, type RevokedResult } from './featu
 import { StudentsScreen } from './features/students/StudentsScreen';
 import { StudentCardScreen } from './features/students/StudentCardScreen';
 import { LeadsScreen } from './features/leads/LeadsScreen';
+import { MoneyScreen } from './features/money/MoneyScreen';
 import { Toasts, type ToastMessage } from './components/Toasts';
 import { ErrorState } from './components/States';
 import { MARK_LABELS } from './api';
@@ -23,6 +24,7 @@ type View =
   | { screen: 'schedule' }
   | { screen: 'students' }
   | { screen: 'leads' }
+  | { screen: 'money' }
   /** Откуда пришли — туда и вернёт «Назад»: в расписание, в поиск или в воронку. */
   | { screen: 'student'; id: string; from: 'schedule' | 'students' | 'leads' };
 
@@ -145,7 +147,7 @@ export default function App() {
       <aside className="rail">
         <div className="brand">
           <b>RockCRM</b>
-          <span>{USE_MOCKS ? 'моки' : 'этап 3'}</span>
+          <span>{USE_MOCKS ? 'моки' : 'этап 4'}</span>
         </div>
         <nav className="nav">
           <div className="nav-h">Смена</div>
@@ -165,8 +167,7 @@ export default function App() {
             <span>Заявки</span>
           </button>
           <div className="nav-h">Управление</div>
-          {/* Деньги и ЗП — вне границ этапа, кнопка оставлена как ориентир прототипа */}
-          <button disabled title="Вне границ этапа 3">
+          <button aria-current={view.screen === 'money'} onClick={() => setView({ screen: 'money' })}>
             <i className="k">4</i>
             <span>Деньги и ЗП</span>
           </button>
@@ -242,6 +243,8 @@ export default function App() {
           <StudentsScreen query={query} onQueryChange={setQuery} onOpen={(id) => openStudent(id, 'students')} />
         ) : view.screen === 'leads' ? (
           <LeadsScreen branchId={branchId} onOpenStudent={(id) => openStudent(id, 'leads')} onToast={pushToast} />
+        ) : view.screen === 'money' ? (
+          <MoneyScreen branches={branches.data ?? []} onToast={pushToast} />
         ) : (
           <StudentCardScreen
             key={view.id}

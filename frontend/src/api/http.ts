@@ -6,6 +6,7 @@ import type {
   ConvertRequest,
   ConvertResponse,
   CreateLeadRequest,
+  DebtsReport,
   DirectoryRoom,
   DirectoryTeacher,
   Discipline,
@@ -16,8 +17,15 @@ import type {
   LeadCard,
   LeadsBoard,
   LessonCard,
+  MoneySummary,
   PatchLeadRequest,
+  PayrollDetail,
+  PayrollPeriodRow,
+  PayrollSheet,
+  PeriodClosed,
   Plan,
+  RevenueReport,
+  RoomsReport,
   ScheduleResponse,
   SellSubscriptionRequest,
   SellSubscriptionResponse,
@@ -187,6 +195,38 @@ export const httpApi = {
     }),
   funnel: (from: string, to: string) =>
     request<FunnelReport>(`/leads/funnel?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+
+  /* ---------- этап 4: деньги и зарплаты ---------- */
+
+  payroll: (from: string, to: string, branchId?: string | null) =>
+    request<PayrollSheet>(`/payroll${periodQuery(from, to, branchId)}`),
+  /** Расшифровка ведомости: за что именно начислено, занятие за занятием. */
+  payrollTeacher: (staffId: string, from: string, to: string, branchId?: string | null) =>
+    request<PayrollDetail>(`/payroll/teachers/${encodeURIComponent(staffId)}${periodQuery(from, to, branchId)}`),
+  payrollPeriods: (limit = 12) => request<PayrollPeriodRow[]>(`/payroll/periods?limit=${limit}`),
+  /**
+   * Закрытие периода. Обратной операции нет: ошибка чинится корректировкой
+   * в следующем периоде, а не переоткрытием, — поэтому вызов обязан идти
+   * только из диалога с подтверждением.
+   */
+  closePayrollPeriod: (from: string, to: string) =>
+    request<PeriodClosed>('/payroll/periods', { method: 'POST', body: JSON.stringify({ from, to }) }),
+
+  revenueReport: (from: string, to: string, branchId?: string | null) =>
+    request<RevenueReport>(`/reports/revenue${periodQuery(from, to, branchId)}`),
+  roomsReport: (from: string, to: string, branchId?: string | null) =>
+    request<RoomsReport>(`/reports/rooms${periodQuery(from, to, branchId)}`),
+  /** Периода нет: долг — состояние на сейчас, а не за отрезок. */
+  debtsReport: (limit = 50) => request<DebtsReport>(`/reports/debts?limit=${limit}`),
+  moneySummary: (from: string, to: string, branchId?: string | null) =>
+    request<MoneySummary>(`/reports/summary${periodQuery(from, to, branchId)}`),
 };
+
+/** Период плюс необязательный филиал — одинаковый хвост у пяти эндпоинтов этапа 4. */
+function periodQuery(from: string, to: string, branchId?: string | null): string {
+  const params = new URLSearchParams({ from, to });
+  if (branchId) params.set('branch_id', branchId);
+  return `?${params.toString()}`;
+}
 
 export type Api = typeof httpApi;

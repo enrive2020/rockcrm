@@ -147,6 +147,27 @@ export interface MarkEffect {
 
 export type MarkEffects = Record<AttendanceMark, MarkEffect>;
 
+/**
+ * Что действующая отметка **уже** сделала — факт из журнала, а не пересчёт
+ * правил. Появилось в этапе 4 (issue #22) и закрывает пробел 5: раньше блок
+ * «Отмечено» брал числа из `mark_effects`, то есть из предпросмотра,
+ * посчитанного от уже уменьшенного остатка, и `lessons_after` отставал
+ * ровно на списанное занятие.
+ *
+ * `lessons_after` здесь — настоящий текущий остаток абонемента, поэтому
+ * он допускает null: у ученика без абонемента остатка нет вовсе.
+ */
+export interface AppliedMarkEffect {
+  mark: AttendanceMark;
+  attendance_id: string;
+  lessons_delta: number;
+  makeups_delta: number;
+  lessons_after: number | null;
+  makeups_after: number | null;
+  teacher_amount: number;
+  summary: string;
+}
+
 export interface LessonParticipant {
   student_id: string;
   name: string;
@@ -163,6 +184,11 @@ export interface LessonParticipant {
   /** null — действующего абонемента нет, занятие идёт разовой оплатой. */
   subscription: Subscription | null;
   mark_effects: MarkEffects;
+  /**
+   * null — участник не отмечен либо сервер поле ещё не отдаёт (старый бэкенд).
+   * Во втором случае интерфейс молча обходится без блока фактов, а не падает.
+   */
+  applied_effect?: AppliedMarkEffect | null;
 }
 
 export interface LessonTeacher {
@@ -867,6 +893,307 @@ export interface Discipline {
   min_age?: number | null;
   /** Требования к кабинету, сверяются с `room.features`. */
   room_reqs?: Record<string, boolean>;
+}
+
+/* ==========================================================================
+   Этап 4 — деньги и зарплаты (docs/contract-v4.md)
+
+   Формы сняты с работающего API: серверная часть была написана раньше
+   фронтенда, и контракт показывает уже реализованные ответы. Поля, которых
+   в контракте нет, а в ответе есть (`branch_id` в ведомости и отчётах),
+   отмечены комментарием — их стоит внести в контракт словами.
+
+   Период всюду — пара `from`/`to`, **включительно с обеих сторон**.
+   Деньги — целое число тенге.
+   ========================================================================== */
+
+/** Период отчёта. `from` и `to` включительно — так во всех ответах этапа. */
+export interface ReportPeriod {
+  from: string;
+  to: string;
+}
+
+/* ---------- GET /api/v1/payroll ---------- */
+
+export interface PayrollTeacherRef {
+  id: string;
+  name: string;
+  /** Цвет дорожки, тот же, что в расписании. */
+  color: string | null;
+}
+
+export interface PayrollRow {
+  teacher: PayrollTeacherRef;
+  /** Уникальные занятия: у группы из четырёх человек занятие одно… */
+  lessons: number;
+  /** …а начислений четыре. Числа разные и путать их нельзя. */
+  entries: number;
+  /** Самая частая сумма начисления. */
+  rate: number;
+  /** Ставок несколько (55 и 85 минут, индивидуальное и группа). */
+  rate_varies: boolean;
+  no_shows: number;
+  accrued: number;
+  corrections: number;
+  bonuses: number;
+  total: number;
+  /** Сколько из суммы приехало правками за уже закрытые месяцы. */
+  carried_over: number;
+  carried_over_entries: number;
+}
+
+export type PayrollTotals = Omit<PayrollRow, 'teacher' | 'rate' | 'rate_varies'> & { teachers: number };
+
+export interface PayrollSheet {
+  period: ReportPeriod;
+  /** Открытого периода не существует: `false` значит «месяц ещё не закрыт». */
+  closed: boolean;
+  period_id: string | null;
+  closed_at: string | null;
+  closed_by: string | null;
+  /** В контракте не показан, в ответе есть. */
+  branch_id?: string | null;
+  teachers: PayrollRow[];
+  totals: PayrollTotals;
+  /** Человеческая формулировка от сервера — показывается дословно. */
+  note: string;
+}
+
+/* ---------- GET /api/v1/payroll/teachers/{staff_id} ---------- */
+
+/** Снимок расчёта, сохранённый при отметке: через полгода объяснить сумму больше нечем. */
+export interface PayrollCalc {
+  kind?: string;
+  mark?: AttendanceMark | null;
+  rate?: number;
+  share?: number;
+  amount?: number;
+  [key: string]: unknown;
+}
+
+export type PayrollEntryKind = 'lesson' | 'bonus' | 'correction' | 'deduction';
+
+export const PAYROLL_ENTRY_KIND_LABELS: Record<PayrollEntryKind, string> = {
+  lesson: 'Занятие',
+  bonus: 'Премия',
+  correction: 'Корректировка',
+  deduction: 'Удержание',
+};
+
+export interface PayrollEntry {
+  id: number;
+  date: string;
+  starts_at: string | null;
+  kind: PayrollEntryKind;
+  lesson_id: string | null;
+  student: string | null;
+  discipline: string | null;
+  branch: string | null;
+  duration_min: number | null;
+  mark: AttendanceMark | null;
+  amount: number;
+  calc: PayrollCalc;
+  /** Начисление за день из уже закрытого месяца — приехало корректировкой. */
+  carried_over: boolean;
+}
+
+export interface PayrollDetail {
+  teacher: PayrollTeacherRef;
+  period: ReportPeriod;
+  closed: boolean;
+  period_id: string | null;
+  closed_at: string | null;
+  closed_by: string | null;
+  /** Та же строка, что в ведомости. */
+  totals: PayrollRow;
+  entries: PayrollEntry[];
+}
+
+/* ---------- GET /api/v1/payroll/periods ---------- */
+
+export interface PayrollPeriodRow {
+  id: string;
+  period: ReportPeriod;
+  closed: boolean;
+  closed_at: string | null;
+  closed_by: string | null;
+  teachers: number;
+  entries: number;
+  total: number;
+}
+
+/* ---------- POST /api/v1/payroll/periods ---------- */
+
+export interface ClosePeriodRequest {
+  from: string;
+  to: string;
+}
+
+/**
+ * Что именно закрыто. `message` — формулировка сервера для показа
+ * администратору: числа в ней уже посчитаны, пересказывать их своими
+ * словами значило бы завести второй источник правды.
+ */
+export interface PeriodClosed {
+  id: string;
+  period: ReportPeriod;
+  closed: boolean;
+  closed_at: string;
+  entries: number;
+  teachers: number;
+  total: number;
+  message: string;
+}
+
+/* ---------- GET /api/v1/reports/revenue ---------- */
+
+export interface RevenueSlice {
+  /** null — платёж не привязан к абонементу, строка «Не распределено». */
+  id: string | null;
+  name: string;
+  amount: number;
+  payments: number;
+  share_pct: number;
+}
+
+export interface RevenueMonth {
+  /** "2026-08" */
+  month: string;
+  amount: number;
+  payments: number;
+}
+
+export interface RevenueMethod {
+  method: PaymentMethod;
+  amount: number;
+  payments: number;
+  share_pct: number;
+}
+
+export interface RevenueReport {
+  period: ReportPeriod;
+  branch_id?: string | null;
+  total: number;
+  payments: number;
+  by_branch: RevenueSlice[];
+  by_discipline: RevenueSlice[];
+  by_month: RevenueMonth[];
+  by_method: RevenueMethod[];
+}
+
+/* ---------- GET /api/v1/reports/rooms ---------- */
+
+export interface RoomLoad {
+  room_id: string;
+  room: string;
+  branch_id: string;
+  branch: string;
+  lessons: number;
+  busy_minutes: number;
+  capacity_minutes: number;
+  utilization_pct: number;
+}
+
+export interface BranchLoad {
+  branch_id: string;
+  branch: string;
+  rooms: number;
+  open_days: number;
+  open_minutes_per_day: number;
+  busy_minutes: number;
+  capacity_minutes: number;
+  utilization_pct: number;
+}
+
+export interface RoomsReport {
+  period: ReportPeriod;
+  branch_id?: string | null;
+  utilization_pct: number;
+  busy_minutes: number;
+  capacity_minutes: number;
+  /** Формула ёмкости словами: процент загрузки без указания базы — число, которому нельзя верить. */
+  capacity_note: string;
+  branches: BranchLoad[];
+  /** Отсортированы по загрузке: отчёт отвечает на вопрос «где кончилось место». */
+  rooms: RoomLoad[];
+}
+
+/* ---------- GET /api/v1/reports/debts ---------- */
+
+export interface Debtor {
+  family_id: string;
+  payer: string | null;
+  phone: string | null;
+  students: string[];
+  charged: number;
+  paid: number;
+  debt: number;
+  since_on: string | null;
+  last_paid_on: string | null;
+}
+
+export interface DebtsReport {
+  families: number;
+  total: number;
+  items: Debtor[];
+  note: string;
+}
+
+/* ---------- GET /api/v1/reports/summary ---------- */
+
+export interface SummaryRevenue {
+  amount: number;
+  previous: number;
+  previous_period: ReportPeriod | null;
+  /**
+   * null, когда прошлого периода нет: «+100%» от нуля читается как рост,
+   * хотя означает лишь появление первых данных.
+   */
+  change_pct: number | null;
+}
+
+export interface SummaryRooms {
+  utilization_pct: number;
+  /** Самый загруженный кабинет — тот, где кончилось место. */
+  busiest: RoomLoad | null;
+}
+
+export interface SummaryPayroll {
+  total: number;
+  lessons: number;
+  closed: boolean;
+}
+
+/** Блок «требует внимания»: всё, на что администратор обязан среагировать. */
+export interface SummaryAttention {
+  debt_families: number;
+  debt_amount: number;
+  subscriptions_running_low: number;
+  makeups_open: number;
+  frozen_now: number;
+}
+
+/**
+ * Отток приходит в сводке, но в интерфейс не выводится: текущая реализация
+ * считает его по абонементам, а не по ученикам, и завышает в разы
+ * (issue #25). Поле оставлено в типе — прятать его из формы ответа значило бы
+ * забыть о нём, когда бэкенд починится.
+ */
+export interface SummaryChurn {
+  ended: number;
+  churned: number;
+  churn_pct: number;
+  worst_teacher: { teacher_id: string | null; name: string; ended: number; churned: number; churn_pct: number } | null;
+}
+
+export interface MoneySummary {
+  period: ReportPeriod;
+  branch_id?: string | null;
+  revenue: SummaryRevenue;
+  rooms: SummaryRooms;
+  churn: SummaryChurn;
+  payroll: SummaryPayroll;
+  attention: SummaryAttention;
 }
 
 /* ---------- Ошибки ---------- */
