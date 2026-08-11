@@ -34,6 +34,11 @@ import type {
   TrialRequest,
   TrialResponse,
   ApiErrorBody,
+  CodeSent,
+  LoggedIn,
+  LoggedOut,
+  LoginRequest,
+  Me,
 } from './types';
 
 /**
@@ -58,15 +63,18 @@ export class ApiError extends Error {
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
 /**
- * Заглушка авторизации из контракта: тенант и пользователь передаются
- * заголовками. TODO: убрать после появления настоящего входа — тогда
- * заголовки заменит токен сессии.
+ * Сессия протухла или её погасили «выйти на всех устройствах» — интерфейс
+ * обязан уйти на экран входа, из какого бы места ни пришёл 401.
+ *
+ * Обработчик один и живёт здесь, а не в каждом экране: иначе каждый новый
+ * запрос пришлось бы отдельно учить тому, что делать с 401, и однажды кто-то
+ * забыл бы — пользователь остался бы смотреть на «ошибка загрузки» вместо
+ * формы входа.
  */
-function authHeaders(): Record<string, string> {
-  return {
-    'X-Tenant-Id': import.meta.env.VITE_TENANT_ID ?? '',
-    'X-User-Id': import.meta.env.VITE_USER_ID ?? '',
-  };
+let onUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -74,9 +82,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${BASE}${path}`, {
       ...init,
+      // Токен сессии ездит в куке HttpOnly — прочитать её скриптом нельзя,
+      // и без `credentials` браузер просто не приложит её к запросу.
+      // Ровно поэтому бэкенду нужен точный Origin: `*` вместе с куками
+      // запрещён стандартом, а не нашей осторожностью.
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...authHeaders(),
         ...(init?.headers ?? {}),
       },
     });
@@ -92,6 +104,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       body = null;
     }
+    // Вход исключён намеренно: 401 на `/auth/login` — это «код не подошёл»,
+    // и сбрасывать из-за него форму, в которую человек только что печатал,
+    // значило бы терять набранный номер на каждой опечатке.
+    if (response.status === 401 && !path.startsWith('/auth/')) onUnauthorized?.();
     throw new ApiError(
       response.status,
       body?.error?.code ?? 'http_error',
@@ -105,6 +121,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const httpApi = {
+  /* ---------- этап 5: вход ---------- */
+
+  /**
+   * Запрос одноразового кода. Всегда 202 — и на существующий телефон,
+   * и на случайный: иначе форма входа отвечала бы на вопрос «ходит ли этот
+   * ребёнок в эту школу». Слаг школы обязателен: телефон уникален внутри
+   * школы, но не между школами.
+   */
+  requestCode: (tenant: string, login: string) =>
+    request<CodeSent>('/auth/request-code', { method: 'POST', body: JSON.stringify({ tenant, login }) }),
+  /** Код ИЛИ пароль — вместе сервер отвечает 400, поэтому формы разведены. */
+  login: (payload: LoginRequest) =>
+    request<LoggedIn>('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
+  /** `everywhere` гасит и соседние устройства — на случай потерянного телефона. */
+  logout: (everywhere = false) =>
+    request<LoggedOut>(`/auth/logout${everywhere ? '?everywhere=true' : ''}`, { method: 'POST' }),
+  /** Кто вошёл и что ему видно. Роль берётся отсюда, и только отсюда. */
+  me: () => request<Me>('/auth/me'),
+
   branches: () => request<Branch[]>('/branches'),
   schedule: (branchId: string, date: string) =>
     request<ScheduleResponse>(`/schedule?branch_id=${encodeURIComponent(branchId)}&date=${encodeURIComponent(date)}`),

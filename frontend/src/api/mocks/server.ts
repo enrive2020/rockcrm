@@ -60,6 +60,13 @@ import type {
   StudentSubscription,
   TrialRequest,
   TrialResponse,
+  CodeSent,
+  LoggedIn,
+  LoggedOut,
+  LoginRequest,
+  Me,
+  Role,
+  TenantRef,
 } from '../types';
 import { MARK_ORDER, PAYMENT_METHOD_LABELS, SOURCES, STAGE_LABELS, STAGE_ORDER } from '../types';
 import {
@@ -850,9 +857,198 @@ const LATENCY = Number(import.meta.env.VITE_MOCK_LATENCY_MS ?? 320);
 const delay = <T,>(value: T): Promise<T> =>
   new Promise((resolve) => setTimeout(() => resolve(value), LATENCY));
 
+/* ==========================================================================
+   Этап 5: вход в мок-режиме.
+
+   Мок-режим нужен для разработки без бэкенда, и появление входа не имеет
+   права его отключить. Роль сессии задаётся переменной `VITE_MOCK_ROLE`:
+   это единственный способ посмотреть все пять ролей, не заводя пять учётных
+   записей и не пересевая базу между проверками.
+
+   Формы ответов и коды отказов повторяют живой сервер, включая разницу между
+   401 и 429: если мок отвечает на неверный код так же, как на перебор,
+   то ветку «подождите 15 минут» на моках проверить нечем — а забывают
+   обычно именно её.
+   ========================================================================== */
+
+/** Идентификаторы того же вида, что и остальные мок-данные. */
+const authUid = (n: number) => `aaaaaaaa-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+const MOCK_TENANT: TenantRef = { id: authUid(10), name: 'RockSchool Алматы' };
+
+/** Код и пароль фиксированы: очереди уведомлений в моках нет, читать неоткуда. */
+const MOCK_CODE = '123456';
+const MOCK_PASSWORD = 'rockschool';
+/** Столько же, сколько у живого сервера: три запроса кода за четверть часа… */
+const MOCK_CODE_REQUEST_LIMIT = 3;
+/** …и пять неверных кодов подряд. */
+const MOCK_CODE_ATTEMPT_LIMIT = 5;
+
+const studentIdByName = (name: string): string => STUDENTS.find((s) => s.name === name)?.id ?? '';
+
+/** Кто входит при каждой роли. Люди — те же, что в демо-данных бэкенда. */
+const MOCK_USERS: Record<Role, Omit<Me, 'tenant'>> = {
+  owner: {
+    user_id: authUid(94),
+    name: 'Ерлан Тасмагамбетов',
+    role: 'owner',
+    person_id: authUid(84),
+    staff_id: authUid(74),
+    // Пусто — значит ВСЕ филиалы. Ровно так это читает и бэкенд.
+    branch_ids: [],
+    student_ids: [],
+  },
+  admin: {
+    user_id: authUid(95),
+    name: 'Асель Нурланова',
+    role: 'admin',
+    person_id: authUid(85),
+    staff_id: authUid(75),
+    branch_ids: [],
+    student_ids: [],
+  },
+  teacher: {
+    user_id: authUid(96),
+    name: TEACHERS[0].name,
+    role: 'teacher',
+    person_id: authUid(86),
+    // Свой `staff_id` — тот же, что у дорожки в расписании: по нему
+    // запрашивается собственная ведомость.
+    staff_id: TEACHERS[0].id,
+    branch_ids: BRANCHES.map((b) => b.id),
+    student_ids: STUDENTS.filter((s) => s.teacher_id === TEACHERS[0].id).map((s) => s.id),
+  },
+  guardian: {
+    user_id: authUid(98),
+    name: 'Гульнара Сагындык',
+    role: 'guardian',
+    person_id: authUid(88),
+    staff_id: null,
+    branch_ids: [],
+    student_ids: [studentIdByName('Амина Сагындык'), studentIdByName('Тимур Сагындык')],
+  },
+  student: {
+    user_id: authUid(99),
+    name: 'Дмитрий Со',
+    role: 'student',
+    person_id: authUid(89),
+    staff_id: null,
+    branch_ids: [],
+    student_ids: [studentIdByName('Дмитрий Со')],
+  },
+};
+
+const MOCK_ROLE: Role = (() => {
+  const raw = (import.meta.env.VITE_MOCK_ROLE ?? 'owner').trim();
+  return raw in MOCK_USERS ? (raw as Role) : 'owner';
+})();
+
+const mockMe = (): Me => ({ ...MOCK_USERS[MOCK_ROLE], tenant: MOCK_TENANT });
+
+/**
+ * Стартовое состояние. По умолчанию сессия уже есть: заставлять разработчика
+ * набирать код на каждой перезагрузке значило бы наказывать его за то, что
+ * вход вообще появился. `VITE_MOCK_SIGNED_OUT=true` открывает форму входа —
+ * ею же экран входа и проверяется.
+ */
+let mockSession: Me | null = import.meta.env.VITE_MOCK_SIGNED_OUT === 'true' ? null : mockMe();
+let mockCodeRequests = 0;
+let mockCodeAttempts = 0;
+
+/** «+77015 ••• •• 18» — маска собирается из присланного, а не из найденного. */
+function maskLogin(login: string): string {
+  const digits = login.replace(/[^\d+]/g, '');
+  return digits.length > 8 ? `${digits.slice(0, 6)} ••• •• ${digits.slice(-2)}` : '…';
+}
+
+/**
+ * Кого роль вообще имеет право видеть. `null` — ограничения нет.
+ * Сервер урезает выдачу сам, и мок обязан вести себя так же: иначе кабинет
+ * родителя на моках показывает всю школу и выглядит рабочим.
+ */
+/**
+ * Ставка преподавателя в карточке занятия: своя видна ему самому, чужая —
+ * только владельцу (§2). Администратору ресепшена приходит `null` — «вам
+ * не видно», а не «ставка ноль»: ноль читается как «работает бесплатно»
+ * и однажды попадёт в разговор.
+ */
+function visibleRate(teacher: MockTeacher): number | null {
+  const me = mockSession;
+  if (!me) return null;
+  if (me.role === 'owner') return teacher.rate;
+  if (me.role === 'teacher' && me.staff_id === teacher.id) return teacher.rate;
+  return null;
+}
+
+function visibleStudentIds(): string[] | null {
+  const me = mockSession;
+  if (!me || me.role === 'owner' || me.role === 'admin' || me.role === 'teacher') return null;
+  return me.student_ids;
+}
+
 /* ---------- API ---------- */
 
 export const mockApi = {
+  /* ---------- этап 5: вход ---------- */
+
+  requestCode: async (tenant: string, login: string): Promise<CodeSent> => {
+    if (!tenant.trim()) {
+      throw new ApiError(404, 'unknown_tenant', 'Школа не найдена. Проверьте адрес, по которому открыт кабинет.');
+    }
+    mockCodeRequests += 1;
+    if (mockCodeRequests > MOCK_CODE_REQUEST_LIMIT) {
+      throw new ApiError(429, 'too_many_attempts', 'Слишком много запросов кода с этого адреса. Подождите 15 минут.');
+    }
+    // 202 на любой номер, включая несуществующий.
+    return delay({
+      sent: true,
+      to: maskLogin(login),
+      expires_in: 300,
+      message: 'Если такая учётная запись есть, код придёт в течение минуты.',
+    });
+  },
+
+  login: async (payload: LoginRequest): Promise<LoggedIn> => {
+    if (Boolean(payload.code) === Boolean(payload.password)) {
+      throw new ApiError(400, 'bad_credentials_form', 'Пришлите либо одноразовый код, либо пароль — что-то одно.');
+    }
+    if (mockCodeAttempts >= MOCK_CODE_ATTEMPT_LIMIT) {
+      throw new ApiError(
+        429,
+        'too_many_attempts',
+        'Слишком много неверных кодов. Подождите 15 минут и запросите новый.',
+      );
+    }
+    const ok = payload.code ? payload.code === MOCK_CODE : payload.password === MOCK_PASSWORD;
+    if (!ok) {
+      mockCodeAttempts += 1;
+      // Тот же код и тот же текст, что у живого сервера: неверный код,
+      // неверный пароль и несуществующий телефон отвечают одинаково.
+      throw new ApiError(401, 'bad_credentials', 'Не подошло. Проверьте номер и код — или запросите новый код.');
+    }
+    mockCodeAttempts = 0;
+    mockCodeRequests = 0;
+    mockSession = mockMe();
+    return delay({
+      user: mockSession,
+      expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
+    });
+  },
+
+  logout: async (everywhere = false): Promise<LoggedOut> => {
+    mockSession = null;
+    mockCodeAttempts = 0;
+    mockCodeRequests = 0;
+    return delay({ ok: true, message: everywhere ? 'Вы вышли из всех сеансов.' : 'Вы вышли.' });
+  },
+
+  me: async (): Promise<Me> => {
+    if (!mockSession) {
+      throw new ApiError(401, 'unauthenticated', 'Нужен вход. Запросите код на телефон.');
+    }
+    return delay(mockSession);
+  },
+
   branches: (): Promise<Branch[]> => delay(BRANCHES.map((b) => ({ ...b }))),
 
   // async — чтобы отказ уходил отклонённым промисом, а не синхронным исключением
@@ -920,7 +1116,7 @@ export const mockApi = {
       kind: lesson.kind,
       status: statusOf(lesson),
       room: { id: lesson.room_id, name: findRoom(lesson.room_id).name },
-      teacher: { id: teacher.id, name: teacher.name, rate: teacher.rate },
+      teacher: { id: teacher.id, name: teacher.name, rate: visibleRate(teacher) },
       participants: lesson.student_ids.map((id) => toParticipant(lesson, id)),
       note: lesson.note,
     });
@@ -1134,13 +1330,22 @@ export const mockApi = {
 
   students: async (query: string, branchId?: string | null): Promise<StudentSearchItem[]> => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return delay([]);
+    const visible = visibleStudentIds();
+    // Пустой запрос у родителя осмыслен: ему возвращают его же детей,
+    // и сервер ведёт себя так же. У сотрудника пустой запрос вернул бы
+    // половину школы, поэтому у него список остаётся пустым.
+    if (!needle && visible === null) return delay([]);
     // Телефон ищем по цифрам: администратор набирает его как угодно —
     // с +7, с 8, со скобками, — а совпасть должно всё равно
     const digits = needle.replace(/\D/g, '');
 
     const found = STUDENTS.filter((student) => {
+      // Ограничение по роли накладывается до поиска, а не на результат:
+      // иначе `limit` отрезал бы детей родителя раньше, чем до них дойдёт
+      // очередь, и кабинет показал бы пустой список.
+      if (visible !== null && !visible.includes(student.id)) return false;
       if (branchId && student.branch_id !== branchId) return false;
+      if (!needle) return true;
       if (student.name.toLowerCase().includes(needle)) return true;
       const payer = findFamily(student.family_id)?.payer;
       if (!payer) return false;
@@ -1170,6 +1375,13 @@ export const mockApi = {
   },
 
   student: async (studentId: string): Promise<StudentCard> => {
+    const visible = visibleStudentIds();
+    // Чужой ребёнок отвечает 404, а не 403: 403 подтверждал бы, что такой
+    // ученик в школе есть, и перебором идентификаторов её можно было бы
+    // пересчитать целиком. Живой сервер отвечает так же.
+    if (visible !== null && !visible.includes(studentId)) {
+      throw new ApiError(404, 'student_not_found', 'Ученик не найден.');
+    }
     const student = findStudentOr404(studentId);
     const ledger = LEDGER[student.id] ?? [];
 
@@ -1897,7 +2109,10 @@ export const mockApi = {
       rooms: { utilization_pct: rooms.utilization_pct, busiest: rooms.rooms[0] ?? null },
       churn: { ended: 12, churned: 4, churn_pct: 33, worst_teacher: null },
       payroll: {
-        total: sheet.reduce((sum, r) => sum + r.amount, 0),
+        // Фонд оплаты труда — те же деньги людей, что и ведомость, только
+        // одной строкой: администратору сервер отдаёт `null`, и мок обязан
+        // отдавать его же, иначе эту ветку экрана проверить нечем.
+        total: mockSession?.role === 'owner' ? sheet.reduce((sum, r) => sum + r.amount, 0) : null,
         lessons: new Set(sheet.filter((r) => r.kind === 'lesson').map((r) => `${r.teacher_id}|${r.date}|${r.start}`)).size,
         closed: closedPeriodFor(from, to) !== null,
       },

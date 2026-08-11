@@ -7,6 +7,7 @@ import {
   type PayrollSheet as PayrollSheetData,
 } from '../../api';
 import { useAsync } from '../../lib/useAsync';
+import type { Access } from '../../lib/access';
 import {
   dateGen,
   money,
@@ -46,11 +47,20 @@ const TABS: { id: Tab; label: string }[] = [
 export function MoneyScreen({
   branches,
   onToast,
+  access,
 }: {
   branches: Branch[];
   onToast: (toast: Omit<ToastMessage, 'id'>) => void;
+  access: Access;
 }) {
-  const [tab, setTab] = useState<Tab>('payroll');
+  /**
+   * Ведомость и список закрытых периодов — только владельцу (`require_owner`).
+   * Администратор видит выручку, кабинеты и долги: это работа школы, а не
+   * чужая зарплата. Вкладка, которая ответит 403, не рисуется — начинаем
+   * с той, что роли доступна.
+   */
+  const tabs = access.payrollSheet ? TABS : TABS.filter((item) => item.id !== 'payroll');
+  const [tab, setTab] = useState<Tab>(tabs[0].id);
   // Период по умолчанию — текущий месяц: ведомость закрывают помесячно
   const [period, setPeriod] = useState(() => monthBounds(TODAY));
   const [branchId, setBranchId] = useState<string | null>(null);
@@ -58,8 +68,12 @@ export function MoneyScreen({
   const { from, to } = period;
 
   const summary = useAsync<MoneySummary>(() => api.moneySummary(from, to, branchId), [from, to, branchId]);
-  const payroll = useAsync<PayrollSheetData>(() => api.payroll(from, to, branchId), [from, to, branchId]);
-  const periods = useAsync<PayrollPeriodRow[]>(() => api.payrollPeriods(12), []);
+  const payroll = useAsync<PayrollSheetData>(
+    () => api.payroll(from, to, branchId),
+    [from, to, branchId],
+    access.payrollSheet,
+  );
+  const periods = useAsync<PayrollPeriodRow[]>(() => api.payrollPeriods(12), [], access.payrollSheet);
 
   /** После закрытия периода перечитываем всё: ведомость сменила состояние. */
   const handleClosed = (message: string) => {
@@ -85,7 +99,7 @@ export function MoneyScreen({
         </div>
         <div className="spacer" />
         <div className="seg-ctl">
-          {TABS.map((item) => (
+          {tabs.map((item) => (
             <button key={item.id} aria-pressed={tab === item.id} onClick={() => setTab(item.id)}>
               {item.label}
             </button>
@@ -174,7 +188,7 @@ export function MoneyScreen({
 
           <div className="col-stack">
             {summary.data && <AttentionCard data={summary.data} />}
-            <PeriodsCard state={periods} />
+            {access.payrollSheet && <PeriodsCard state={periods} />}
           </div>
         </div>
       </div>
@@ -187,7 +201,11 @@ function SummaryRow({ data, from, to }: { data: MoneySummary; from: string; to: 
   const revenue = data.revenue;
   const rooms = data.rooms;
   const payroll = data.payroll;
-  const share = revenue.amount > 0 ? Math.round((payroll.total / revenue.amount) * 100) : null;
+  // `total === null` — фонд оплаты труда роли не показывают (§2). Считать
+  // от него долю выручки нечего, а подставить ноль значило бы нарисовать
+  // «0% выручки уходит людям» — число, которого никто не считал.
+  const share =
+    revenue.amount > 0 && payroll.total !== null ? Math.round((payroll.total / revenue.amount) * 100) : null;
 
   return (
     <div className="grid g4">
@@ -234,15 +252,26 @@ function SummaryRow({ data, from, to }: { data: MoneySummary; from: string; to: 
 
       <div className="card">
         <span className="lbl">Ведомость</span>
-        <div className="stat num">{money(payroll.total)}</div>
+        {/* Прочерк, а не ноль: «вам не видно» и «денег ноль» — разные вещи,
+            и второе однажды попадёт в разговор с преподавателем */}
+        <div className={`stat num${payroll.total === null ? ' dim' : ''}`}>
+          {payroll.total === null ? '—' : money(payroll.total)}
+        </div>
         <p className="trend">
           {payroll.lessons} {plural(payroll.lessons, 'занятие', 'занятия', 'занятий')} ·{' '}
           {payroll.closed ? 'период закрыт' : 'период открыт, суммы ещё изменятся'}
         </p>
-        {share !== null && (
+        {payroll.total === null ? (
           <p className="hint">
-            {share}% выручки периода. Начисление идёт от каждого проведённого занятия, а не от оклада.
+            Фонд оплаты труда видит только владелец школы (§2). Число занятий и состояние периода — работа школы,
+            а не чужая зарплата, поэтому они остаются.
           </p>
+        ) : (
+          share !== null && (
+            <p className="hint">
+              {share}% выручки периода. Начисление идёт от каждого проведённого занятия, а не от оклада.
+            </p>
+          )
         )}
       </div>
 

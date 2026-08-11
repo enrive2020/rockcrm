@@ -194,7 +194,12 @@ export function AttendancePanel({
               </div>
               <div className="kv">
                 <span>Ставка преподавателя</span>
-                <b className="num">{money(lesson.teacher.rate)}</b>
+                {/* `null` — «вам не видно», а не «ставка ноль»: чужую ставку
+                    показывают только владельцу, и «0 ₸» на месте скрытой суммы
+                    читалось бы как «работает бесплатно» */}
+                <b className={`num${lesson.teacher.rate === null ? ' dim' : ''}`} title={lesson.teacher.rate === null ? 'Чужую ставку видит только владелец школы' : undefined}>
+                  {lesson.teacher.rate === null ? '—' : money(lesson.teacher.rate)}
+                </b>
               </div>
             </div>
 

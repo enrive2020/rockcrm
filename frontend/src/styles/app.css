@@ -90,6 +90,68 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 }
 .theme-btn:hover { color: #fff; border-color: var(--rail-ink-3); }
 
+/* Блок пользователя — кнопка: за ним прячется выход, и нажимать его будут
+   не глядя, поэтому цель клика должна совпадать с тем, что видно */
+.who-btn { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; text-align: left; padding: 4px; margin: -4px; border-radius: 4px; }
+.who-btn:hover { background: rgba(255, 255, 255, .06); }
+.rail-foot { position: relative; }
+.user-menu {
+  position: absolute; left: 10px; right: 10px; bottom: calc(100% + 6px); z-index: 25;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  box-shadow: var(--shadow); padding: 6px; color: var(--ink);
+  animation: rise .14s ease;
+}
+.user-menu-h { padding: 6px 8px 8px; border-bottom: 1px solid var(--line-soft); margin-bottom: 4px; }
+.user-menu-h b { display: block; font-size: 13px; font-weight: 600; }
+.user-menu-h small { color: var(--ink-3); font-size: 11.5px; }
+.user-menu button { display: block; width: 100%; text-align: left; padding: 7px 8px; border-radius: 4px; font-size: 13px; }
+.user-menu button:hover { background: var(--panel-3); }
+.user-menu button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ---------- экран входа ----------
+   Первое, что видит клиент школы. Собран из тех же токенов, что и весь
+   продукт: другой шрифт и другой акцент читались бы как чужая страница,
+   на которой свой номер вводить не стоит. */
+.login {
+  min-height: 100%; padding: 24px; overflow-y: auto;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+  /* Латунный отсвет сверху — единственное украшение, и оно из палитры */
+  background-image: radial-gradient(120% 60% at 50% -10%, var(--accent-wash) 0%, transparent 60%);
+}
+.login-card {
+  width: min(400px, 100%);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: var(--shadow); padding: 26px 24px 20px;
+  display: flex; flex-direction: column; gap: 12px;
+  animation: rise .16s ease;
+}
+.login-brand { display: flex; align-items: baseline; gap: 8px; }
+.login-brand b { font-family: var(--f-display); font-size: 20px; letter-spacing: .02em; font-weight: 600; }
+.login-brand span {
+  font-family: var(--f-display); font-size: 10px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent);
+}
+.login-card .h1 { font-size: 20px; }
+.login-card .sub { margin: 0; }
+.login-card .field { gap: 6px; }
+.login-card .inp { height: 38px; font-size: 14px; }
+.login-card .btn { flex: none; }
+.login-card .hint { margin-top: 2px; }
+.login-tabs { align-self: flex-start; }
+/* Шесть цифр — крупно и вразрядку: их сверяют с экраном телефона */
+.code-inp { text-align: center; font-size: 22px !important; letter-spacing: .32em; height: 48px !important; }
+.login-notice {
+  margin: 0; padding: 9px 11px; border-radius: 5px;
+  background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent-bright) 40%, transparent);
+  color: var(--accent); font-size: 12.5px;
+}
+.login-foot { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.login-foot .btn.slim { margin-left: auto; }
+.login-back { align-self: flex-start; font-size: 12.5px; }
+.login-theme { position: fixed; top: 16px; right: 16px; border-color: var(--line); color: var(--ink-3); background: var(--panel); }
+.login-theme:hover { color: var(--ink); border-color: var(--ink-3); }
+
 .main { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .topbar {
   flex: none; background: var(--panel); border-bottom: 1px solid var(--line);

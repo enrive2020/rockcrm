@@ -11,5 +11,5 @@ export const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 export const api: Api = USE_MOCKS ? mockApi : httpApi;
 
-export { ApiError } from './http';
+export { ApiError, setUnauthorizedHandler } from './http';
 export * from './types';
