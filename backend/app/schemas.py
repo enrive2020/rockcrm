@@ -382,6 +382,11 @@ class HoldCreated(BaseModel):
     freeze_days_left: int
     # Сверх контракта: та же информация одной фразой для тоста в интерфейсе.
     message: str
+    # Сверх контракта и необязательно: статус абонемента после операции.
+    # У заморозки «с сегодня» это `frozen`, у назначенной на будущее — прежний.
+    # Без него интерфейсу пришлось бы перечитывать карточку, чтобы понять,
+    # изменилось ли вообще что-нибудь видимое администратору.
+    status: str | None = None
 
 
 class HoldReleased(BaseModel):
@@ -393,6 +398,7 @@ class HoldReleased(BaseModel):
     lessons_restored: int
     freeze_days_left: int
     message: str
+    status: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -464,8 +470,14 @@ class LeadFull(LeadCard):
 class BoardColumn(BaseModel):
     stage: Stage
     title: str
+    # Сколько заявок в стадии всего, а не сколько приехало в этом ответе:
+    # колонка «Отказ» отдаётся страницей, а счётчик обязан остаться честным.
     count: int
     leads: list[LeadCard]
+    # Оба поля сверх контракта и необязательные — старый фронтенд их просто
+    # не заметит. next_offset подставляется в ?offset= следующего запроса.
+    has_more: bool = False
+    next_offset: int | None = None
 
 
 class BoardSummary(BaseModel):

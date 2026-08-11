@@ -123,6 +123,122 @@ def test_board_of_other_tenant_is_empty(client):
 
 
 # ---------------------------------------------------------------------------
+# Размер выборки и число запросов
+#
+# На демонстрационных данных доска отвечает мгновенно и оба дефекта не видны:
+# заявок четырнадцать. На полугодовой истории их 688, и доска делала 395
+# запросов за 1,3 секунды, отдавая целиком колонку «Отказ» в 509 карточек.
+# Поэтому здесь проверяется не время, а то, что от него зависит: размер
+# выборки и постоянство числа запросов.
+# ---------------------------------------------------------------------------
+
+
+def test_board_page_is_limited_and_count_stays_honest(client):
+    """Колонка отдаёт страницу, но счётчик показывает, сколько их всего.
+
+    Если `count` начнёт равняться размеру страницы, администратор решит,
+    что отказов пятьдесят, и перестанет искать причины в остальных
+    четырёхстах — вранья такого рода интерфейс не заметит.
+    """
+    body = board(client, limit=1)
+    new = column(body, "new")
+
+    assert len(new["leads"]) == 1, "страница обязана быть ограничена"
+    assert new["count"] == 3, "счётчик колонки — это вся стадия, а не страница"
+    assert new["has_more"] is True
+    assert new["next_offset"] == 1
+    # Шапка тоже считает всю воронку, а не загруженное.
+    assert body["summary"]["total"] == 16
+    assert body["summary"]["overdue"] == 1
+
+
+def test_board_pages_do_not_lose_or_double_leads(client):
+    """Три страницы по одной дают ровно те же три заявки, что и одна на три."""
+    whole = names(board(client), "new")
+    assert len(whole) == 3
+
+    paged = []
+    offset = 0
+    while True:
+        col = column(board(client, limit=1, offset=offset), "new")
+        paged += [c["name"] for c in col["leads"]]
+        if not col["has_more"]:
+            break
+        offset = col["next_offset"]
+
+    assert paged == whole
+    assert len(set(paged)) == 3, "заявка не должна попасть на две страницы сразу"
+
+    # Последняя страница честно говорит, что дальше ничего нет.
+    last = column(board(client, limit=1, offset=2), "new")
+    assert last["has_more"] is False and last["next_offset"] is None
+
+
+def test_board_limit_applies_to_every_column_separately(client):
+    """Ограничение постадийное: одна большая колонка не съедает остальные."""
+    body = board(client, limit=1)
+    filled = [c["stage"] for c in body["columns"] if c["leads"]]
+    assert len(filled) >= 4, "каждая непустая колонка обязана отдать свою карточку"
+    assert all(len(c["leads"]) <= 1 for c in body["columns"])
+
+
+def test_board_query_count_does_not_grow_with_the_number_of_leads(client, monkeypatch):
+    """N+1: занятость слотов берётся одним запросом на доску, а не на карточку.
+
+    Каждый пробный на доске стоил отдельного `slot_occupants`, и на живой
+    школе это давало 395 запросов вместо десятка. Считаем запросы до и после
+    добавления трёх заявок с пробными: число обязано остаться тем же.
+    """
+    import psycopg
+
+    from scripts import seed_demo
+
+    counter = {"n": 0}
+    original = psycopg.Cursor.execute
+
+    def counting(self, *args, **kwargs):
+        counter["n"] += 1
+        return original(self, *args, **kwargs)
+
+    def queries_for_board() -> int:
+        monkeypatch.setattr(psycopg.Cursor, "execute", counting)
+        counter["n"] = 0
+        try:
+            assert client.get("/api/v1/leads", headers=HEADERS).status_code == 200
+            return counter["n"]
+        finally:
+            monkeypatch.undo()
+
+    before = queries_for_board()
+
+    # Три новых заявки, каждая с назначенным пробным: именно пробный тянул
+    # за собой лишний запрос за занятостью кабинета и преподавателя.
+    for index in range(3):
+        lead_id = create(
+            client, name=f"Пробный {index}", phone=f"+7701555010{index}",
+            discipline_id=DISC_DRUMS, branch_id=BRANCH_AF,
+        ).json()["id"]
+        booked = client.post(
+            f"/api/v1/leads/{lead_id}/trial",
+            json={
+                "teacher_id": seed_demo.teacher_id("madratov"),
+                "room_id": seed_demo.ROOMS["drum_a"],
+                "starts_at": f"2026-08-1{3 + index}T09:00:00+05:00",
+                "duration_min": 45,
+            },
+            headers=HEADERS,
+        )
+        assert booked.status_code == 201, booked.text
+
+    after = queries_for_board()
+    assert sum(c["count"] for c in board(client)["columns"]) == 19
+    assert after == before, (
+        f"на трёх новых заявках доска сделала {after} запросов вместо {before} — "
+        "занятость слотов снова спрашивается по карточке"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Карточка
 # ---------------------------------------------------------------------------
 

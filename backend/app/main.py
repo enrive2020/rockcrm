@@ -401,9 +401,20 @@ def leads_board(
     source: Annotated[str | None, Query(description="Источник заявки")] = None,
     assigned_to: Annotated[str | None, Query(description="UUID сотрудника")] = None,
     branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
+    # Постраничная подгрузка колонки. Ограничение действует на КАЖДУЮ колонку:
+    # общее съела бы одна «Отказ», в которой на живой школе пятьсот заявок.
+    limit: Annotated[
+        int,
+        Query(ge=1, le=leads_service.MAX_PAGE, description="Карточек в одной колонке"),
+    ] = leads_service.DEFAULT_PAGE,
+    offset: Annotated[
+        int, Query(ge=0, description="Сколько карточек колонки пропустить")
+    ] = 0,
 ) -> dict[str, Any]:
     with tenant_tx(who.tenant_id) as cur:
-        return leads_service.board(cur, stage, source, assigned_to, branch_id)
+        return leads_service.board(
+            cur, stage, source, assigned_to, branch_id, limit, offset
+        )
 
 
 # Отчёт объявлен ДО /leads/{lead_id}: иначе FastAPI сопоставит «funnel»

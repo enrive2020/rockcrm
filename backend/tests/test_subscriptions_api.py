@@ -10,7 +10,7 @@ from __future__ import annotations
 import datetime as dt
 
 import pytest
-from conftest import HEADERS, HEADERS_OTHER, student, subscription
+from conftest import HEADERS, HEADERS_OTHER, TENANT, student, subscription
 
 AMINA = "sagyndyk"
 AMINA_SUB = subscription("sagyndyk")
@@ -486,6 +486,131 @@ def test_release_says_lessons_are_not_restored(client, sql):
         (student(AMINA),),
     ).fetchone()
     assert still_cancelled["n"] >= 3
+
+
+# ---------------------------------------------------------------------------
+# Статус замороженного абонемента
+# ---------------------------------------------------------------------------
+
+
+def test_hold_from_today_marks_the_subscription_frozen(client, sql):
+    """Замороженный абонемент обязан отличаться от действующего.
+
+    Схема объявляет статус `frozen`, триггер пересчёта его бережёт, три
+    запроса на него смотрят — а выставлять его было некому: после полугода
+    работы в базе оказалось 64 действующих заморозки и ни одного `frozen`.
+    Администратор не видел, что ученик на каникулах, и спрашивал бы, почему
+    тот не ходит.
+    """
+    assert sub_row(sql, AMINA_SUB)["status"] == "active"
+
+    response = freeze(client, AMINA_SUB, TODAY, TODAY + dt.timedelta(days=5))
+    assert response.status_code == 201, response.text
+    assert response.json()["status"] == "frozen"
+    assert sub_row(sql, AMINA_SUB)["status"] == "frozen"
+
+    # И это видно на экране, а не только в базе.
+    card = client.get(f"/api/v1/students/{student(AMINA)}", headers=HEADERS).json()
+    assert card["subscription"]["status"] == "frozen"
+
+
+def test_hold_scheduled_for_the_future_does_not_freeze_yet(client, sql):
+    """Заморозка со следующей недели не делает абонемент замороженным сегодня.
+
+    До её начала абонемент действует: занятия идут, списания идут. Пометить
+    его замороженным заранее значило бы показать «на каникулах» ученика,
+    который сегодня придёт на урок. Сама будущая заморозка видна в `holds`.
+    """
+    assert freeze(client, AMINA_SUB, HOLD_FROM, HOLD_TO).json()["status"] == "active"
+    assert sub_row(sql, AMINA_SUB)["status"] == "active"
+
+    card = client.get(f"/api/v1/students/{student(AMINA)}", headers=HEADERS).json()
+    assert card["subscription"]["status"] == "active"
+    assert len(card["subscription"]["holds"]) == 1
+
+
+def test_release_returns_the_subscription_to_its_real_status(client, sql):
+    """Снятие возвращает статус, выведенный из фактов, а не из снимка.
+
+    Хранить «каким он был до заморозки» негде и незачем: за время каникул
+    абонемент мог исчерпаться или истечь, и восстановленный из снимка
+    `active` разошёлся бы с остатком и сроком.
+    """
+    hold_id = freeze(client, AMINA_SUB, TODAY, TODAY + dt.timedelta(days=5)).json()["hold_id"]
+    assert sub_row(sql, AMINA_SUB)["status"] == "frozen"
+
+    body = unfreeze(client, AMINA_SUB, hold_id).json()
+    assert body["status"] == "active"
+    assert sub_row(sql, AMINA_SUB)["status"] == "active"
+
+
+def test_frozen_status_survives_the_next_journal_entry(client, sql):
+    """Первое же движение по абонементу не должно стирать `frozen`.
+
+    Статус пересчитывает триггер от журнала, и он бережёт `frozen`
+    (`WHEN s.status IN ('cancelled','frozen')`). Держим это тестом: без него
+    заморозка «спадала» бы сама собой и дефект вернулся бы незаметно.
+    """
+    freeze(client, AMINA_SUB, TODAY, TODAY + dt.timedelta(days=5))
+    sql.execute(
+        """INSERT INTO subscription_entry (tenant_id, subscription_id, kind, lessons_delta, reason)
+           VALUES (%s, %s, 'adjust', -1, 'проверка триггера')""",
+        (TENANT, AMINA_SUB),
+    )
+    sql.commit()
+    assert sub_row(sql, AMINA_SUB)["status"] == "frozen"
+
+
+def test_nightly_sync_unfreezes_when_the_hold_is_over(client, sql):
+    """Ночная сверка снимает `frozen`, когда каникулы кончились.
+
+    Границу дат приложение само не переходит: она не наступает ни в одном
+    HTTP-запросе. Без задания карточка показывала бы каникулы, кончившиеся
+    две недели назад, а триггер, берегущий `frozen`, не дал бы абонементу
+    стать ни `exhausted`, ни `expired`.
+    """
+    from scripts import sync_statuses
+
+    freeze(client, AMINA_SUB, TODAY, TODAY + dt.timedelta(days=5))
+    assert sub_row(sql, AMINA_SUB)["status"] == "frozen"
+
+    # Заморозка кончилась вчера. Двигаем её в прошлое напрямую: перевести
+    # часы у процесса теста нечем, а сама проверка — про дату, а не про код.
+    sql.execute(
+        """UPDATE subscription_hold
+              SET period = daterange(%s, %s, '[)')
+            WHERE subscription_id = %s""",
+        (TODAY - dt.timedelta(days=6), TODAY, AMINA_SUB),
+    )
+    sql.commit()
+
+    # Только эта школа: задание ходит по всем тенантам базы, а тест обязан
+    # трогать ровно свои данные.
+    assert sync_statuses.run(TENANT) == 1
+    assert sub_row(sql, AMINA_SUB)["status"] == "active"
+
+    # Повторный прогон ничего не меняет: задание приводит статус к фактам,
+    # а не переключает его, и запуск после сбоя безопасен.
+    assert sync_statuses.run(TENANT) == 0
+
+
+def test_nightly_sync_freezes_when_the_hold_starts(client, sql):
+    """И включает заморозку, назначенную на будущее, в день её начала."""
+    from scripts import sync_statuses
+
+    assert freeze(client, AMINA_SUB, HOLD_FROM, HOLD_TO).json()["status"] == "active"
+
+    # Наступило первое число каникул.
+    sql.execute(
+        """UPDATE subscription_hold
+              SET period = daterange(%s, %s, '[)')
+            WHERE subscription_id = %s""",
+        (TODAY, TODAY + dt.timedelta(days=11), AMINA_SUB),
+    )
+    sql.commit()
+
+    assert sync_statuses.run(TENANT) == 1
+    assert sub_row(sql, AMINA_SUB)["status"] == "frozen"
 
 
 def test_release_of_unknown_hold_is_404(client):

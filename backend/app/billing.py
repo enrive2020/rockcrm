@@ -463,6 +463,13 @@ def create_hold(
     )
     valid_until_after = cur.fetchone()["valid_until"]
 
+    # Статус приводится в соответствие с заморозками. Схема объявляет `frozen`,
+    # триггер его бережёт, три запроса на него смотрят — но никто его
+    # не проставлял, и замороженный абонемент был неотличим от действующего:
+    # администратор не видел, что ученик на каникулах, и спрашивал бы,
+    # почему тот не ходит.
+    status = _sync_freeze_status(cur, subscription_id, today)
+
     cancelled = _cancel_lessons(cur, str(sub["student_id"]), body.from_, body.to, tz)
 
     # Заморозка идёт в журнал абонемента наравне со списаниями. Баланс она
@@ -508,12 +515,100 @@ def create_hold(
         "valid_until_after": valid_until_after.isoformat(),
         "lessons_cancelled": len(cancelled),
         "freeze_days_left": max(left - days, 0),
+        "status": status,
         "message": (
             f"Заморозка на {days} {days_word(days)}: "
             f"срок сдвинут на {valid_until_after:%d.%m.%Y}, "
             f"отменено занятий — {len(cancelled)}."
         ),
     }
+
+
+# Статус абонемента, выведенный из фактов: действующая ли сегодня заморозка,
+# остался ли остаток, не истёк ли срок. Единственное определение на систему —
+# им пользуются и заморозка, и её снятие, и ночная сверка.
+#
+# Ветки повторяют триггер subscription_recalc (db/003_billing.sql:143)
+# намеренно: все статусы, кроме `frozen`, обязаны получиться теми же, что
+# поставил бы он. Иначе первая же запись в журнал переписала бы статус
+# на свой, и два определения разошлись бы прямо на глазах.
+#
+# `frozen` проверяется по дню филиала (%(today)s), а `expired` — по
+# current_date: срок абонемента триггер и так считает по календарю сервера,
+# и расходиться с ним из-за часового пояса тут не за что.
+_STATUS_FROM_FACTS = """
+    CASE
+      -- Отменённый абонемент замораживать нечего и незачем.
+      WHEN s.status = 'cancelled' THEN s.status
+      WHEN EXISTS (
+        SELECT 1 FROM subscription_hold h
+        WHERE h.subscription_id = s.id AND h.period @> %(today)s::date
+      ) THEN 'frozen'
+      WHEN s.lessons_balance <= 0 THEN 'exhausted'
+      WHEN s.valid_until < current_date THEN 'expired'
+      ELSE 'active'
+    END
+"""
+
+
+def _sync_freeze_status(cur: psycopg.Cursor, subscription_id: str, today: dt.date) -> str:
+    """Приводит статус одного абонемента в соответствие с его заморозками.
+
+    Статус `frozen` ставится, только если заморозка действует **сегодня**.
+    Заморозка, назначенная на будущее, статус не меняет — и это осознанно:
+    до её начала абонемент действительно действует, занятия идут, списания
+    идут. Пометить его замороженным заранее значило бы показать
+    администратору «на каникулах» ученика, который сегодня придёт на урок,
+    а сам факт будущей заморозки виден в `holds` карточки.
+
+    Обратная сторона: границу дат приложение само не переходит — оно
+    вызывается только при создании и снятии заморозки. Календарь двигает
+    sync_statuses(), см. её описание.
+    """
+    cur.execute(
+        f"""
+        UPDATE subscription s
+        SET status = {_STATUS_FROM_FACTS}
+        WHERE s.id = %(id)s
+        RETURNING status
+        """,
+        {"id": subscription_id, "today": today},
+    )
+    return cur.fetchone()["status"]
+
+
+def sync_statuses(cur: psycopg.Cursor, today: dt.date) -> list[dict[str, Any]]:
+    """Ночная сверка статусов абонементов школы. Возвращает изменённые.
+
+    Без неё половина заморозки повисает: `create_hold` переводит абонемент
+    в `frozen` в день начала, а обратно его никто не возвращает — заморозка
+    кончилась две недели назад, а карточка всё ещё показывает каникулы.
+    Хуже того, триггер пересчёта бережёт `frozen` (`WHEN s.status IN
+    ('cancelled','frozen')`), поэтому застрявший статус не даст абонементу
+    стать ни `exhausted`, ни `expired`.
+
+    Заморозка, назначенная на будущее, тоже становится действующей именно
+    здесь — в день своего начала.
+
+    Задание идемпотентно: оно не «переключает», а приводит статус к тому,
+    что следует из фактов, и второй прогон подряд не меняет ничего.
+    Запускать раз в сутки: `python -m scripts.sync_statuses`.
+    """
+    cur.execute(
+        f"""
+        WITH want AS (
+          SELECT s.id, {_STATUS_FROM_FACTS} AS status
+          FROM subscription s
+        )
+        UPDATE subscription s
+        SET status = want.status
+        FROM want
+        WHERE want.id = s.id AND s.status IS DISTINCT FROM want.status
+        RETURNING s.id, s.student_id, s.status
+        """,
+        {"today": today},
+    )
+    return cur.fetchall()
 
 
 def _cancel_lessons(
@@ -622,6 +717,16 @@ def release_hold(
     # снятая заморозка продолжала бы действовать.
     cur.execute("DELETE FROM subscription_hold WHERE id = %s", (hold_id,))
 
+    # Прежний статус нигде не сохранён, и хранить его негде — колонки под него
+    # в схеме нет. Он и не нужен: статус выводится из фактов (есть ли заморозка
+    # на сегодня, остался ли остаток, не истёк ли срок) теми же ветками, что
+    # и в триггере. Восстановленный из снимка статус разошёлся бы с фактами:
+    # за время заморозки абонемент мог исчерпаться или истечь.
+    #
+    # Вызов идёт после journal.add_entry: триггер subscription_recalc бережёт
+    # `frozen` и вернул бы его обратно, отработав следом.
+    status = _sync_freeze_status(cur, subscription_id, _today(sub["branch_timezone"]))
+
     rules = dict(DEFAULT_RULES)
     rules.update(sub["rules"] or {})
     limit = int(rules.get("freeze_days_per_year", 0))
@@ -662,5 +767,6 @@ def release_hold(
         "lessons_cancelled": lessons_cancelled,
         "lessons_restored": 0,
         "freeze_days_left": max(limit - used, 0),
+        "status": status,
         "message": message,
     }
