@@ -1,0 +1,64 @@
+/*
+  Токены перенесены из prototype/index.html без изменения значений:
+  графит с холодным уклоном, латунный акцент, пять цветов дорожек.
+  Три блока — светлая по умолчанию, системная тёмная и ручной выбор
+  через data-theme на <html>; ручной выбор обязан побеждать системный.
+*/
+:root {
+  --bg: #E8EAED; --panel: #FFFFFF; --panel-2: #F4F5F7; --panel-3: #ECEEF1;
+  --line: #D3D7DD; --line-soft: #E3E6EA;
+  --ink: #15181D; --ink-2: #4A515C; --ink-3: #7C838F;
+  --accent: #8A6412; --accent-bright: #B98A24; --accent-wash: #F6EFDD; --on-accent: #FFFFFF;
+  --ok: #257A57; --ok-wash: #E3F0E9;
+  --bad: #B23A31; --bad-wash: #F8E6E4;
+  --rail: #1B1E23; --rail-ink: #C9CFD8; --rail-ink-3: #767F8B; --rail-line: #2B3038;
+  --ch-clay: #A65D3F; --ch-teal: #2F7D7A; --ch-slate: #4B6489; --ch-moss: #4E7A3E; --ch-plum: #7C4A72;
+  --shadow: 0 1px 2px rgba(16, 18, 22, .06), 0 8px 24px -12px rgba(16, 18, 22, .22);
+
+  /* Ширина часа на дорожке — расписание живёт в этой единице */
+  --hw: 104px;
+  /* Ширина «гребёнки» с именами преподавателей */
+  --gutter: 200px;
+
+  --f-display: "Bahnschrift", "DIN Alternate", "Avenir Next Condensed", "Segoe UI", system-ui, sans-serif;
+  --f-ui: "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif;
+  --f-mono: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101216; --panel: #191C21; --panel-2: #21252B; --panel-3: #262A31;
+    --line: #2C313A; --line-soft: #23272E;
+    --ink: #E9ECF1; --ink-2: #A7AFBB; --ink-3: #757E8B;
+    --accent: #D9A73C; --accent-bright: #EFC163; --accent-wash: #2A2318; --on-accent: #15181D;
+    --ok: #4FA97F; --ok-wash: #16291F;
+    --bad: #D9645A; --bad-wash: #2B1917;
+    --rail: #15181C; --rail-ink: #C9CFD8; --rail-ink-3: #6C7683; --rail-line: #242931;
+    --ch-clay: #C97F5E; --ch-teal: #4FA5A1; --ch-slate: #7C97C4; --ch-moss: #7BA766; --ch-plum: #B278A6;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px -14px rgba(0, 0, 0, .7);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #101216; --panel: #191C21; --panel-2: #21252B; --panel-3: #262A31;
+  --line: #2C313A; --line-soft: #23272E;
+  --ink: #E9ECF1; --ink-2: #A7AFBB; --ink-3: #757E8B;
+  --accent: #D9A73C; --accent-bright: #EFC163; --accent-wash: #2A2318; --on-accent: #15181D;
+  --ok: #4FA97F; --ok-wash: #16291F;
+  --bad: #D9645A; --bad-wash: #2B1917;
+  --rail: #15181C; --rail-ink: #C9CFD8; --rail-ink-3: #6C7683; --rail-line: #242931;
+  --ch-clay: #C97F5E; --ch-teal: #4FA5A1; --ch-slate: #7C97C4; --ch-moss: #7BA766; --ch-plum: #B278A6;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px -14px rgba(0, 0, 0, .7);
+}
+
+:root[data-theme="light"] {
+  --bg: #E8EAED; --panel: #FFFFFF; --panel-2: #F4F5F7; --panel-3: #ECEEF1;
+  --line: #D3D7DD; --line-soft: #E3E6EA;
+  --ink: #15181D; --ink-2: #4A515C; --ink-3: #7C838F;
+  --accent: #8A6412; --accent-bright: #B98A24; --accent-wash: #F6EFDD; --on-accent: #FFFFFF;
+  --ok: #257A57; --ok-wash: #E3F0E9;
+  --bad: #B23A31; --bad-wash: #F8E6E4;
+  --rail: #1B1E23; --rail-ink: #C9CFD8; --rail-ink-3: #767F8B; --rail-line: #2B3038;
+  --ch-clay: #A65D3F; --ch-teal: #2F7D7A; --ch-slate: #4B6489; --ch-moss: #4E7A3E; --ch-plum: #7C4A72;
+  --shadow: 0 1px 2px rgba(16, 18, 22, .06), 0 8px 24px -12px rgba(16, 18, 22, .22);
+}
