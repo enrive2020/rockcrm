@@ -2,16 +2,25 @@ import type {
   AttendanceRequest,
   AttendanceResponse,
   Branch,
+  ConvertRequest,
+  ConvertResponse,
+  CreateLeadRequest,
+  FunnelReport,
   HoldRequest,
   HoldReleaseResponse,
   HoldResponse,
+  LeadCard,
+  LeadsBoard,
   LessonCard,
+  PatchLeadRequest,
   Plan,
   ScheduleResponse,
   SellSubscriptionRequest,
   SellSubscriptionResponse,
   StudentCard,
   StudentSearchItem,
+  TrialRequest,
+  TrialResponse,
   ApiErrorBody,
 } from './types';
 
@@ -126,6 +135,35 @@ export const httpApi = {
       `/subscriptions/${encodeURIComponent(subscriptionId)}/holds/${encodeURIComponent(holdId)}`,
       { method: 'DELETE' },
     ),
+
+  /* ---------- этап 3 ---------- */
+
+  leads: (filters: { stage?: string; source?: string; assigned_to?: string; branch_id?: string | null } = {}) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params.set(key, value);
+    }
+    const query = params.toString();
+    return request<LeadsBoard>(`/leads${query ? `?${query}` : ''}`);
+  },
+  lead: (leadId: string) => request<LeadCard>(`/leads/${encodeURIComponent(leadId)}`),
+  createLead: (payload: CreateLeadRequest) =>
+    request<LeadCard>('/leads', { method: 'POST', body: JSON.stringify(payload) }),
+  /** Смена стадии, ответственный, напоминание, счётчик попыток дозвона. */
+  patchLead: (leadId: string, payload: PatchLeadRequest) =>
+    request<LeadCard>(`/leads/${encodeURIComponent(leadId)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  bookTrial: (leadId: string, payload: TrialRequest) =>
+    request<TrialResponse>(`/leads/${encodeURIComponent(leadId)}/trial`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  convertLead: (leadId: string, payload: ConvertRequest) =>
+    request<ConvertResponse>(`/leads/${encodeURIComponent(leadId)}/convert`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  funnel: (from: string, to: string) =>
+    request<FunnelReport>(`/leads/funnel?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
 };
 
 export type Api = typeof httpApi;

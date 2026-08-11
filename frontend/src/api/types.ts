@@ -493,6 +493,310 @@ export interface HoldReleaseResponse {
   message?: string;
 }
 
+/* ==========================================================================
+   Этап 3 — воронка заявок (docs/contract-v3.md)
+   ========================================================================== */
+
+/** Стадии из CHECK `lead.stage`. Порядок — порядок колонок на доске. */
+export type LeadStage = 'new' | 'contacting' | 'trial_booked' | 'trial_held' | 'won' | 'lost';
+
+/** `lost` живёт отдельной колонкой: это не следующий шаг, а выход из воронки. */
+export const STAGE_ORDER: LeadStage[] = ['new', 'contacting', 'trial_booked', 'trial_held', 'won'];
+
+export const STAGE_LABELS: Record<LeadStage, string> = {
+  new: 'Новая',
+  contacting: 'Дозвон',
+  trial_booked: 'Пробный назначен',
+  trial_held: 'Пробный проведён',
+  won: 'Абонемент куплен',
+  lost: 'Отказ',
+};
+
+/** Источники из CHECK `lead.source`. */
+export type LeadSource =
+  | 'telegram_bot'
+  | 'site_form'
+  | 'whatsapp'
+  | 'instagram'
+  | 'referral'
+  | 'walk_in'
+  | 'phone'
+  | 'other';
+
+export const SOURCES: LeadSource[] = [
+  'telegram_bot',
+  'site_form',
+  'whatsapp',
+  'instagram',
+  'referral',
+  'walk_in',
+  'phone',
+  'other',
+];
+
+export const SOURCE_LABELS: Record<LeadSource, string> = {
+  telegram_bot: 'TG-бот',
+  site_form: 'Сайт',
+  whatsapp: 'WhatsApp',
+  instagram: 'Instagram',
+  referral: 'Сарафан',
+  walk_in: 'Пришёл сам',
+  phone: 'Звонок',
+  other: 'Другое',
+};
+
+/** Причины отказа из CHECK `lead.lost_reason`. */
+export type LostReason = 'price' | 'location' | 'schedule' | 'competitor' | 'no_answer' | 'not_ready' | 'other';
+
+export const LOST_REASONS: LostReason[] = [
+  'price',
+  'location',
+  'schedule',
+  'competitor',
+  'no_answer',
+  'not_ready',
+  'other',
+];
+
+export const LOST_REASON_LABELS: Record<LostReason, string> = {
+  price: 'Дорого',
+  location: 'Далеко ехать',
+  schedule: 'Не подошло расписание',
+  competitor: 'Ушли к конкуренту',
+  no_answer: 'Не дозвонились',
+  not_ready: 'Пока не готовы',
+  other: 'Другое',
+};
+
+/** Флаги — то, на что администратор обязан среагировать. */
+export type LeadFlag = 'no_answer' | 'overdue' | 'trial_today' | 'trial_conflict';
+
+export const FLAG_LABELS: Record<LeadFlag, string> = {
+  no_answer: 'Не дозвонились',
+  overdue: 'Просрочено',
+  trial_today: 'Пробный сегодня',
+  trial_conflict: 'Кабинет занят',
+};
+
+/** Флаг требует немедленного вмешательства — красный, а не латунный. */
+export const FLAG_IS_BAD: Record<LeadFlag, boolean> = {
+  no_answer: true,
+  overdue: true,
+  trial_today: false,
+  trial_conflict: true,
+};
+
+export interface LeadUser {
+  id: string;
+  name: string;
+}
+
+/**
+ * Назначенный пробный. В карточке контракт описывает его полностью,
+ * на доске называет «кратким описанием» без формы — держим одну структуру
+ * с необязательными полями, чтобы доска и карточка не разошлись.
+ */
+export interface LeadTrial {
+  lesson_id: string;
+  starts_at: string;
+  teacher: string;
+  room: string;
+  status?: LessonStatus;
+  conflicts?: LessonConflict[];
+}
+
+/* ---------- GET /api/v1/leads ---------- */
+
+export interface BoardLead {
+  id: string;
+  name: string;
+  student_name: string | null;
+  student_age: number | null;
+  discipline: string | null;
+  source: LeadSource;
+  phone: string | null;
+  created_at: string;
+  /** Человеческая длительность с последней смены стадии: «2 часа», «3 дня». */
+  waiting_for: string;
+  next_action_at: string | null;
+  contact_attempts: number;
+  assigned_to: LeadUser | null;
+  trial: LeadTrial | null;
+  flags: LeadFlag[];
+}
+
+export interface BoardColumn {
+  stage: LeadStage;
+  title: string;
+  count: number;
+  leads: BoardLead[];
+}
+
+export interface BoardSummary {
+  total: number;
+  overdue: number;
+  conversion_trial_to_won_pct: number;
+  avg_days_to_won: number;
+}
+
+export interface LeadsBoard {
+  columns: BoardColumn[];
+  summary: BoardSummary;
+}
+
+/* ---------- GET /api/v1/leads/{id} ---------- */
+
+/**
+ * Направление заявки. `min_age` контракт в ответе не показывает, но требует
+ * сверять с ним возраст — держим необязательным полем: если бэкенд его
+ * не пришлёт, предупреждение просто не появится.
+ */
+export interface LeadDiscipline {
+  id: string;
+  name: string;
+  min_age?: number;
+}
+
+export interface LeadStageChange {
+  at: string;
+  from: LeadStage | null;
+  to: LeadStage;
+  by: string | null;
+}
+
+export interface LeadCard {
+  id: string;
+  name: string;
+  phone: string | null;
+  student_name: string | null;
+  student_age: number | null;
+  discipline: LeadDiscipline | null;
+  branch: { id: string; name: string } | null;
+  stage: LeadStage;
+  lost_reason: LostReason | null;
+  source: LeadSource;
+  utm: Record<string, string>;
+  promo_code: string | null;
+  assigned_to: LeadUser | null;
+  next_action_at: string | null;
+  contact_attempts: number;
+  created_at: string;
+  /** Комментарий из заявки: контракт принимает его в POST, но в ответе не показывает. */
+  comment?: string | null;
+  trial: LeadTrial | null;
+  history: LeadStageChange[];
+  converted: { student_id: string | null; person_id: string | null };
+}
+
+/* ---------- POST /api/v1/leads ---------- */
+
+export interface CreateLeadRequest {
+  name: string;
+  phone: string;
+  student_name?: string;
+  student_age?: number;
+  discipline_id?: string | null;
+  branch_id?: string | null;
+  source: LeadSource;
+  comment?: string;
+}
+
+/* ---------- PATCH /api/v1/leads/{id} ---------- */
+
+export interface PatchLeadRequest {
+  stage?: LeadStage;
+  assigned_to?: string | null;
+  next_action_at?: string | null;
+  contact_attempts?: number;
+  lost_reason?: LostReason | null;
+}
+
+/* ---------- POST /api/v1/leads/{id}/trial ---------- */
+
+export interface TrialRequest {
+  teacher_id: string;
+  room_id: string;
+  starts_at: string;
+  duration_min: number;
+  price: number;
+  /** Подтверждение овербукинга после 409 от сервера. */
+  overbook_ack: boolean;
+}
+
+export interface TrialResponse {
+  lesson_id: string;
+  stage: LeadStage;
+  starts_at: string;
+  teacher: string;
+  room: string;
+  notification_queued: boolean;
+}
+
+/* ---------- POST /api/v1/leads/{id}/convert ---------- */
+
+export interface ConvertPayer {
+  first_name: string;
+  last_name: string;
+  phone: string;
+}
+
+export interface ConvertStudent {
+  first_name: string;
+  last_name: string;
+  birth_date?: string;
+  discipline_id?: string | null;
+  branch_id?: string | null;
+  main_teacher_id?: string | null;
+}
+
+export interface ConvertRequest {
+  /** Необязателен: у взрослого ученика плательщик — он сам. */
+  payer?: ConvertPayer;
+  student: ConvertStudent;
+  /** Необязателен: ученика можно завести, а абонемент продать позже. */
+  subscription?: {
+    plan_id: string;
+    starts_on: string;
+    discount_pct?: number;
+    promo_code?: string;
+    payment?: { amount: number; method: PaymentMethod };
+  };
+}
+
+export interface ConvertResponse {
+  student_id: string;
+  person_id: string;
+  family_id: string;
+  subscription_id: string | null;
+  stage: LeadStage;
+}
+
+/* ---------- GET /api/v1/leads/funnel ---------- */
+
+export interface FunnelStageRow {
+  stage: LeadStage;
+  entered: number;
+  moved_on: number;
+  conversion_pct: number;
+}
+
+export interface FunnelSourceRow {
+  source: LeadSource;
+  leads: number;
+  trials: number;
+  won: number;
+  conversion_pct: number;
+  avg_days_to_won: number;
+}
+
+export interface FunnelReport {
+  period: { from: string; to: string };
+  stages: FunnelStageRow[];
+  sources: FunnelSourceRow[];
+  lost_reasons: { reason: LostReason; count: number }[];
+  avg_days_to_won: number;
+}
+
 /* ---------- Ошибки ---------- */
 
 export interface ApiErrorBody {

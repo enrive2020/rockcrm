@@ -433,6 +433,77 @@ select.inp { padding-right: 4px; }
   color: var(--bad); font-size: 12.5px;
 }
 
+/* ==========================================================================
+   Воронка заявок (этап 3). Классы канбана взяты из прототипа: .kb, .col,
+   .lead, .src — правка из прототипа переносится напрямую.
+   ========================================================================== */
+
+.kb-wrap { padding: 0 22px 22px; overflow-x: auto; }
+.kb { display: grid; grid-template-columns: repeat(6, minmax(212px, 1fr)); gap: 12px; align-items: start; min-width: 1180px; }
+.col { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px; min-height: 132px; }
+/* Пока карточку тащат, колонки подсвечиваются: видно, куда можно бросить */
+.col.drop { border-style: dashed; border-color: var(--accent-bright); }
+.col-h { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
+.col-h b { font-family: var(--f-display); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; }
+.col-h .n { margin-left: auto; font-size: 11px; color: var(--ink-3); }
+.col-empty { margin: 0; padding: 10px 2px; font-size: 12px; color: var(--ink-3); }
+
+.lead {
+  width: 100%; text-align: left; display: block;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 5px;
+  padding: 10px; margin-bottom: 8px;
+  transition: transform .12s, box-shadow .12s;
+}
+.lead:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.lead:active { cursor: grabbing; }
+.lead[aria-pressed="true"] { border-color: var(--accent-bright); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-bright) 30%, transparent); }
+.lead b { display: block; font-size: 13px; font-weight: 600; }
+.lead small { display: block; font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+.lead .row { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.src {
+  font-family: var(--f-display); font-size: 9.5px; letter-spacing: .07em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 3px; background: var(--panel-3); color: var(--ink-2);
+}
+
+.filter { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-3); }
+.inp.slim { height: 26px; width: auto; padding: 0 6px; font-size: 12px; }
+.btn.narrow { flex: none; padding: 7px 14px; }
+
+/* История стадий: путь заявки читается сверху вниз */
+.hist { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--line); }
+.hist li { position: relative; padding: 0 0 10px 12px; font-size: 12.5px; }
+.hist li::before {
+  content: ""; position: absolute; left: -18px; top: 6px;
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent-bright);
+}
+.hist li:last-child { padding-bottom: 0; }
+.hist time { display: block; font-size: 11px; color: var(--ink-3); }
+.hist b { font-weight: 600; }
+.hist small { color: var(--ink-3); margin-left: 6px; }
+
+/* Занятость слота в диалоге пробного */
+.slots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.slots li {
+  display: flex; align-items: baseline; gap: 8px; padding: 6px 8px;
+  border: 1px solid var(--line-soft); border-radius: 4px; background: var(--panel-2); font-size: 12.5px;
+}
+.slots li.busy { border-color: color-mix(in srgb, var(--bad) 45%, transparent); background: var(--bad-wash); color: var(--bad); }
+.slots li b { font-weight: 600; }
+.slots li small { margin-left: auto; color: var(--ink-3); font-size: 11.5px; }
+.slots li.busy small { color: var(--bad); }
+
+.dlg.narrow { width: min(420px, 100%); }
+.field p.static { margin: 0; padding: 7px 0; font-size: 12.5px; color: var(--ink-2); }
+
+/* Воронка отчёта: длина полосы — сколько вошло, справа — доля ушедших дальше */
+.funnel { display: flex; flex-direction: column; gap: 8px; }
+.funnel-row { display: grid; grid-template-columns: 150px 1fr 54px; align-items: center; gap: 10px; }
+.funnel-name { font-size: 12.5px; color: var(--ink-2); }
+.funnel-bar { position: relative; height: 24px; background: var(--panel-3); border-radius: 4px; overflow: hidden; display: flex; align-items: center; }
+.funnel-bar i { display: block; height: 100%; background: var(--accent-bright); border-radius: 4px; min-width: 2px; }
+.funnel-bar b { position: absolute; left: 8px; font-size: 12px; font-weight: 600; color: var(--ink); }
+.funnel-conv { text-align: right; font-size: 12.5px; color: var(--ink-3); }
+
 /* ---------- уведомления ---------- */
 .toasts {
   position: fixed; right: 416px; bottom: 20px; z-index: 40;

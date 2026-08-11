@@ -84,7 +84,12 @@ def test_cancelled_lessons_are_hidden(client, sql):
 
 
 def test_trial_by_lead_shows_lead_name(client):
-    """У пробного нет ученика, но заголовок обязан быть — имя из заявки."""
+    """У пробного нет ученика, но заголовок обязан быть — имя из заявки.
+
+    В заявке два имени: кто оставил её (`name`, обычно родитель) и кто придёт
+    на урок (`student_name`). В расписании стоит второе — преподаватель ждёт
+    ребёнка, а не того, кто звонил.
+    """
     body = schedule(client).json()
     trial = next(
         les
@@ -92,11 +97,11 @@ def test_trial_by_lead_shows_lead_name(client):
         for les in track["lessons"]
         if les["kind"] == "trial"
     )
-    assert trial["title"] == "Алиса Ким"
+    assert trial["title"] == "Алиса"
     assert trial["student_id"] is None
 
     card = get_card(client, trial["id"])
-    assert card["title"] == "Алиса Ким"
+    assert card["title"] == "Алиса"
     # Отметить такое занятие нельзя: attendance требует ученика, а его ещё нет.
     assert card["participants"] == []
 
