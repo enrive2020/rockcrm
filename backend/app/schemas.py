@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -393,6 +393,213 @@ class HoldReleased(BaseModel):
     lessons_restored: int
     freeze_days_left: int
     message: str
+
+
+# ---------------------------------------------------------------------------
+# Этап 3: воронка заявок
+#
+# Значения стадий, источников и причин отказа взяты дословно из CHECK-ограничений
+# db/004_sales.sql: Literal здесь не украшение, а та же проверка на входе,
+# что и в базе, — только с понятным текстом ошибки вместо 23514.
+# ---------------------------------------------------------------------------
+
+Stage = Literal["new", "contacting", "trial_booked", "trial_held", "won", "lost"]
+LeadSource = Literal[
+    "telegram_bot", "site_form", "whatsapp", "instagram",
+    "referral", "walk_in", "phone", "other",
+]
+LostReason = Literal[
+    "price", "location", "schedule", "competitor", "no_answer", "not_ready", "other",
+]
+
+
+class NamedRef(BaseModel):
+    id: str
+    name: str | None = None
+
+
+class TrialBrief(BaseModel):
+    lesson_id: str
+    starts_at: str
+    teacher: str | None = None
+    room: str | None = None
+    status: LessonStatus
+    conflicts: list[Conflict] = []
+
+
+class LeadCard(BaseModel):
+    id: str
+    name: str
+    phone: str | None = None
+    student_name: str | None = None
+    student_age: int | None = None
+    discipline: str | None = None
+    source: LeadSource
+    stage: Stage
+    created_at: str
+    waiting_for: str
+    next_action_at: str | None = None
+    contact_attempts: int
+    assigned_to: NamedRef | None = None
+    trial: TrialBrief | None = None
+    flags: list[str] = []
+
+
+class LeadFull(LeadCard):
+    # Направление и филиал в карточке — объекты, а в списке хватает названия:
+    # диалогу назначения пробного нужен идентификатор, доске — нет.
+    discipline: NamedRef | None = None
+    branch: NamedRef | None = None
+    lost_reason: LostReason | None = None
+    utm: dict[str, Any] = {}
+    promo_code: str | None = None
+    external_id: str | None = None
+    history: list[dict[str, Any]] = []
+    converted: dict[str, str | None] = {}
+    # Сверх контракта: возраст ниже минимального для направления. Не ошибка,
+    # а предупреждение — решает администратор.
+    age_warning: str | None = None
+
+
+class BoardColumn(BaseModel):
+    stage: Stage
+    title: str
+    count: int
+    leads: list[LeadCard]
+
+
+class BoardSummary(BaseModel):
+    total: int
+    overdue: int
+    conversion_trial_to_won_pct: int
+    avg_days_to_won: float | None = None
+
+
+class Board(BaseModel):
+    columns: list[BoardColumn]
+    summary: BoardSummary
+
+
+class LeadCreate(BaseModel):
+    name: str = Field(min_length=1)
+    phone: str | None = None
+    student_name: str | None = None
+    student_age: int | None = Field(default=None, ge=3, le=99)
+    discipline_id: str | None = None
+    branch_id: str | None = None
+    source: LeadSource = "phone"
+    promo_code: str | None = None
+    comment: str | None = None
+
+
+class LeadPatch(BaseModel):
+    """Все поля необязательны — отличить «не передали» от «передали null»
+    позволяет exclude_unset при разборе: сбросить напоминание в null нужно
+    уметь так же, как и выставить его."""
+
+    stage: Stage | None = None
+    assigned_to: str | None = None
+    next_action_at: datetime | None = None
+    contact_attempts: int | None = Field(default=None, ge=0)
+    lost_reason: LostReason | None = None
+
+
+class TrialRequest(BaseModel):
+    teacher_id: str
+    room_id: str
+    starts_at: datetime
+    duration_min: int = Field(default=45, ge=15, le=180)
+    # Цена пробного принимается, но в схеме ей места нет — см. README.
+    price: int = Field(default=0, ge=0)
+    overbook_ack: bool = False
+
+
+class TrialBooked(BaseModel):
+    lesson_id: str
+    stage: Stage
+    starts_at: str
+    teacher: str | None = None
+    room: str | None = None
+    notification_queued: bool
+
+
+class PayerIn(BaseModel):
+    first_name: str = Field(min_length=1)
+    last_name: str | None = None
+    phone: str | None = None
+
+
+class StudentIn(BaseModel):
+    first_name: str = Field(min_length=1)
+    last_name: str | None = None
+    birth_date: date | None = None
+    discipline_id: str | None = None
+    branch_id: str | None = None
+    main_teacher_id: str | None = None
+
+
+class ConvertRequest(BaseModel):
+    # Плательщика может не быть: взрослый ученик платит за себя,
+    # и семья создаётся из одного человека.
+    payer: PayerIn | None = None
+    student: StudentIn
+    # Абонемент необязателен: ученика заводят сейчас, продают позже.
+    # Заявка всё равно переходит в won — ученик-то появился.
+    subscription: SellRequest | None = None
+
+
+class Converted(BaseModel):
+    student_id: str
+    person_id: str
+    family_id: str
+    subscription_id: str | None = None
+    stage: Stage
+
+
+class WebhookLead(BaseModel):
+    external_id: str | None = None
+    name: str = Field(min_length=1)
+    phone: str | None = None
+    student_name: str | None = None
+    student_age: int | None = Field(default=None, ge=3, le=99)
+    # Направление приходит строкой от бота и сопоставляется по названию.
+    # Не нашли — заявку всё равно принимаем: терять лид из-за опечатки нельзя.
+    discipline: str | None = None
+    branch_id: str | None = None
+    source: LeadSource = "other"
+    utm: dict[str, Any] = {}
+    promo_code: str | None = None
+    comment: str | None = None
+
+
+class FunnelStage(BaseModel):
+    stage: Stage
+    title: str
+    entered: int
+    moved_on: int
+    conversion_pct: int
+
+
+class FunnelSource(BaseModel):
+    source: LeadSource
+    leads: int
+    trials: int
+    won: int
+    conversion_pct: int
+    avg_days_to_won: float | None = None
+
+
+class FunnelLostReason(BaseModel):
+    reason: LostReason
+    count: int
+
+
+class Funnel(BaseModel):
+    period: dict[str, str]
+    stages: list[FunnelStage]
+    sources: list[FunnelSource]
+    lost_reasons: list[FunnelLostReason]
+    avg_days_to_won: float | None = None
 
 
 class ErrorBody(BaseModel):

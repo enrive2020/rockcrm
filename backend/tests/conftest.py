@@ -76,6 +76,10 @@ def subscription(key: str) -> str:
     return seed_demo.subscription_id(key)
 
 
+def lead(key: str) -> str:
+    return seed_demo.lead_id(key)
+
+
 def get_card(client: TestClient, lesson_id: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
     response = client.get(f"/api/v1/lessons/{lesson_id}", headers=headers or HEADERS)
     assert response.status_code == 200, response.text

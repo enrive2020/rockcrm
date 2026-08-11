@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 import psycopg
 
+from . import phone
 from .rules import SubscriptionState
 
 # Полный набор полей занятия для расписания и карточки. Вынесен в константу,
@@ -469,20 +470,6 @@ _STUDENT_JOINS = """
 """
 
 
-def _digits(value: str) -> str:
-    """Цифры запроса, приведённые к тому виду, в котором телефон лежит в базе.
-
-    В базе номер в E.164 (+77015552418), а в трубке его диктуют как
-    «8 701 555 24 18»: восьмёрка — это казахстанский код выхода на межгород,
-    тот же номер, что и +7. Без этой замены поиск по продиктованному номеру
-    не находил бы ничего, и администратор решил бы, что клиента нет в базе.
-    """
-    digits = "".join(ch for ch in value if ch.isdigit())
-    if len(digits) >= 11 and digits.startswith("8"):
-        digits = digits[1:]
-    return digits
-
-
 def search_students(
     cur: psycopg.Cursor, query: str, branch_id: str | None, limit: int
 ) -> list[dict[str, Any]]:
@@ -495,7 +482,7 @@ def search_students(
     а в трубке его диктуют как «8 701 555 24 18» или «555-24-18».
     """
     text = (query or "").strip()
-    digits = _digits(text)
+    digits = phone.digits_of(text)
     cur.execute(
         f"""
         SELECT {_STUDENT_COLUMNS}
@@ -827,6 +814,13 @@ def get_plan(cur: psycopg.Cursor, plan_id: str) -> dict[str, Any] | None:
     return cur.fetchone()
 
 
+def tenant_timezone(cur: psycopg.Cursor, tenant_id: str) -> str:
+    """Пояс школы. Отчёты считаются в нём, а не в поясе сервера."""
+    cur.execute("SELECT timezone FROM tenant WHERE id = %s", (tenant_id,))
+    row = cur.fetchone()
+    return (row["timezone"] if row else None) or "Asia/Almaty"
+
+
 def tenant_rules(cur: psycopg.Cursor, tenant_id: str) -> dict[str, Any]:
     """Правила школы на текущий момент — то, что копируется в новый абонемент."""
     cur.execute("SELECT default_rules FROM tenant WHERE id = %s", (tenant_id,))
@@ -857,3 +851,410 @@ def subscription_context(cur: psycopg.Cursor, subscription_id: str) -> dict[str,
         (subscription_id,),
     )
     return cur.fetchone()
+
+
+# ---------------------------------------------------------------------------
+# Заявки
+# ---------------------------------------------------------------------------
+
+# Заявка вместе со всем, что нужно и доске, и карточке. Пробный подтягивается
+# латералью: у заявки может быть несколько занятий (пробный переносили),
+# а на экране показывается последнее назначенное.
+_LEAD_COLUMNS = """
+  l.id, l.name, l.phone, l.student_name, l.student_age,
+  l.stage, l.lost_reason, l.source, l.utm, l.promo_code, l.external_id,
+  l.next_action_at, l.contact_attempts, l.created_at, l.updated_at,
+  l.person_id, l.student_id,
+  l.discipline_id, d.name AS discipline, d.min_age AS discipline_min_age,
+  l.branch_id, b.name AS branch,
+  coalesce(b.timezone, t.timezone) AS branch_timezone,
+  l.assigned_to,
+  btrim(concat_ws(' ', ap.first_name, ap.last_name)) AS assigned_name,
+  -- Момент последней смены стадии. Именно от него считается «сколько ждёт»:
+  -- время с создания говорило бы, что заявка висит неделю, хотя вчера
+  -- по ней провели пробный.
+  coalesce(
+    (SELECT max(h.changed_at) FROM lead_stage_history h WHERE h.lead_id = l.id),
+    l.created_at
+  ) AS stage_since,
+  tr.lesson_id, tr.starts_at AS trial_starts_at, tr.ends_at AS trial_ends_at,
+  tr.status AS trial_status, tr.teacher_name AS trial_teacher,
+  tr.room_name AS trial_room, tr.room_id AS trial_room_id,
+  tr.teacher_id AS trial_teacher_id
+"""
+
+_LEAD_JOINS = """
+  FROM lead l
+  JOIN tenant t ON t.id = l.tenant_id
+  LEFT JOIN discipline d ON d.id = l.discipline_id
+  LEFT JOIN branch     b ON b.id = l.branch_id
+  LEFT JOIN app_user  au ON au.id = l.assigned_to
+  LEFT JOIN person    ap ON ap.id = au.person_id
+  LEFT JOIN LATERAL (
+    SELECT le.id AS lesson_id, le.starts_at, le.ends_at, le.status,
+           le.room_id, le.teacher_id,
+           r.name AS room_name,
+           btrim(concat_ws(' ', tp.first_name, tp.last_name)) AS teacher_name
+    FROM lesson le
+    JOIN staff  st ON st.id = le.teacher_id
+    JOIN person tp ON tp.id = st.person_id
+    JOIN room   r  ON r.id  = le.room_id
+    WHERE le.lead_id = l.id AND le.status <> 'cancelled'
+    ORDER BY le.starts_at DESC
+    LIMIT 1
+  ) tr ON true
+"""
+
+
+def list_leads(
+    cur: psycopg.Cursor,
+    stage: str | None,
+    source: str | None,
+    assigned_to: str | None,
+    branch_id: str | None,
+) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT {_LEAD_COLUMNS}
+        {_LEAD_JOINS}
+        WHERE (%(stage)s::text  IS NULL OR l.stage = %(stage)s::text)
+          AND (%(source)s::text IS NULL OR l.source = %(source)s::text)
+          AND (%(user)s::uuid   IS NULL OR l.assigned_to = %(user)s::uuid)
+          AND (%(branch)s::uuid IS NULL OR l.branch_id = %(branch)s::uuid)
+        ORDER BY l.created_at DESC
+        """,
+        {"stage": stage, "source": source, "user": assigned_to, "branch": branch_id},
+    )
+    return cur.fetchall()
+
+
+def get_lead(cur: psycopg.Cursor, lead_id: str, for_update: bool = False) -> dict[str, Any] | None:
+    """Заявка целиком.
+
+    for_update блокирует строку до конца транзакции: два администратора,
+    одновременно двигающие одну заявку, иначе записали бы две строки истории
+    с одной и той же исходной стадией, и отчёт увидел бы лишний переход.
+    """
+    lock = "FOR NO KEY UPDATE OF l" if for_update else ""
+    cur.execute(
+        f"""
+        SELECT {_LEAD_COLUMNS}
+        {_LEAD_JOINS}
+        WHERE l.id = %s
+        {lock}
+        """,
+        (lead_id,),
+    )
+    return cur.fetchone()
+
+
+def lead_by_external_id(cur: psycopg.Cursor, external_id: str) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT {_LEAD_COLUMNS}
+        {_LEAD_JOINS}
+        WHERE l.external_id = %s
+        """,
+        (external_id,),
+    )
+    return cur.fetchone()
+
+
+def open_lead_with_phone(cur: psycopg.Cursor, phone: str) -> dict[str, Any] | None:
+    """Незакрытая заявка на тот же телефон.
+
+    Закрытые (`won`, `lost`) не считаются: тот же человек через полгода
+    возвращается со вторым ребёнком, и это новая заявка, а не дубль.
+    """
+    cur.execute(
+        """
+        SELECT id, name, stage, created_at FROM lead
+        WHERE phone = %s AND stage NOT IN ('won', 'lost')
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (phone,),
+    )
+    return cur.fetchone()
+
+
+def lead_history(cur: psycopg.Cursor, lead_id: str) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT h.from_stage, h.to_stage, h.changed_at,
+               -- nullif обязателен: concat_ws на сплошных NULL отдаёт пустую
+               -- строку, и заявка, принесённая ботом, показывала бы автором
+               -- пустоту вместо честного «автора нет».
+               nullif(btrim(concat_ws(' ', p.first_name, p.last_name)), '') AS changed_by
+        FROM lead_stage_history h
+        LEFT JOIN app_user u ON u.id = h.changed_by
+        LEFT JOIN person   p ON p.id = u.person_id
+        WHERE h.lead_id = %s
+        ORDER BY h.changed_at, h.id
+        """,
+        (lead_id,),
+    )
+    return cur.fetchall()
+
+
+def discipline_by_name(cur: psycopg.Cursor, name: str) -> dict[str, Any] | None:
+    """Направление по названию без учёта регистра — как его прислал бот.
+
+    Не нашли — вернём None и всё равно примем заявку: терять лид из-за
+    опечатки в слове «барабаны» нельзя, направление уточнит администратор.
+    """
+    cur.execute(
+        """
+        SELECT id, name, min_age, room_reqs FROM discipline
+        WHERE archived_at IS NULL AND lower(btrim(name)) = lower(btrim(%s))
+        LIMIT 1
+        """,
+        (name,),
+    )
+    return cur.fetchone()
+
+
+def get_discipline(cur: psycopg.Cursor, discipline_id: str) -> dict[str, Any] | None:
+    cur.execute(
+        "SELECT id, name, min_age, room_reqs FROM discipline WHERE id = %s",
+        (discipline_id,),
+    )
+    return cur.fetchone()
+
+
+def get_room(cur: psycopg.Cursor, room_id: str) -> dict[str, Any] | None:
+    cur.execute(
+        "SELECT id, branch_id, name, features FROM room WHERE id = %s AND archived_at IS NULL",
+        (room_id,),
+    )
+    return cur.fetchone()
+
+
+def get_staff(cur: psycopg.Cursor, staff_id: str) -> dict[str, Any] | None:
+    cur.execute(
+        """
+        SELECT s.id, btrim(concat_ws(' ', p.first_name, p.last_name)) AS name
+        FROM staff s JOIN person p ON p.id = s.person_id
+        WHERE s.id = %s AND s.archived_at IS NULL
+        """,
+        (staff_id,),
+    )
+    return cur.fetchone()
+
+
+def slot_occupants(
+    cur: psycopg.Cursor,
+    room_id: str,
+    teacher_id: str,
+    starts_at: dt.datetime,
+    ends_at: dt.datetime,
+    exclude_lesson_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Кто уже занимает кабинет или преподавателя в это время.
+
+    База не даст создать пересечение без подтверждённого овербукинга, но
+    сообщение «нарушено ограничение» администратору бесполезно: ему нужно
+    имя того, кто в кабинете, чтобы решить — двигать время или подтверждать.
+    """
+    cur.execute(
+        """
+        SELECT le.id, le.room_id, le.teacher_id, le.starts_at, le.ends_at,
+               r.name AS room_name,
+               btrim(concat_ws(' ', tp.first_name, tp.last_name)) AS teacher_name,
+               coalesce(
+                 nullif(btrim(concat_ws(' ', sp.first_name, sp.last_name)), ''),
+                 g.name,
+                 nullif(btrim(coalesce(ld.student_name, ld.name)), '')
+               ) AS title
+        FROM lesson le
+        JOIN room   r  ON r.id  = le.room_id
+        JOIN staff  st ON st.id = le.teacher_id
+        JOIN person tp ON tp.id = st.person_id
+        LEFT JOIN student     s  ON s.id  = le.student_id
+        LEFT JOIN person      sp ON sp.id = s.person_id
+        LEFT JOIN study_group g  ON g.id  = le.group_id
+        LEFT JOIN lead        ld ON ld.id = le.lead_id
+        WHERE le.status <> 'cancelled'
+          AND (le.room_id = %(room)s OR le.teacher_id = %(teacher)s)
+          AND le.starts_at < %(ends)s
+          AND le.ends_at   > %(starts)s
+          AND (%(exclude)s::uuid IS NULL OR le.id <> %(exclude)s::uuid)
+        ORDER BY le.starts_at
+        """,
+        {
+            "room": room_id,
+            "teacher": teacher_id,
+            "starts": starts_at,
+            "ends": ends_at,
+            "exclude": exclude_lesson_id,
+        },
+    )
+    return cur.fetchall()
+
+
+def person_by_phone(cur: psycopg.Cursor, phone: str) -> dict[str, Any] | None:
+    """Живая персона с этим телефоном.
+
+    Ключевой запрос конверсии: тот же родитель приводит второго ребёнка,
+    и второй профиль на него означает потерянную семейную скидку
+    и разъехавшуюся историю платежей.
+    """
+    cur.execute(
+        """
+        SELECT id, first_name, last_name, phone
+        FROM person
+        WHERE phone = %s AND archived_at IS NULL
+        LIMIT 1
+        """,
+        (phone,),
+    )
+    return cur.fetchone()
+
+
+def family_of_payer(cur: psycopg.Cursor, person_id: str) -> dict[str, Any] | None:
+    """Семья, где эта персона уже числится плательщиком."""
+    cur.execute(
+        """
+        SELECT f.id, f.name, f.discount_pct
+        FROM family f
+        JOIN family_member fm ON fm.family_id = f.id AND fm.relation = 'payer'
+        WHERE fm.person_id = %s
+        LIMIT 1
+        """,
+        (person_id,),
+    )
+    return cur.fetchone()
+
+
+def user_exists(cur: psycopg.Cursor, user_id: str) -> bool:
+    cur.execute("SELECT 1 FROM app_user WHERE id = %s AND is_active", (user_id,))
+    return cur.fetchone() is not None
+
+
+# ---------------------------------------------------------------------------
+# Отчёт по воронке
+#
+# Считается из lead_stage_history, а не из текущих стадий: заявка, дошедшая
+# до покупки, в колонке «пробный проведён» уже не лежит, и по текущим стадиям
+# конверсия «пробный → абонемент» вышла бы заниженной ровно на тех, кто купил.
+#
+# Когорта — заявки, СОЗДАННЫЕ в периоде, а переходы берутся из всей их истории.
+# Иначе заявка, пришедшая 30-го и купившая 2-го, попала бы в знаменатель
+# одного месяца и в числитель другого, и сумма конверсий не сошлась бы ни с чем.
+# ---------------------------------------------------------------------------
+
+_COHORT = """
+  WITH cohort AS (
+    SELECT l.id, l.source, l.created_at, l.lost_reason
+    FROM lead l
+    WHERE l.created_at >= %(from)s AND l.created_at < %(to)s
+  ),
+  reached AS (
+    SELECT DISTINCT h.lead_id, h.to_stage, min(h.changed_at) AS at
+    FROM lead_stage_history h
+    JOIN cohort c ON c.id = h.lead_id
+    GROUP BY h.lead_id, h.to_stage
+  )
+"""
+
+
+def funnel_stage_counts(
+    cur: psycopg.Cursor, since: dt.datetime, until: dt.datetime
+) -> list[dict[str, Any]]:
+    """Сколько заявок когорты побывало в каждой стадии."""
+    cur.execute(
+        _COHORT
+        + """
+        SELECT to_stage AS stage, count(*)::int AS entered
+        FROM reached
+        GROUP BY to_stage
+        """,
+        {"from": since, "to": until},
+    )
+    return cur.fetchall()
+
+
+def funnel_stage_pairs(
+    cur: psycopg.Cursor, since: dt.datetime, until: dt.datetime
+) -> dict[str, set[str]]:
+    """Какие стадии прошла каждая заявка когорты.
+
+    Возвращается множество на заявку: «прошёл дальше» вычисляется в коде
+    по порядку стадий из rules.STAGE_ORDER — единственному их порядку
+    в системе.
+    """
+    cur.execute(
+        _COHORT
+        + """
+        SELECT lead_id, to_stage FROM reached
+        """,
+        {"from": since, "to": until},
+    )
+    out: dict[str, set[str]] = {}
+    for row in cur.fetchall():
+        out.setdefault(str(row["lead_id"]), set()).add(row["to_stage"])
+    return out
+
+
+def funnel_sources(
+    cur: psycopg.Cursor, since: dt.datetime, until: dt.datetime
+) -> list[dict[str, Any]]:
+    cur.execute(
+        _COHORT
+        + """
+        SELECT c.source,
+               count(*)::int AS leads,
+               count(*) FILTER (
+                 WHERE EXISTS (SELECT 1 FROM reached r
+                               WHERE r.lead_id = c.id AND r.to_stage = 'trial_booked')
+               )::int AS trials,
+               count(*) FILTER (
+                 WHERE EXISTS (SELECT 1 FROM reached r
+                               WHERE r.lead_id = c.id AND r.to_stage = 'won')
+               )::int AS won,
+               avg(
+                 EXTRACT(epoch FROM (
+                   (SELECT r.at FROM reached r WHERE r.lead_id = c.id AND r.to_stage = 'won')
+                   - c.created_at
+                 )) / 86400.0
+               ) AS avg_days_to_won
+        FROM cohort c
+        GROUP BY c.source
+        ORDER BY leads DESC, c.source
+        """,
+        {"from": since, "to": until},
+    )
+    return cur.fetchall()
+
+
+def funnel_lost_reasons(
+    cur: psycopg.Cursor, since: dt.datetime, until: dt.datetime
+) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT lost_reason AS reason, count(*)::int AS count
+        FROM lead
+        WHERE created_at >= %(from)s AND created_at < %(to)s
+          AND stage = 'lost' AND lost_reason IS NOT NULL
+        GROUP BY lost_reason
+        ORDER BY count DESC, lost_reason
+        """,
+        {"from": since, "to": until},
+    )
+    return cur.fetchall()
+
+
+def funnel_days_to_won(
+    cur: psycopg.Cursor, since: dt.datetime, until: dt.datetime
+) -> float | None:
+    cur.execute(
+        _COHORT
+        + """
+        SELECT avg(EXTRACT(epoch FROM (r.at - c.created_at)) / 86400.0) AS days
+        FROM cohort c
+        JOIN reached r ON r.lead_id = c.id AND r.to_stage = 'won'
+        """,
+        {"from": since, "to": until},
+    )
+    row = cur.fetchone()
+    return None if row is None or row["days"] is None else float(row["days"])
