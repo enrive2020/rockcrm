@@ -331,6 +331,7 @@ AMINA_UPCOMING = [("4b0", "2026-08-14"), ("4b1", "2026-08-19"), ("4b2", "2026-08
 
 # Заметки к урокам с репертуаром — то, ради чего родитель заходит в кабинет.
 # Тексты и теги взяты из прототипа.
+# (суффикс занятия, текст, домашнее задание, теги, видна ли семье)
 AMINA_NOTES = [
     (
         "4a3",
@@ -338,6 +339,7 @@ AMINA_NOTES = [
         "90 bpm — держим метроном на 80.",
         "Метроном 80 bpm, восьмые и шестнадцатые по 10 минут в день.",
         ["Nirvana — Smells Like Teen Spirit", "Рудимент: Single Paradiddle", "80 bpm"],
+        True,
     ),
     (
         "4a1",
@@ -345,12 +347,25 @@ AMINA_NOTES = [
         "концерту 27 сентября.",
         "Играть припев под минус, 3 прохода подряд без остановки.",
         ["Отчётный концерт", "Игра под минус"],
+        True,
     ),
     (
         "4a4",
         "Постановка правой ноги на кике. Дома — 10 минут в день на восьмые.",
         "Восьмые правой ногой, 10 минут в день.",
         ["Техника: bass drum", "ДЗ: 10 мин/день"],
+        True,
+    ),
+    # Внутренняя пометка преподавателя. Ради неё она и заведена: без строки
+    # с visible_to_family = false проверка «кабинет её не показывает» была бы
+    # проверкой пустого множества, то есть не проверкой вовсе.
+    (
+        "4a2",
+        "Мама третий раз переносит занятие в последний момент. Если так пойдёт "
+        "дальше — говорить с ней придётся про дисциплину, а не про барабаны.",
+        None,
+        ["Внутреннее: разговор с родителем"],
+        False,
     ),
 ]
 
@@ -482,12 +497,12 @@ def _seed_amina_history(cur: psycopg.Cursor) -> None:
             },
         )
 
-    for suffix, body, homework, tags in AMINA_NOTES:
+    for suffix, body, homework, tags, visible in AMINA_NOTES:
         cur.execute(
             """INSERT INTO lesson_note (tenant_id, lesson_id, student_id, author_id,
-                                        body, homework, tags)
-               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-            (TENANT, _id(suffix), sid, teacher, body, homework, tags),
+                                        body, homework, tags, visible_to_family)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            (TENANT, _id(suffix), sid, teacher, body, homework, tags, visible),
         )
 
 

@@ -4,7 +4,8 @@
 Этап 2: поиск и карточка ученика, тарифы, продажа и продление абонемента,
 заморозка и её снятие.
 Этап 3: воронка заявок, пробный урок, конверсия в ученика, приём по вебхуку.
-Этап 5: вход по телефону, сессии и разграничение прав по ролям.
+Этап 5: вход по телефону, сессии и разграничение прав по ролям,
+кабинет родителя отдельными ресурсами `/me/*` и очередь заявок из него.
 """
 from __future__ import annotations
 
@@ -22,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import attendance as attendance_service
-from . import api_keys, auth, authz, billing, config, journal, money, phone
+from . import api_keys, auth, authz, billing, config, family, journal, money, phone
 from . import repository as repo, schemas
 from . import leads as leads_service
 from . import students as students_service
@@ -1179,6 +1180,178 @@ def money_summary(
             # остаются: они говорят о работе школы, а не о чужой зарплате.
             head["payroll"] = dict(head["payroll"], total=None)
         return head
+
+
+# ---------------------------------------------------------------------------
+# Кабинет родителя — этап 5, issue #5
+#
+# Отдельные ресурсы `/me/*`, а НЕ урезанная карточка ученика. Урезание —
+# операция вычитания, и она ошибается молча: стоит кому-нибудь добавить поле
+# в общую карточку, и оно уедет родителю, если про него забыли. В карточке
+# лежат риск оттока, долг семьи, внутренние заметки и ставка преподавателя —
+# ни одно из этого показывать нельзя, а половина ещё и обидна.
+#
+# Отдельный ресурс собирается сложением: в него попадает только то, что
+# положили осознанно, и ошибка выглядит как отсутствующее поле, а не утечка.
+#
+# Состав детей во всех пяти ресурсах берётся ИЗ СЕССИИ. Идентификатор в пути
+# только сверяется со списком; чужой — 404, а не 403.
+# ---------------------------------------------------------------------------
+
+
+@app.get(f"{API}/me/children", response_model=list[schemas.Child], tags=["Кабинет"])
+def my_children(who: CallerDep) -> list[dict[str, Any]]:
+    """Свои дети с остатком абонемента и ближайшим занятием.
+
+    Главный экран кабинета: «когда вести» и «сколько осталось» — оба вопроса
+    в одном ответе, без второго запроса на каждого ребёнка.
+    """
+    authz.require_family(who)
+    with tenant_tx(who.tenant_id) as cur:
+        return family.children(cur, authz.family_student_ids(cur, who))
+
+
+@app.get(f"{API}/me/schedule", response_model=schemas.FamilySchedule, tags=["Кабинет"])
+def my_schedule(
+    who: CallerDep,
+    from_: Annotated[dt.date | None, Query(alias="from")] = None,
+    to: Annotated[dt.date | None, Query(description="Включительно")] = None,
+) -> dict[str, Any]:
+    """Расписание всех своих детей сразу.
+
+    Не «расписание ребёнка»: родителю нужно знать, когда вести кого, а листать
+    детей по одному он не будет. Без `from`/`to` — неделя вперёд от сегодня.
+    """
+    authz.require_family(who)
+    with tenant_tx(who.tenant_id) as cur:
+        return family.schedule(
+            cur,
+            authz.family_student_ids(cur, who),
+            repo.tenant_timezone(cur, who.tenant_id),
+            from_,
+            to,
+        )
+
+
+@app.get(
+    f"{API}/me/children/{{student_id}}", response_model=schemas.ChildCard, tags=["Кабинет"]
+)
+def my_child(who: CallerDep, student_id: str) -> dict[str, Any]:
+    """История одного ребёнка: за что списано, что задали, что играем.
+
+    Чужой ребёнок отвечает 404: идентификатор в пути сверяется со списком
+    из сессии, и «есть, но не ваш» подтверждало бы, что такой ученик в школе
+    существует.
+    """
+    authz.require_family(who)
+    with tenant_tx(who.tenant_id) as cur:
+        if student_id not in authz.family_student_ids(cur, who):
+            raise not_found("Ученик не найден")
+        card = family.child(cur, student_id)
+        if card is None:
+            raise not_found("Ученик не найден")
+        return card
+
+
+@app.post(
+    f"{API}/me/lessons/{{lesson_id}}/reschedule-request",
+    response_model=schemas.RescheduleCreated,
+    status_code=201,
+    tags=["Кабинет"],
+)
+def request_reschedule(
+    who: CallerDep, lesson_id: str, body: schemas.RescheduleRequest
+) -> dict[str, Any]:
+    """Заявка на перенос — заявка, а не перенос.
+
+    Родитель не двигает расписание сам: слот может быть занят, преподаватель
+    может быть занят, и решение принимает администратор.
+    """
+    authz.require_family(who)
+    with tenant_tx(who.tenant_id) as cur:
+        return family.request_reschedule(
+            cur,
+            who.tenant_id,
+            who.user_id,
+            who.person_id,
+            authz.family_student_ids(cur, who),
+            lesson_id,
+            body.reason,
+            list(body.preferred),
+        )
+
+
+@app.post(
+    f"{API}/me/children/{{student_id}}/renew-request",
+    response_model=schemas.RenewCreated,
+    status_code=201,
+    tags=["Кабинет"],
+)
+def request_renew(
+    who: CallerDep, student_id: str, body: schemas.RenewRequest
+) -> dict[str, Any]:
+    """Заявка на продление абонемента.
+
+    Оплаты в кабинете нет: приём платежей через провайдера — отдельная
+    интеграция, а обещать оплату, которой нет, хуже, чем её отсутствие.
+    """
+    authz.require_family(who)
+    with tenant_tx(who.tenant_id) as cur:
+        if student_id not in authz.family_student_ids(cur, who):
+            raise not_found("Ученик не найден")
+        return family.request_renew(
+            cur, who.tenant_id, who.user_id, who.person_id, student_id, body.comment
+        )
+
+
+# ---------------------------------------------------------------------------
+# Заявки из кабинета — сторона администратора
+#
+# Заявка, которую некому увидеть и нечем закрыть, ничем не отличается
+# от несделанной: кабинет обещает родителю ответ, и обещание надо кому-то
+# выполнять.
+# ---------------------------------------------------------------------------
+
+
+@app.get(f"{API}/requests", response_model=schemas.FamilyRequests, tags=["Кабинет"])
+def family_requests(
+    who: CallerDep,
+    status: Annotated[
+        str, Query(description="pending | accepted | declined | all")
+    ] = "pending",
+    kind: Annotated[str | None, Query(description="reschedule | renew")] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> dict[str, Any]:
+    """Очередь заявок. По умолчанию — нерассмотренные, старые сверху:
+    заявка, которую не заметили три дня, важнее пришедшей минуту назад."""
+    authz.require_admin(who)
+    if status not in ("pending", "accepted", "declined", "all"):
+        raise ApiError(400, "bad_status", "status: pending, accepted, declined или all.")
+    if kind is not None and kind not in ("reschedule", "renew"):
+        raise ApiError(400, "bad_kind", "kind: reschedule или renew.")
+    with tenant_tx(who.tenant_id) as cur:
+        return family.list_requests(cur, None if status == "all" else status, kind, limit)
+
+
+@app.patch(
+    f"{API}/requests/{{request_id}}", response_model=schemas.FamilyRequest, tags=["Кабинет"]
+)
+def answer_family_request(
+    who: CallerDep, request_id: str, body: schemas.RequestDecision
+) -> dict[str, Any]:
+    """Рассмотрение заявки: принять или отклонить с ответом родителю.
+
+    Сам перенос занятия эта операция НЕ делает: редактирования расписания
+    в системе пока нет вовсе (см. «Известные ограничения»). `moved_to`
+    проставляется, когда занятие переставили руками, — чтобы в заявке было
+    видно, чем всё кончилось.
+    """
+    authz.require_admin(who)
+    with tenant_tx(who.tenant_id) as cur:
+        return family.answer_request(
+            cur, who.tenant_id, who.user_id, request_id, body.status, body.answer,
+            body.moved_to,
+        )
 
 
 @app.get(f"{API}/health", tags=["Служебное"])

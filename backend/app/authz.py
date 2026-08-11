@@ -124,6 +124,34 @@ def require_staff(actor: Actor) -> None:
         raise forbidden("Этот раздел доступен сотрудникам школы.")
 
 
+def require_family(actor: Actor) -> None:
+    """Кабинет родителя: ресурсы `/me/*`.
+
+    Сотрудника сюда не пускаем не из вредности, а потому что «мои дети»
+    у него не определены: `visible_student_ids` отвечает владельцу и
+    администратору `None` — «ограничения нет», — и `/me/children` показал бы
+    им всю школу как свою семью. Роль `student` входит наравне с `guardian`:
+    взрослый ученик платит за себя сам и должен видеть про себя ровно то же,
+    что родитель видит про ребёнка (§2).
+    """
+    if not actor.is_family:
+        raise forbidden(
+            "Кабинет — для родителей и взрослых учеников. "
+            "Экраны школы лежат в остальных разделах.",
+            "family_only",
+        )
+
+
+def family_student_ids(cur: psycopg.Cursor, actor: Actor) -> list[str]:
+    """Состав детей ИЗ СЕССИИ, а не из параметров запроса.
+
+    Отдельная функция, потому что у `/me/*` `None` («ограничения нет») —
+    не ответ, а ошибка: пустой список безопаснее и означает «детей нет».
+    """
+    allowed = visible_student_ids(cur, actor)
+    return sorted(allowed) if allowed is not None else []
+
+
 def require_admin(actor: Actor) -> None:
     """Операции ресепшена: продажа, заморозка, воронка, отчёты.
 
