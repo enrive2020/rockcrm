@@ -1,5 +1,14 @@
-"""Проверка схемы RockCRM на живом PostgreSQL."""
-import pathlib, re, sys, pgserver, psycopg
+"""Проверка схемы RockCRM на живом PostgreSQL.
+
+По умолчанию поднимает собственный кластер через pgserver — тогда установленная
+база не нужна. Но в этой сборке нет btree_gist, поэтому проверки ограничений
+исключения помечаются SKIP.
+
+Чтобы прогнать полный набор, укажите полноценный PostgreSQL:
+
+    DATABASE_URL=postgresql://postgres:dev@localhost:55432/rockcrm python tests/test_schema.py
+"""
+import os, pathlib, re, sys, psycopg
 
 DB = pathlib.Path(__file__).parent / "pgdata"       # локальный кластер для прогона
 SQL = pathlib.Path(__file__).resolve().parent.parent / "db"
@@ -21,6 +30,16 @@ def check(name, fn, needs_gist=False):
         fail.append(f"{name}: {e}")
     except Exception as e:
         fail.append(f"{name}: {type(e).__name__}: {str(e).splitlines()[0]}")
+    finally:
+        # Упавший тест оставляет транзакцию в aborted-состоянии, и без отката
+        # все следующие проверки посыпались бы каскадом, маскируя настоящую
+        # причину. Роль тоже сбрасываем: тесты изоляции меняют её.
+        try:
+            conn.rollback()
+            cur.execute("RESET ROLE")
+            conn.commit()
+        except Exception:
+            pass
 
 def rejects(cur, sql, args=None, why=""):
     """Ожидаем, что база отвергнет операцию."""
@@ -32,9 +51,13 @@ def rejects(cur, sql, args=None, why=""):
     cur.connection.rollback()
     raise AssertionError(f"операция прошла, хотя должна быть отвергнута ({why})")
 
-print("запускаю postgres...")
-srv = pgserver.get_server(DB)
-uri = srv.get_uri()
+uri = os.environ.get("DATABASE_URL")
+if uri:
+    print(f"подключаюсь к внешней базе: {re.sub(r'//[^@]*@', '//***@', uri)}")
+else:
+    import pgserver
+    print("поднимаю встроенный postgres...")
+    uri = pgserver.get_server(DB).get_uri()
 conn = psycopg.connect(uri, autocommit=False)
 cur = conn.cursor()
 
@@ -66,7 +89,10 @@ for f in sorted(SQL.glob("*.sql")):
     print(f"  применён {f.name}")
 
 # ---------- посев ----------
-cur.execute("""
+# Параметры подставляются в текст, а не передаются драйверу: psycopg не даёт
+# сочетать несколько команд в одном запросе с аргументами, а разбивать посев
+# на два десятка вызовов ради этого незачем. Значения — константы теста.
+SEED = """
 INSERT INTO tenant (id, slug, name) VALUES
   (%(a)s, 'rockschool', 'RockSchool Алматы'),
   (%(b)s, 'other-school', 'Другая школа');
@@ -74,37 +100,38 @@ INSERT INTO tenant (id, slug, name) VALUES
 INSERT INTO branch (id, tenant_id, name) VALUES
   ('01890000-0000-7000-8000-0000000000b1', %(a)s, 'Аль-Фараби 53В');
 INSERT INTO room (id, tenant_id, branch_id, name, features) VALUES
-  ('01890000-0000-7000-8000-0000000000r1', %(a)s, '01890000-0000-7000-8000-0000000000b1',
+  ('01890000-0000-7000-8000-0000000000c1', %(a)s, '01890000-0000-7000-8000-0000000000b1',
    'Барабанная A', '{"drum_kit": true, "soundproof": true}');
 INSERT INTO room (id, tenant_id, branch_id, name) VALUES
-  ('01890000-0000-7000-8000-0000000000r2', %(a)s, '01890000-0000-7000-8000-0000000000b1', 'Класс 1');
+  ('01890000-0000-7000-8000-0000000000c2', %(a)s, '01890000-0000-7000-8000-0000000000b1', 'Класс 1');
 
 INSERT INTO discipline (id, tenant_id, name, min_age, room_reqs) VALUES
   ('01890000-0000-7000-8000-0000000000d1', %(a)s, 'Барабаны', 5, '{"drum_kit": true}');
 
 INSERT INTO person (id, tenant_id, first_name, last_name, phone) VALUES
-  ('01890000-0000-7000-8000-0000000000p1', %(a)s, 'Дмитрий', 'Шарапов', '+77015550001'),
-  ('01890000-0000-7000-8000-0000000000p2', %(a)s, 'Егор', 'Мадратов', '+77015550002'),
-  ('01890000-0000-7000-8000-0000000000p3', %(a)s, 'Амина', 'Сагындык', '+77015550003'),
-  ('01890000-0000-7000-8000-0000000000p9', %(b)s, 'Чужой', 'Ученик', '+77015559999');
+  ('01890000-0000-7000-8000-0000000000a1', %(a)s, 'Дмитрий', 'Шарапов', '+77015550001'),
+  ('01890000-0000-7000-8000-0000000000a2', %(a)s, 'Егор', 'Мадратов', '+77015550002'),
+  ('01890000-0000-7000-8000-0000000000a3', %(a)s, 'Амина', 'Сагындык', '+77015550003'),
+  ('01890000-0000-7000-8000-0000000000a9', %(b)s, 'Чужой', 'Ученик', '+77015559999');
 
 INSERT INTO staff (id, tenant_id, person_id, kind) VALUES
-  ('01890000-0000-7000-8000-0000000000s1', %(a)s, '01890000-0000-7000-8000-0000000000p1', 'teacher'),
-  ('01890000-0000-7000-8000-0000000000s2', %(a)s, '01890000-0000-7000-8000-0000000000p2', 'teacher');
+  ('01890000-0000-7000-8000-0000000000e1', %(a)s, '01890000-0000-7000-8000-0000000000a1', 'teacher'),
+  ('01890000-0000-7000-8000-0000000000e2', %(a)s, '01890000-0000-7000-8000-0000000000a2', 'teacher');
 
 INSERT INTO student (id, tenant_id, person_id, discipline_id) VALUES
-  ('01890000-0000-7000-8000-0000000000t1', %(a)s, '01890000-0000-7000-8000-0000000000p3',
+  ('01890000-0000-7000-8000-0000000000f1', %(a)s, '01890000-0000-7000-8000-0000000000a3',
    '01890000-0000-7000-8000-0000000000d1');
-""", {"a": TA, "b": TB})
+"""
+cur.execute(SEED.replace("%(a)s", f"'{TA}'").replace("%(b)s", f"'{TB}'"))
 conn.commit()
 
 L = "01890000-0000-7000-8000-0000000000%s"
 BASE = dict(t=TA, b='01890000-0000-7000-8000-0000000000b1',
-            r1='01890000-0000-7000-8000-0000000000r1',
-            r2='01890000-0000-7000-8000-0000000000r2',
-            s1='01890000-0000-7000-8000-0000000000s1',
-            s2='01890000-0000-7000-8000-0000000000s2',
-            st='01890000-0000-7000-8000-0000000000t1')
+            r1='01890000-0000-7000-8000-0000000000c1',
+            r2='01890000-0000-7000-8000-0000000000c2',
+            s1='01890000-0000-7000-8000-0000000000e1',
+            s2='01890000-0000-7000-8000-0000000000e2',
+            st='01890000-0000-7000-8000-0000000000f1')
 
 def add_lesson(lid, room, teacher, start, mins=55, status='planned', ack=False):
     cur.execute("""
@@ -117,7 +144,7 @@ def add_lesson(lid, room, teacher, start, mins=55, status='planned', ack=False):
           "m": mins, "status": status, "ack": ack})
 
 # базовое занятие 11:00–11:55, Барабанная A, Шарапов
-add_lesson(L % "l1", BASE["r1"], BASE["s1"], "2026-08-12 11:00+06")
+add_lesson(L % "1a", BASE["r1"], BASE["s1"], "2026-08-12 11:00+06")
 conn.commit()
 
 # ---------- тесты расписания ----------
@@ -139,19 +166,19 @@ def t_teacher_overlap():
 
 def t_adjacent_ok():
     """Занятие впритык (11:55–12:50) конфликтом не является: границы полуоткрыты."""
-    add_lesson(L % "l2", BASE["r1"], BASE["s2"], "2026-08-12 11:55+06")
+    add_lesson(L % "1b", BASE["r1"], BASE["s2"], "2026-08-12 11:55+06")
     conn.commit()
 
 def t_overbook_ack():
     """Осознанный овербукинг проходит."""
-    add_lesson(L % "l3", BASE["r1"], BASE["s2"], "2026-08-12 11:10+06", ack=True)
+    add_lesson(L % "1c", BASE["r1"], BASE["s2"], "2026-08-12 11:10+06", ack=True)
     conn.commit()
 
 def t_cancelled_frees_slot():
-    cur.execute("UPDATE lesson SET status='cancelled' WHERE id=%s", (L % "l1",))
-    add_lesson(L % "l4", BASE["r1"], BASE["s1"], "2026-08-12 11:00+06")
+    cur.execute("UPDATE lesson SET status='cancelled' WHERE id=%s", (L % "1a",))
+    add_lesson(L % "1d", BASE["r1"], BASE["s1"], "2026-08-12 11:00+06")
     conn.commit()
-    cur.execute("UPDATE lesson SET status='cancelled' WHERE id=%s", (L % "l4",))
+    cur.execute("UPDATE lesson SET status='cancelled' WHERE id=%s", (L % "1d",))
     conn.commit()
 
 check("кабинет нельзя занять дважды", t_room_overlap, needs_gist=True)
@@ -161,7 +188,7 @@ check("овербукинг с подтверждением разрешён", t
 check("отменённое занятие освобождает слот", t_cancelled_frees_slot)
 
 # ---------- тесты абонемента ----------
-SUB = L % "u1"
+SUB = L % "2a"
 def t_ledger():
     cur.execute("""
       INSERT INTO subscription (id, tenant_id, student_id, lessons_total, price, rules, valid_until)
@@ -210,12 +237,12 @@ def t_double_charge():
     """Одна отметка не может списать занятие дважды."""
     cur.execute("""INSERT INTO attendance (id, tenant_id, lesson_id, student_id, mark)
                    VALUES (%s, %s, %s, %s, 'came')""",
-                (L % "a1", TA, L % "l2", BASE["st"]))
+                (L % "3a", TA, L % "1b", BASE["st"]))
     cur.execute("""INSERT INTO subscription_entry (tenant_id, subscription_id, kind, lessons_delta, attendance_id)
-                   VALUES (%s, %s, 'charge', -1, %s)""", (TA, SUB, L % "a1"))
+                   VALUES (%s, %s, 'charge', -1, %s)""", (TA, SUB, L % "3a"))
     conn.commit()
     rejects(cur, """INSERT INTO subscription_entry (tenant_id, subscription_id, kind, lessons_delta, attendance_id)
-                    VALUES (%s, %s, 'charge', -1, %s)""", (TA, SUB, L % "a1"),
+                    VALUES (%s, %s, 'charge', -1, %s)""", (TA, SUB, L % "3a"),
             "повторное списание по той же отметке")
 
 def t_hold_overlap():
@@ -248,8 +275,13 @@ def t_uuid_v7():
     cur.execute("SELECT uuid_v7()")
     u = str(cur.fetchone()[0])
     assert u[14] == "7", f"версия UUID = {u[14]}, ожидалась 7"
-    cur.execute("SELECT uuid_v7() < uuid_v7()")
-    assert cur.fetchone()[0], "UUID v7 не возрастают во времени"
+    # Порядок проверяем с паузой: внутри одной миллисекунды старший разряд
+    # одинаков, и сравнение решает случайная часть — v7 этого и не обещает.
+    first = u
+    cur.execute("SELECT pg_sleep(0.005)")
+    cur.execute("SELECT uuid_v7()")
+    second = str(cur.fetchone()[0])
+    assert first < second, f"UUID v7 не возрастают во времени: {first} !< {second}"
     conn.commit()
 
 def t_lesson_target():
@@ -265,10 +297,10 @@ check("занятие обязано иметь адресата", t_lesson_targ
 # ---------- изоляция тенантов ----------
 def t_rls_isolation():
     cur.execute("SET ROLE rockcrm_app")
-    cur.execute("SET app.tenant_id = %s", (TA,))
+    cur.execute("SELECT set_config('app.tenant_id', %s, false)", (TA,))
     cur.execute("SELECT count(*) FROM person")
     a = cur.fetchone()[0]
-    cur.execute("SET app.tenant_id = %s", (TB,))
+    cur.execute("SELECT set_config('app.tenant_id', %s, false)", (TB,))
     cur.execute("SELECT count(*) FROM person")
     b = cur.fetchone()[0]
     conn.commit()
@@ -278,7 +310,7 @@ def t_rls_isolation():
 def t_rls_no_tenant():
     """Забытый SET app.tenant_id обязан дать пустоту, а не чужие данные."""
     cur.execute("SET ROLE rockcrm_app")
-    cur.execute("RESET app.tenant_id")
+    cur.execute("SELECT set_config('app.tenant_id', '', false)")
     cur.execute("SELECT count(*) FROM person")
     n = cur.fetchone()[0]
     conn.commit()
@@ -287,29 +319,40 @@ def t_rls_no_tenant():
 def t_rls_write_guard():
     """Нельзя записать строку в чужой тенант."""
     cur.execute("SET ROLE rockcrm_app")
-    cur.execute("SET app.tenant_id = %s", (TA,))
+    cur.execute("SELECT set_config('app.tenant_id', %s, false)", (TA,))
     rejects(cur, "INSERT INTO person (tenant_id, first_name) VALUES (%s, 'Диверсант')",
             (TB,), "запись в чужой тенант")
 
 def t_journal_append_only():
-    cur.execute("SET ROLE rockcrm_app")
-    cur.execute("SET app.tenant_id = %s", (TA,))
-    rejects(cur, "UPDATE subscription_entry SET lessons_delta = 99 WHERE subscription_id = %s",
-            (SUB,), "правка журнала абонемента")
-    cur.execute("SET ROLE rockcrm_app")
-    cur.execute("SET app.tenant_id = %s", (TA,))
-    rejects(cur, "DELETE FROM subscription_entry WHERE subscription_id = %s",
-            (SUB,), "удаление из журнала абонемента")
+    """Правка журнала обязана падать с ошибкой, а не менять ноль строк тихо."""
+    for sql, why in [
+        ("UPDATE subscription_entry SET lessons_delta = 99 WHERE subscription_id = %s",
+         "правка журнала абонемента"),
+        ("DELETE FROM subscription_entry WHERE subscription_id = %s",
+         "удаление из журнала абонемента"),
+    ]:
+        cur.execute("SET ROLE rockcrm_app")
+        cur.execute("SELECT set_config('app.tenant_id', %s, false)", (TA,))
+        code = rejects(cur, sql, (SUB,), why)
+        assert code == "2F004" or code is not None, f"неожиданный код ошибки: {code}"
+
+def t_audit_append_only():
+    cur.execute("RESET ROLE")
+    cur.execute("""INSERT INTO audit_log (tenant_id, action, entity, entity_id)
+                   VALUES (%s, 'attendance.mark', 'lesson', %s)""", (TA, L % "1b"))
+    conn.commit()
+    rejects(cur, "UPDATE audit_log SET action = 'подделка' WHERE tenant_id = %s",
+            (TA,), "правка журнала аудита")
 
 def t_junction_isolation():
     cur.execute("RESET ROLE")
     cur.execute("""INSERT INTO family (id, tenant_id, name) VALUES (%s, %s, 'Сагындык')""",
-                (L % "f1", TA))
+                (L % "4a", TA))
     cur.execute("""INSERT INTO family_member (family_id, person_id, relation)
-                   VALUES (%s, %s, 'student')""", (L % "f1", L % "p3"))
+                   VALUES (%s, %s, 'student')""", (L % "4a", L % "a3"))
     conn.commit()
     cur.execute("SET ROLE rockcrm_app")
-    cur.execute("SET app.tenant_id = %s", (TB,))
+    cur.execute("SELECT set_config('app.tenant_id', %s, false)", (TB,))
     cur.execute("SELECT count(*) FROM family_member")
     n = cur.fetchone()[0]
     conn.commit()
@@ -319,6 +362,7 @@ check("тенанты видят только свои данные", t_rls_isol
 check("без выставленного тенанта не видно ничего", t_rls_no_tenant)
 check("нельзя записать строку в чужой тенант", t_rls_write_guard)
 check("журнал абонемента защищён от правок и удалений", t_journal_append_only)
+check("журнал аудита защищён от правок", t_audit_append_only)
 check("связующие таблицы изолированы через родителя", t_junction_isolation)
 
 cur.execute("RESET ROLE")
