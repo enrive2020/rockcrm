@@ -233,5 +233,5 @@ def test_directories_are_isolated_by_tenant(client, path):
 
 
 @pytest.mark.parametrize("path", ["/api/v1/teachers", "/api/v1/rooms", "/api/v1/disciplines"])
-def test_directories_require_tenant_header(client, path):
+def test_directories_require_session(client, path):
     assert client.get(path).status_code == 401

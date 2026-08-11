@@ -27,11 +27,41 @@ TENANT = seed_demo.TENANT
 TENANT_OTHER = seed_demo.TENANT_OTHER
 USER = seed_demo.ADMIN_USER
 BRANCH_AF = seed_demo.BRANCH_AF
+BRANCH_AB = seed_demo.BRANCH_AB
 OTHER_LESSON = seed_demo.OTHER_LESSON
 DAY = seed_demo.DAY
 
-HEADERS = {"X-Tenant-Id": TENANT, "X-User-Id": USER}
-HEADERS_OTHER = {"X-Tenant-Id": TENANT_OTHER, "X-User-Id": seed_demo.OTHER_USER}
+
+def bearer(token: str) -> dict[str, str]:
+    """Заголовок сессии для тестового клиента.
+
+    Прежние `X-Tenant-Id` и `X-User-Id` не существуют: тенант приезжает
+    из сессии. Сами сессии кладёт в базу `seed_demo` — тем же приёмом, что
+    и демо-ключи внешних источников: в базе хеш, открытый токен известен
+    заранее только потому, что это демо.
+
+    Служебного пути «войти без проверки» в приложении не появилось: эти строки
+    ничем не отличаются от выданных настоящим входом, и живут они только
+    на базе, которую посеял seed_demo (а он начинает с удаления обоих
+    демо-тенантов). Вход по коду и по паролю проверяется отдельно
+    в tests/test_auth.py — через настоящий HTTP.
+    """
+    return {"Authorization": f"Bearer {token}"}
+
+
+# По умолчанию тесты ходят владельцем: он видит всё, поэтому проверки этапов
+# 1–4 остаются проверками своей предметной области, а не прав доступа.
+# Разграничение прав проверяется там, где оно и есть смысл теста —
+# в test_authz.py, каждой ролью отдельно.
+HEADERS = bearer("rck_sess_demo_owner")
+HEADERS_OTHER = bearer("rck_sess_demo_other_owner")
+
+HEADERS_ADMIN = bearer("rck_sess_demo_admin")                 # Асель, без филиалов
+HEADERS_BRANCH_ADMIN = bearer("rck_sess_demo_branch_admin")   # Дана, только Абая
+HEADERS_TEACHER = bearer("rck_sess_demo_teacher")             # Шарапов, барабаны
+HEADERS_TEACHER2 = bearer("rck_sess_demo_teacher2")           # Федько, гитара
+HEADERS_GUARDIAN = bearer("rck_sess_demo_guardian")           # Гульнара Сагындык
+HEADERS_STUDENT = bearer("rck_sess_demo_student")             # Дмитрий Со, 17 лет
 
 ADMIN_URL = config.ADMIN_DATABASE_URL.rsplit("/", 1)[0] + "/" + config.APP_DB_NAME
 
@@ -134,6 +164,25 @@ def get_card(client: TestClient, lesson_id: str, headers: dict[str, str] | None 
     response = client.get(f"/api/v1/lessons/{lesson_id}", headers=headers or HEADERS)
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def sent_code(conn, to_address: str) -> str | None:
+    """Код из очереди уведомлений — оттуда же, откуда его возьмёт человек.
+
+    Тест читает не «секретную дырку для тестов», а тот самый исходящий ящик,
+    в который приложение кладёт SMS: воркера, который относит их оператору,
+    в системе пока нет (см. README). Хеш в `auth_code` при этом остаётся
+    хешем — восстановить код из него по-прежнему нечем.
+    """
+    row = conn.execute(
+        """
+        SELECT payload FROM notification
+        WHERE template = 'auth_code' AND to_address = %s
+        ORDER BY created_at DESC, id DESC LIMIT 1
+        """,
+        (to_address,),
+    ).fetchone()
+    return None if row is None else row["payload"]["code"]
 
 
 def participant(card: dict[str, Any], student_id: str) -> dict[str, Any]:

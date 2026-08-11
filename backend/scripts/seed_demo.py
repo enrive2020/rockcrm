@@ -18,11 +18,14 @@ import psycopg
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app import api_keys, config  # noqa: E402
+from app import api_keys, auth, config  # noqa: E402
 
 # --- идентификаторы, на которые может опереться фронтенд и тесты -------------
 TENANT = "0189b0de-0000-7000-8000-00000000000a"   # RockSchool Алматы
 TENANT_OTHER = "0189b0de-0000-7000-8000-00000000000b"  # соседняя школа, для проверки изоляции
+
+TENANT_SLUG = "rockschool-demo"
+TENANT_OTHER_SLUG = "other-school-demo"
 
 BRANCH_AF = "0189b0de-0000-7000-8000-0000000000b1"
 BRANCH_AB = "0189b0de-0000-7000-8000-0000000000b2"
@@ -154,6 +157,58 @@ GROUP_ENSEMBLE = _id("070")
 ENSEMBLE_MEMBERS = ["seit", "kim_zh", "bek_n", "murat"]
 
 MANAGER_USER = "0189b0de-0000-7000-8000-0000000000u3".replace("u", "9")
+
+# --- учётные записи ролей ---------------------------------------------------
+# До этапа авторизации в демо был один администратор: заголовки-заглушки
+# не различали ролей, и различать было нечего. Теперь роль решает, что человек
+# видит, и без живого преподавателя, родителя и владельца проверить это нечем.
+OWNER_USER = "0189b0de-0000-7000-8000-0000000000u4".replace("u", "9")
+# Администратор, привязанный к ОДНОМУ филиалу. Асель (ADMIN_USER) не привязана
+# ни к одному — так и остаётся школой без разделения по филиалам, а ограничение
+# проверяется на том, у кого оно задано.
+BRANCH_ADMIN_USER = "0189b0de-0000-7000-8000-0000000000u5".replace("u", "9")
+# Дмитрий Шарапов, барабанщик: ведёт Амину и Марка, не ведёт Тимура Ахметова.
+TEACHER_USER = "0189b0de-0000-7000-8000-0000000000u6".replace("u", "9")
+# Глеб Федько, гитарист: ведёт Тимура Ахметова. Нужен вторым преподавателем,
+# чтобы «своё» и «чужое» занятие были у настоящих разных людей.
+TEACHER2_USER = "0189b0de-0000-7000-8000-0000000000u7".replace("u", "9")
+# Гульнара Сагындык — плательщик семьи, мать Амины и Тимура Сагындык.
+GUARDIAN_USER = "0189b0de-0000-7000-8000-0000000000u8".replace("u", "9")
+# Дмитрий Со, 17 лет: взрослый ученик платит за себя сам и видит только себя.
+STUDENT_USER = "0189b0de-0000-7000-8000-0000000000u9".replace("u", "9")
+
+OWNER_PERSON = _id("1fc")
+BRANCH_ADMIN_PERSON = _id("1f9")
+
+# Пароль демо-сотрудников. Как и открытый текст демо-ключей, он известен
+# заранее только потому, что это демо: seed сносит и создаёт тенанты целиком,
+# на боевой базе запускать его нечего.
+DEMO_PASSWORD = "rockschool"
+
+# Хеш считается ОДИН раз на импорт модуля, а не на каждый посев: scrypt стоит
+# около 60 мс, а тесты пересевают базу перед каждым тестом — три сотни тестов
+# заплатили бы за это минуту чистого ожидания на ровном месте.
+DEMO_PASSWORD_HASH = auth.hash_secret(DEMO_PASSWORD)
+
+# Сессии демо-данных с заранее известным токеном — по той же схеме, что
+# и демо-ключи внешних источников (DEMO_API_KEYS ниже): в базу уходит только
+# хеш, а открытый текст нужен тестам и curl-примерам, чтобы переживать пересев.
+#
+# Это НЕ служебный вход в обход проверок: приложение не знает про эти строки
+# ничего особенного и проверяет их ровно так же, как любую другую сессию.
+# Работают они только на базе, которую посеял этот скрипт, — а он начинает
+# с DELETE FROM tenant по обоим демо-тенантам.
+# (открытый токен, учётная запись, тенант)
+DEMO_SESSIONS = [
+    ("rck_sess_demo_owner", OWNER_USER, TENANT),
+    ("rck_sess_demo_admin", ADMIN_USER, TENANT),
+    ("rck_sess_demo_branch_admin", BRANCH_ADMIN_USER, TENANT),
+    ("rck_sess_demo_teacher", TEACHER_USER, TENANT),
+    ("rck_sess_demo_teacher2", TEACHER2_USER, TENANT),
+    ("rck_sess_demo_guardian", GUARDIAN_USER, TENANT),
+    ("rck_sess_demo_student", STUDENT_USER, TENANT),
+    ("rck_sess_demo_other_owner", OTHER_USER, TENANT_OTHER),
+]
 
 # Ключи внешних источников. Открытый текст здесь известен заранее только
 # потому, что это демо: тестам и curl-примерам нужен ключ, переживающий
@@ -447,10 +502,10 @@ def seed(conn: psycopg.Connection) -> None:
     cur.execute(
         """
         INSERT INTO tenant (id, slug, name, timezone) VALUES
-          (%s, 'rockschool-demo', 'RockSchool Алматы', 'Asia/Almaty'),
-          (%s, 'other-school-demo', 'Соседняя школа', 'Asia/Almaty')
+          (%s, %s, 'RockSchool Алматы', 'Asia/Almaty'),
+          (%s, %s, 'Соседняя школа', 'Asia/Almaty')
         """,
-        (TENANT, TENANT_OTHER),
+        (TENANT, TENANT_SLUG, TENANT_OTHER, TENANT_OTHER_SLUG),
     )
 
     cur.execute(
@@ -531,10 +586,66 @@ def seed(conn: psycopg.Connection) -> None:
         (admin_person, TENANT),
     )
     cur.execute(
-        """INSERT INTO app_user (id, tenant_id, person_id, login, role)
-           VALUES (%s, %s, %s, '+77015550100', 'admin')""",
-        (ADMIN_USER, TENANT, admin_person),
+        """INSERT INTO app_user (id, tenant_id, person_id, login, role, password_hash)
+           VALUES (%s, %s, %s, '+77015550100', 'admin', %s)""",
+        (ADMIN_USER, TENANT, admin_person, DEMO_PASSWORD_HASH),
     )
+
+    # --- владелец школы ---------------------------------------------------
+    # Ставки ЗП и ведомость видит только он (spec §2), и без него проверить
+    # это было бы не на ком: у школы с одним администратором роли не различимы.
+    cur.execute(
+        """INSERT INTO person (id, tenant_id, first_name, last_name, phone, pd_consent_at)
+           VALUES (%s, %s, 'Ерлан', 'Тасмагамбетов', '+77015550110', now())""",
+        (OWNER_PERSON, TENANT),
+    )
+    owner_staff = _id("0e9")
+    cur.execute(
+        """INSERT INTO staff (id, tenant_id, person_id, kind, hired_on)
+           VALUES (%s, %s, %s, 'owner', '2024-01-01')""",
+        (owner_staff, TENANT, OWNER_PERSON),
+    )
+    cur.execute(
+        """INSERT INTO app_user (id, tenant_id, person_id, login, role, password_hash)
+           VALUES (%s, %s, %s, '+77015550110', 'owner', %s)""",
+        (OWNER_USER, TENANT, OWNER_PERSON, DEMO_PASSWORD_HASH),
+    )
+
+    # --- администратор ОДНОГО филиала --------------------------------------
+    # Правило §2 «администратор филиала Абая не правит расписание Аль-Фараби»
+    # держится на staff_branch, и проверять его надо на том, у кого эта связь
+    # заведена: у школы, которая её не заполняла, ограничения нет вовсе.
+    cur.execute(
+        """INSERT INTO person (id, tenant_id, first_name, last_name, phone, pd_consent_at)
+           VALUES (%s, %s, 'Дана', 'Абишева', '+77015550111', now())""",
+        (BRANCH_ADMIN_PERSON, TENANT),
+    )
+    branch_admin_staff = _id("0ea")
+    cur.execute(
+        """INSERT INTO staff (id, tenant_id, person_id, kind, hired_on)
+           VALUES (%s, %s, %s, 'admin', '2025-01-01')""",
+        (branch_admin_staff, TENANT, BRANCH_ADMIN_PERSON),
+    )
+    cur.execute(
+        "INSERT INTO staff_branch (staff_id, branch_id) VALUES (%s, %s)",
+        (branch_admin_staff, BRANCH_AB),      # только Абая 150
+    )
+    cur.execute(
+        """INSERT INTO app_user (id, tenant_id, person_id, login, role, password_hash)
+           VALUES (%s, %s, %s, '+77015550111', 'admin', %s)""",
+        (BRANCH_ADMIN_USER, TENANT, BRANCH_ADMIN_PERSON, DEMO_PASSWORD_HASH),
+    )
+
+    # --- входы преподавателей ---------------------------------------------
+    # Пароля у них нет: password_hash NULL — вход только по одноразовому коду.
+    # Схема это прямо предусматривает (db/001_core.sql), и преподаватель,
+    # заходящий раз в день отметить занятия, пароль всё равно забудет.
+    for user_id, key in ((TEACHER_USER, "sharapov"), (TEACHER2_USER, "fedko")):
+        cur.execute(
+            """INSERT INTO app_user (id, tenant_id, person_id, login, role)
+               SELECT %s, %s, %s, phone, 'teacher' FROM person WHERE id = %s""",
+            (user_id, TENANT, person_id(key), person_id(key)),
+        )
 
     # --- тарифы ------------------------------------------------------------
     for key, name, disc, fmt, minutes, lessons, days, price in PLANS:
@@ -656,9 +767,26 @@ def seed(conn: psycopg.Connection) -> None:
         (manager_person, TENANT),
     )
     cur.execute(
+        """INSERT INTO app_user (id, tenant_id, person_id, login, role, password_hash)
+           VALUES (%s, %s, %s, '+77015550101', 'admin', %s)""",
+        (MANAGER_USER, TENANT, manager_person, DEMO_PASSWORD_HASH),
+    )
+
+    # --- кабинет родителя и взрослого ученика ------------------------------
+    # Гульнара Сагындык — плательщик семьи с двумя детьми: ровно тот случай,
+    # ради которого семья в схеме и заведена. Пароля нет: родитель входит
+    # по коду, и это основной сценарий всей задачи.
+    cur.execute(
         """INSERT INTO app_user (id, tenant_id, person_id, login, role)
-           VALUES (%s, %s, %s, '+77015550101', 'admin')""",
-        (MANAGER_USER, TENANT, manager_person),
+           VALUES (%s, %s, %s, '+77015552418', 'guardian')""",
+        (GUARDIAN_USER, TENANT, PAYER_SAGYNDYK),
+    )
+    # Взрослый ученик платит за себя сам и видит только себя — по §2 у него
+    # права родителя, но семьи нет.
+    cur.execute(
+        """INSERT INTO app_user (id, tenant_id, person_id, login, role)
+           SELECT %s, %s, %s, phone, 'student' FROM person WHERE id = %s""",
+        (STUDENT_USER, TENANT, person_id("so"), person_id("so")),
     )
 
     # --- ключи внешних источников ------------------------------------------
@@ -803,10 +931,13 @@ def seed(conn: psycopg.Connection) -> None:
         (other_person, TENANT_OTHER, other_student, TENANT_OTHER,
          other_admin_person, TENANT_OTHER),
     )
+    # Владелец, а не администратор: соседняя школа участвует в тестах изоляции
+    # на всех экранах, включая ведомость, и роль поменьше проверяла бы права,
+    # а не изоляцию.
     cur.execute(
-        """INSERT INTO app_user (id, tenant_id, person_id, login, role)
-           VALUES (%s, %s, %s, 'other-admin', 'admin')""",
-        (OTHER_USER, TENANT_OTHER, other_admin_person),
+        """INSERT INTO app_user (id, tenant_id, person_id, login, role, password_hash)
+           VALUES (%s, %s, %s, 'other-admin', 'owner', %s)""",
+        (OTHER_USER, TENANT_OTHER, other_admin_person, DEMO_PASSWORD_HASH),
     )
     cur.execute(
         "INSERT INTO staff (id, tenant_id, person_id, kind) VALUES (%s, %s, %s, 'teacher')",
@@ -830,6 +961,18 @@ def seed(conn: psycopg.Connection) -> None:
          f"{DAY} 11:00", TZ, f"{DAY} 11:00", TZ),
     )
 
+    # --- сессии демо-пользователей -----------------------------------------
+    # В базу уходит только хеш токена — как и в бою, и как у демо-ключей
+    # внешних источников. Открытый текст известен заранее лишь потому, что
+    # тестам и curl-примерам нужен вход, переживающий пересев; настоящие
+    # сессии выдаёт POST /api/v1/auth/login и никто больше.
+    for raw, user_id, tenant in DEMO_SESSIONS:
+        cur.execute(
+            """INSERT INTO user_session (tenant_id, user_id, token_hash, expires_at)
+               VALUES (%s, %s, %s, now() + interval '30 days')""",
+            (tenant, user_id, auth.hash_token(raw)),
+        )
+
     conn.commit()
 
 
@@ -838,8 +981,9 @@ def main() -> None:
     with psycopg.connect(target) as conn:
         seed(conn)
     print(f"демо-данные загружены: {DAY}, тенант {TENANT}")
-    print(f"  X-Tenant-Id: {TENANT}")
-    print(f"  X-User-Id:   {ADMIN_USER}")
+    print(f"  школа:       {TENANT_SLUG}")
+    print(f"  вход:        +77015550110 / {DEMO_PASSWORD}  (владелец Ерлан)")
+    print(f"  токен:       rck_sess_demo_owner  (Authorization: Bearer …)")
     print(f"  branch_id:   {BRANCH_AF}  (Аль-Фараби 53В)")
     print(f"  student_id:  {student_id('sagyndyk')}  (Амина Сагындык)")
     print(f"  subscription:{subscription_id('sagyndyk')}  (её августовский абонемент)")

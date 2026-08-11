@@ -195,7 +195,11 @@ class Participant(BaseModel):
 class TeacherCard(BaseModel):
     id: str
     name: str
-    rate: int
+    # `null` — не «ставки нет», а «вам её не видно». По §2 чужую ставку
+    # знает только владелец: администратор ресепшена ведёт расписание,
+    # но сколько получает преподаватель — не его дело. Ноль здесь означал бы
+    # «работает бесплатно» и однажды попал бы в разговор.
+    rate: int | None = None
 
 
 class LessonNote(BaseModel):
@@ -993,6 +997,73 @@ class MoneySummary(BaseModel):
     churn: dict[str, Any]
     payroll: dict[str, Any]
     attention: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# Вход
+# ---------------------------------------------------------------------------
+
+Role = Literal["owner", "admin", "teacher", "guardian", "student"]
+
+
+class CodeRequest(BaseModel):
+    # Слаг школы обязателен: телефон уникален внутри школы, но не между ними,
+    # и без названия школы вход по телефону означал бы «покажи все школы,
+    # где есть этот номер» — то есть выдачу чужих данных ещё до входа.
+    # Фронтенд знает слаг из поддомена, в котором открыт.
+    tenant: str = Field(examples=["rockschool-demo"], min_length=1)
+    login: str = Field(
+        examples=["+7 701 555 24 18"],
+        min_length=1,
+        description="Телефон в любом формате или логин сотрудника",
+    )
+
+
+class CodeSent(BaseModel):
+    # Никогда не «пользователь не найден»: ответ одинаков и для существующего
+    # телефона, и для случайного. Иначе форма входа превращается в проверку,
+    # ходит ли ребёнок в эту школу.
+    sent: bool
+    to: str = Field(examples=["+77015 ••• •• 18"], description="Замаскированный адрес")
+    expires_in: int = Field(examples=[300], description="Секунд до протухания кода")
+    message: str
+
+
+class LoginRequest(BaseModel):
+    tenant: str = Field(examples=["rockschool-demo"], min_length=1)
+    login: str = Field(examples=["+7 701 555 24 18"], min_length=1)
+    # Ровно одно из двух. Код — основной путь (родители не помнят паролей),
+    # пароль оставлен сотрудникам: администратор входит по двадцать раз в день,
+    # и SMS на каждый вход — это не безопасность, а счёт от оператора.
+    code: str | None = Field(default=None, examples=["123456"])
+    password: str | None = None
+
+
+class Me(BaseModel):
+    user_id: str
+    name: str
+    role: Role
+    tenant: NamedRef
+    person_id: str
+    staff_id: str | None = None
+    # Пустой список = без ограничения по филиалам (школа не заполнила
+    # staff_branch), а не «доступа никуда нет».
+    branch_ids: list[str] = []
+    student_ids: list[str] = []
+
+
+class LoggedIn(BaseModel):
+    user: Me
+    expires_at: str
+    # Тот же токен, что уехал в куке. Отдаётся для не-браузерных клиентов
+    # (curl, мобильное приложение, интеграционные тесты); фронтенду он
+    # не нужен и хранить его в localStorage не надо — см. backend/README.md.
+    token: str
+
+
+class LoggedOut(BaseModel):
+    ok: bool
+    message: str
 
 
 class ErrorBody(BaseModel):

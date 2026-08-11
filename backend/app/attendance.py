@@ -54,21 +54,11 @@ def _require_participant(cur: psycopg.Cursor, lesson: dict[str, Any], student_id
     )
 
 
-def require_actor(cur: psycopg.Cursor, user_id: str) -> str:
-    """Проверяет, что X-User-Id — настоящая учётная запись этой школы.
-
-    TODO: заглушка авторизации. На следующем этапе идентичность приезжает
-    из токена; пока проверяем хотя бы существование, иначе аудит писался бы
-    на несуществующего автора, а внешний ключ ронял бы отметку в 500.
-    """
-    cur.execute("SELECT id FROM app_user WHERE id = %s AND is_active", (user_id,))
-    if cur.fetchone() is None:
-        raise ApiError(
-            401,
-            "unknown_user",
-            "Заголовок X-User-Id указывает на неизвестную учётную запись.",
-        )
-    return user_id
+# Проверки «а существует ли такой автор» здесь больше нет: она была нужна,
+# пока автор приезжал заголовком X-User-Id и мог быть выдуман. Теперь автор —
+# это учётная запись из сессии, найденная в базе при каждом запросе
+# (authz.load_actor), и записать аудит на несуществующего человека
+# технически невозможно.
 
 
 def preview_effect(

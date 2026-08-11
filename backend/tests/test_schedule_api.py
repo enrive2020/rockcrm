@@ -7,6 +7,7 @@ from conftest import (
     HEADERS,
     HEADERS_OTHER,
     OTHER_LESSON,
+    TENANT_OTHER,
     get_card,
     lesson,
     student,
@@ -191,19 +192,30 @@ def test_foreign_tenant_schedule_is_empty(client):
     assert response.status_code == 404
 
 
-def test_missing_headers_give_401(client):
+def test_without_session_it_is_401(client):
+    """Без входа не отдаётся ничего — включая справочники."""
     assert client.get("/api/v1/branches").status_code == 401
-    assert client.get("/api/v1/branches", headers={"X-Tenant-Id": HEADERS["X-Tenant-Id"]}).status_code == 401
-    body = client.get("/api/v1/branches").json()
-    assert body["error"]["code"] == "no_tenant"
+    assert client.get("/api/v1/branches").json()["error"]["code"] == "no_session"
+    # Выдуманный токен неотличим по ответу от протухшего: разница между ними
+    # ничего не даёт человеку и многое — тому, кто подбирает.
+    bad = client.get("/api/v1/branches", headers={"Authorization": "Bearer rck_sess_nope"})
+    assert bad.status_code == 401
+    assert bad.json()["error"]["code"] == "bad_session"
 
 
-def test_unknown_user_cannot_write(client):
-    response = client.post(
-        f"/api/v1/lessons/{lesson('les02')}/attendance",
-        json={"student_id": student("sagyndyk"), "mark": "came"},
-        headers={"X-Tenant-Id": HEADERS["X-Tenant-Id"],
-                 "X-User-Id": "0189b0de-0000-7000-8000-0000000000ff"},
-    )
-    assert response.status_code == 401
-    assert response.json()["error"]["code"] == "unknown_user"
+def test_forged_tenant_header_is_ignored(client):
+    """Ровно то, ради чего затевалась задача: заголовок больше ничего не решает.
+
+    Раньше `X-Tenant-Id` соседней школы открывал её данные любому, кто открыл
+    вкладку разработчика. Теперь тенант берётся из сессии, и заголовок —
+    просто мусор в запросе: ответ обязан быть таким же, как без него.
+    """
+    forged = dict(HEADERS)
+    forged["X-Tenant-Id"] = TENANT_OTHER
+    forged["X-User-Id"] = "0189b0de-0000-7000-8000-0000000000ff"
+
+    honest = schedule(client).json()
+    assert schedule(client, headers=forged).json() == honest
+
+    # И чужое занятие по-прежнему не видно, сколько заголовков ни подставь.
+    assert client.get(f"/api/v1/lessons/{OTHER_LESSON}", headers=forged).status_code == 404
