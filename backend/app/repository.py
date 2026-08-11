@@ -476,12 +476,24 @@ def lesson_participants(cur: psycopg.Cursor, lesson: dict[str, Any]) -> list[dic
     return []
 
 
+# Актуальность абонемента проверяется НА ДАТУ ОПЕРАЦИИ, а не на сегодня
+# (ADR-001, пункт 4). Решает срок действия: если дата попала между valid_from
+# и valid_until, абонемент годится — даже если к сегодняшнему дню он истёк.
+#
+# Статуса в условии больше нет, кроме отменённого. Прежнее
+# `status IN ('active','frozen','exhausted')` отсекало отметку от 15 марта,
+# внесённую в апреле: триггер успевал поставить `expired`, выборка возвращала
+# пусто, списывать становилось не с чего — так 2 500 отметок из 2 900 прошли
+# мимо журнала (issue #15). `exhausted` пропускается по той же причине, по
+# которой пропускался и раньше: с исчерпанного абонемента списывать нечего,
+# и сказать об этом обязаны правила отметки с внятным текстом, а не пустая
+# выборка, неотличимая от «абонемента не было вовсе».
 _SUBSCRIPTION_SQL = """
   SELECT id, lessons_total, lessons_balance, makeups_balance,
          valid_from, valid_until, status, rules, price
   FROM subscription
   WHERE student_id = %(student)s
-    AND status IN ('active', 'frozen', 'exhausted')
+    AND status <> 'cancelled'
     AND valid_from <= %(on)s
     AND valid_until >= %(on)s
   -- Сначала тот, с которого есть что списать; при равенстве — истекающий
@@ -494,7 +506,10 @@ _SUBSCRIPTION_SQL = """
 def active_subscription(
     cur: psycopg.Cursor, student_id: str, on: dt.date, for_update: bool = False
 ) -> SubscriptionState | None:
-    """Абонемент, по которому пойдёт занятие в указанную дату.
+    """Абонемент, действовавший в указанную дату.
+
+    Дата — дата операции, а не «сегодня»: абонемент, действовавший 15 марта,
+    годится для отметки от 15 марта, даже если сегодня апрель (ADR-001).
 
     for_update блокирует строку до конца транзакции: два администратора,
     отмечающие два занятия одного ученика одновременно, иначе оба увидели бы
@@ -2083,51 +2098,145 @@ def branch_open_days(
 # ---------------------------------------------------------------------------
 # Отток
 #
-# Ушедшим считается ученик, у которого абонемент закончился в периоде и
-# не появилось следующего в течение grace_days. Отсрочка нужна потому, что
-# продление покупают и через неделю после окончания: школа, считающая такого
-# ученика ушедшим, увидела бы отток в тридцать процентов и перестала бы
-# верить отчёту вовсе.
+# Отток считается ПО ЛЮДЯМ, а не по абонементам (issue #25). Прежняя версия
+# считала документы, и это давало 76% там, где школу покинули 16% учеников:
 #
-# На ученика берётся ОДИН абонемент — последний закончившийся в периоде.
-# Иначе ученик, у которого в месяце закрылись два абонемента, весил бы
-# в отчёте вдвое больше соседа.
+# * ученик с гитарой и барабанами давал два «ухода» вместо одного человека;
+# * пауза в три недели между абонементами объявлялась уходом, хотя ученик
+#   вернулся;
+# * абонемент, кончающийся 25 августа, в отчёте «за август» уже считался
+#   непродлённым — хотя продлевать его ещё рано, сегодня одиннадцатое.
+#
+# Последнее — главное и самое неочевидное: **вердикт нельзя выносить раньше,
+# чем истекла отсрочка**. Ученик, у которого абонемент кончится послезавтра,
+# ушедшим быть не может ни при каком определении, а именно такие и составляли
+# три четверти «оттока».
+#
+# Отсюда четыре состояния вместо двух:
+#   retained — абонемент действует (сегодня или за пределами периода);
+#   frozen   — на каникулах: заморозка действует на дату оценки;
+#   pending  — абонемент кончился, но отсрочка ещё идёт: судить рано;
+#   churned  — кончился, отсрочка истекла, нового нет ни по одному направлению.
+#
+# `last_end` берётся по ВСЕМ абонементам человека, а не по одному направлению:
+# уйти из школы можно только целиком.
 # ---------------------------------------------------------------------------
 
 _CHURN_SOURCE = """
-  WITH ended AS (
-    SELECT DISTINCT ON (s.student_id)
-           s.id, s.student_id, s.valid_from, s.valid_until
+  WITH span AS (
+    -- Один ряд на человека: докуда действует последний из его абонементов
+    -- по любому направлению и учился ли он вообще в запрошенном периоде.
+    SELECT s.student_id,
+           max(s.valid_until) AS last_end,
+           bool_or(s.valid_from < %(to)s AND s.valid_until >= %(from)s) AS studied
     FROM subscription s
     WHERE s.status <> 'cancelled'
-      AND s.valid_until >= %(from)s AND s.valid_until < %(to)s
-    ORDER BY s.student_id, s.valid_until DESC
+    GROUP BY s.student_id
+  ),
+  on_hold AS (
+    -- Ученик на каникулах не ушёл. Заморозка сдвигает срок абонемента вперёд,
+    -- поэтому обычно человек и так попадёт в retained; проверка нужна для
+    -- случая, когда заморозили уже истёкший абонемент — тогда без неё
+    -- ученик, о котором школа точно знает, что он вернётся, попал бы в отток.
+    SELECT DISTINCT s.student_id
+    FROM subscription_hold h
+    JOIN subscription s ON s.id = h.subscription_id
+    WHERE h.period @> %(asof)s::date
   ),
   verdict AS (
-    SELECT e.student_id, e.valid_until,
-           EXISTS (
-             SELECT 1 FROM subscription n
-             WHERE n.student_id = e.student_id
-               AND n.id <> e.id
-               AND n.status <> 'cancelled'
-               AND n.valid_until > e.valid_until
-               AND n.valid_from <= e.valid_until + %(grace)s
-           ) AS renewed
-    FROM ended e
+    SELECT sp.student_id,
+           sp.last_end,
+           st.archived_at,
+           (st.archived_at AT TIME ZONE coalesce(b.timezone, t.timezone))::date
+             AS archived_on,
+           CASE
+             -- Абонемент ещё действует сегодня либо продолжается за границей
+             -- периода. Второе условие отсекает чужой уход: человек, ушедший
+             -- в июне, не должен попасть в отчёт за март.
+             WHEN sp.last_end >= %(asof)s OR sp.last_end >= %(to)s THEN 'retained'
+             WHEN h.student_id IS NOT NULL THEN 'frozen'
+             -- Отсрочка ещё идёт: продление покупают и через неделю после
+             -- окончания, и объявлять уход, пока окно открыто, — гадание.
+             WHEN sp.last_end + %(grace)s >= %(asof)s THEN 'pending'
+             ELSE 'churned'
+           END AS state
+    FROM span sp
+    JOIN student st ON st.id = sp.student_id
+    JOIN tenant  t  ON t.id  = st.tenant_id
+    LEFT JOIN branch  b ON b.id = st.branch_id
+    LEFT JOIN on_hold h ON h.student_id = sp.student_id
+    WHERE sp.studied
   )
 """
 
 
-def churn_totals(
-    cur: psycopg.Cursor, since: dt.date, until: dt.date, grace_days: int
+def _churn_params(
+    since: dt.date, until: dt.date, grace_days: int, asof: dt.date
 ) -> dict[str, Any]:
+    return {
+        "from": since,
+        "to": until,
+        "grace": dt.timedelta(days=grace_days),
+        "asof": asof,
+    }
+
+
+def churn_totals(
+    cur: psycopg.Cursor, since: dt.date, until: dt.date, grace_days: int, asof: dt.date
+) -> dict[str, Any]:
+    """Люди: сколько учились, сколько осталось, сколько ушло.
+
+    `archived` считается по `student.archived_at` — это вторая, независимая
+    оценка того же числа. Расходиться они будут всегда: администратор
+    архивирует ученика тогда, когда узнал об уходе, а не когда кончился
+    абонемент. Показывать одно число вместо двух значит выдать оценку
+    за факт.
+    """
     cur.execute(
         _CHURN_SOURCE
         + """
-        SELECT count(*)::int AS ended,
-               count(*) FILTER (WHERE renewed)::int AS renewed,
-               count(*) FILTER (WHERE NOT renewed)::int AS churned
+        SELECT count(*)::int AS students,
+               count(*) FILTER (WHERE state = 'retained')::int AS retained,
+               count(*) FILTER (WHERE state = 'frozen')::int   AS frozen,
+               count(*) FILTER (WHERE state = 'pending')::int  AS pending,
+               count(*) FILTER (WHERE state = 'churned')::int  AS churned,
+               count(*) FILTER (
+                 WHERE archived_on >= %(from)s AND archived_on < %(to)s
+               )::int AS archived
         FROM verdict
+        """,
+        _churn_params(since, until, grace_days, asof),
+    )
+    return cur.fetchone()
+
+
+def churn_subscription_facts(
+    cur: psycopg.Cursor, since: dt.date, until: dt.date, grace_days: int
+) -> dict[str, Any]:
+    """Те же события в документах: сколько абонементов кончилось и продлено.
+
+    Держится отдельно от людей намеренно. Число закончившихся абонементов —
+    проверяемый факт, по нему сходится касса; число ушедших людей — вывод
+    из этих фактов. Смешивать их в одной цифре и значило бы получить 76%
+    оттока при 16% реальных.
+    """
+    cur.execute(
+        """
+        SELECT count(*)::int AS ended,
+               count(*) FILTER (WHERE renewed)::int AS renewed
+        FROM (
+          SELECT EXISTS (
+                   SELECT 1 FROM subscription n
+                   WHERE n.student_id = s.student_id
+                     AND n.id <> s.id
+                     AND n.status <> 'cancelled'
+                     AND n.valid_until > s.valid_until
+                     AND n.valid_from <= s.valid_until + %(grace)s
+                 ) AS renewed
+          FROM subscription s
+          WHERE s.status <> 'cancelled'
+            AND s.valid_until >= %(from)s AND s.valid_until < %(to)s
+        ) x
         """,
         {"from": since, "to": until, "grace": dt.timedelta(days=grace_days)},
     )
@@ -2135,34 +2244,48 @@ def churn_totals(
 
 
 def churn_by_teacher(
-    cur: psycopg.Cursor, since: dt.date, until: dt.date, grace_days: int
+    cur: psycopg.Cursor, since: dt.date, until: dt.date, grace_days: int, asof: dt.date
 ) -> list[dict[str, Any]]:
+    """Разрез по преподавателям — тоже по людям.
+
+    `students` (сколько человек у преподавателя учились в периоде) отдаётся
+    рядом с процентом намеренно: 33% у преподавателя с тремя учениками
+    и 33% у преподавателя с сорока — разные новости, и по первому числу
+    никого увольнять нельзя.
+    """
     cur.execute(
         _CHURN_SOURCE
         + """
         SELECT st.id AS teacher_id,
                btrim(concat_ws(' ', tp.first_name, tp.last_name)) AS name,
-               count(*)::int AS ended,
-               count(*) FILTER (WHERE NOT v.renewed)::int AS churned
+               count(*)::int AS students,
+               count(*) FILTER (WHERE v.state <> 'retained')::int AS ended,
+               count(*) FILTER (WHERE v.state = 'churned')::int AS churned
         FROM verdict v
         JOIN student s   ON s.id  = v.student_id
         LEFT JOIN staff  st ON st.id = s.main_teacher_id
         LEFT JOIN person tp ON tp.id = st.person_id
         GROUP BY st.id, tp.first_name, tp.last_name
-        ORDER BY churned DESC, ended DESC, name
+        ORDER BY churned DESC, students DESC, name
         """,
-        {"from": since, "to": until, "grace": dt.timedelta(days=grace_days)},
+        _churn_params(since, until, grace_days, asof),
     )
     return cur.fetchall()
 
 
 def churned_students(
-    cur: psycopg.Cursor, since: dt.date, until: dt.date, grace_days: int, limit: int
+    cur: psycopg.Cursor,
+    since: dt.date,
+    until: dt.date,
+    grace_days: int,
+    asof: dt.date,
+    limit: int,
 ) -> list[dict[str, Any]]:
     cur.execute(
         _CHURN_SOURCE
         + """
-        SELECT v.student_id, v.valid_until AS ended_on,
+        SELECT v.student_id, v.last_end AS ended_on,
+               v.archived_on,
                btrim(concat_ws(' ', p.first_name, p.last_name)) AS name,
                d.name  AS discipline,
                b.name  AS branch,
@@ -2181,16 +2304,11 @@ def churned_students(
         LEFT JOIN discipline d  ON d.id  = s.discipline_id
         LEFT JOIN staff      st ON st.id = s.main_teacher_id
         LEFT JOIN person     tp ON tp.id = st.person_id
-        WHERE NOT v.renewed
-        ORDER BY v.valid_until DESC, name
+        WHERE v.state = 'churned'
+        ORDER BY v.last_end DESC, name
         LIMIT %(limit)s
         """,
-        {
-            "from": since,
-            "to": until,
-            "grace": dt.timedelta(days=grace_days),
-            "limit": limit,
-        },
+        _churn_params(since, until, grace_days, asof) | {"limit": limit},
     )
     return cur.fetchall()
 

@@ -218,9 +218,24 @@ class LessonCard(BaseModel):
     note: LessonNote | None = None
 
 
+# Дата операции — общий параметр четырёх пишущих операций (ADR-001, #15).
+# Описание одно на все: расхождение в текстах здесь превратилось бы
+# в расхождение в понимании, а правило одно.
+EFFECTIVE_DATE = Field(
+    default=None,
+    description=(
+        "Дата, которой считается операция. По умолчанию — сегодня в поясе "
+        "филиала. Задним числом не глубже правила школы backdating_days "
+        "(30 дней по умолчанию, 0 — только сегодня) и не внутрь закрытого "
+        "зарплатного периода."
+    ),
+)
+
+
 class AttendanceRequest(BaseModel):
     student_id: str
     mark: Mark
+    effective_date: date | None = EFFECTIVE_DATE
 
 
 class Applied(BaseModel):
@@ -243,6 +258,11 @@ class AttendanceApplied(BaseModel):
     mark: Mark
     applied: Applied
     lesson_status: LessonStatus
+    # Сверх контракта: какой датой записана операция и внесена ли она задним
+    # числом. Интерфейс обязан показать это там же, где отметку поставили, —
+    # иначе ошибку в дате никто не заметит до разбора с родителем.
+    effective_date: str | None = None
+    backdated: bool = False
     alerts: list[Alert] = []
 
 
@@ -260,6 +280,8 @@ class AttendanceRevoked(BaseModel):
     attendance_id: str
     mark: Mark
     revoked_at: str
+    effective_date: str | None = None
+    backdated: bool = False
     reverted: Reverted
     lesson_status: LessonStatus
 
@@ -418,8 +440,10 @@ class PaymentIn(BaseModel):
 class SellRequest(BaseModel):
     plan_id: str
     starts_on: date | None = Field(
-        default=None, description="Первый день действия; по умолчанию сегодня"
+        default=None,
+        description="Первый день действия; по умолчанию — дата операции",
     )
+    effective_date: date | None = EFFECTIVE_DATE
     discount_pct: float | None = Field(default=None, ge=0, le=100)
     promo_code: str | None = None
     payment: PaymentIn | None = None
@@ -441,12 +465,15 @@ class SoldSubscription(BaseModel):
     carry_over_note: str | None = None
     payment_id: str | None = None
     debt: int
+    effective_date: str | None = None
+    backdated: bool = False
 
 
 class HoldRequest(BaseModel):
     from_: date = Field(alias="from")
     to: date
     reason: str | None = None
+    effective_date: date | None = EFFECTIVE_DATE
 
     model_config = {"populate_by_name": True}
 
@@ -465,6 +492,8 @@ class HoldCreated(BaseModel):
     # Без него интерфейсу пришлось бы перечитывать карточку, чтобы понять,
     # изменилось ли вообще что-нибудь видимое администратору.
     status: str | None = None
+    effective_date: str | None = None
+    backdated: bool = False
 
 
 class HoldReleased(BaseModel):
@@ -477,6 +506,8 @@ class HoldReleased(BaseModel):
     freeze_days_left: int
     message: str
     status: str | None = None
+    effective_date: str | None = None
+    backdated: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -883,6 +914,9 @@ class RoomsReport(BaseModel):
 class ChurnTeacher(BaseModel):
     teacher_id: str | None = None
     name: str
+    # Сколько человек у преподавателя учились в периоде. Без этого числа
+    # процент нечитаем: 33% при трёх учениках — это один человек.
+    students: int
     ended: int
     churned: int
     churn_pct: int
@@ -896,16 +930,37 @@ class ChurnStudent(BaseModel):
     teacher: str | None = None
     teacher_id: str | None = None
     ended_on: str
+    # Когда администратор перевёл ученика в архив. Пусто — значит уход
+    # виден только по абонементам, и карточку стоит проверить.
+    archived_on: str | None = None
     last_lesson_on: str | None = None
 
 
 class ChurnReport(BaseModel):
+    """Отток по людям (issue #25).
+
+    Числа здесь двух родов и намеренно не смешаны. `students_total`,
+    `retained`, `frozen`, `pending`, `churned` — про людей: ими отвечают
+    на «теряю ли я клиентов». `ended` и `renewed` — про документы: сколько
+    абонементов закончилось и сколько продлено. `archived` — вторая,
+    независимая оценка ухода, по `student.archived_at`.
+    """
+
     period: Period
     grace_days: int
-    ended: int
-    renewed: int
+    # Дата, на которую вынесен вердикт. Не конец периода: об абонементе,
+    # который кончится послезавтра, сказать нечего.
+    as_of: str
+    students_total: int
+    retained: int
+    frozen: int
+    pending: int
     churned: int
     churn_pct: int
+    archived: int
+    archived_pct: int
+    ended: int
+    renewed: int
     by_teacher: list[ChurnTeacher]
     students: list[ChurnStudent]
     note: str

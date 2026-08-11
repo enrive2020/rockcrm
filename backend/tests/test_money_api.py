@@ -446,69 +446,198 @@ def test_rooms_filter_by_branch(client):
 
 
 # ---------------------------------------------------------------------------
-# Отток
+# Отток (issue #25)
+#
+# Отчёт считает ЛЮДЕЙ, а не абонементы, и не выносит вердикт раньше, чем
+# истекла отсрочка продления. Прежняя версия делала обе ошибки сразу
+# и показывала 76% там, где школу покинули 16%: абонемент, кончающийся
+# 31 августа, попадал в «не продлили» уже одиннадцатого числа, а на демо-данных
+# отчёт бодро отвечал «отток 100%» про восемнадцать учеников, которые
+# в этот момент ходили на занятия.
+#
+# Все проверки ниже опираются на то же «сегодня», что и остальной файл:
+# 11 августа 2026, абонементы демо действуют с 1 по 31 августа.
 # ---------------------------------------------------------------------------
 
+# Ученик без абонемента в демо: на нём удобно строить историю ухода,
+# не задевая восемнадцать остальных.
+ALONE = "zhanat"
 
-def test_churn_counts_subscriptions_that_ended_without_renewal(client):
-    """Все демо-абонементы кончаются 31 августа и продлений нет — отток 100%."""
-    data = get(client, "/api/v1/reports/churn", AUGUST)
+
+def churn(client, period, **params):
+    return get(client, "/api/v1/reports/churn", {**period, **params})
+
+
+def sell(client, student_key, plan_key, starts_on):
+    response = client.post(
+        f"/api/v1/students/{student(student_key)}/subscriptions",
+        json={"plan_id": seed_demo.plan_id(plan_key), "starts_on": starts_on},
+        headers=HEADERS,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_running_subscription_is_not_a_departure(client):
+    """Ученик, чей абонемент действует сегодня, ушедшим быть не может.
+
+    Именно этого не хватало отчёту: он объявлял непродлёнными абонементы,
+    которые кончаются в конце месяца, — то есть выносил вердикт о днях,
+    которые ещё не наступили.
+    """
+    data = churn(client, AUGUST)
+    assert data["as_of"] == "2026-08-11"
+    assert data["students_total"] == 18
+    assert data["retained"] == 18
+    assert data["churned"] == 0
+    assert data["churn_pct"] == 0
+    # Документы при этом посчитаны честно: восемнадцать абонементов
+    # действительно кончаются в августе, и ни один пока не продлён.
     assert data["ended"] == 18
     assert data["renewed"] == 0
-    assert data["churned"] == 18
-    assert data["churn_pct"] == 100
     assert data["grace_days"] == 14
 
 
-def test_renewal_removes_the_student_from_churn(client):
-    """Продление — единственное, что отличает ушедшего от оставшегося."""
-    before = get(client, "/api/v1/reports/churn", AUGUST)
-    sold = client.post(
-        f"/api/v1/students/{student('sagyndyk')}/subscriptions",
-        json={"plan_id": seed_demo.plan_id("drums8"), "starts_on": "2026-09-01"},
+def test_a_pause_between_subscriptions_is_not_a_departure(client):
+    """Ученик, вернувшийся после паузы длиннее отсрочки, не ушёл.
+
+    Пауза в два месяца — это лето, а не уход, и человек, который сегодня
+    снова ходит на занятия, не может числиться в оттоке за май.
+    """
+    sell(client, ALONE, "drums4", "2026-05-01")   # по 31 мая
+    sell(client, ALONE, "drums4", "2026-08-01")   # вернулся в августе
+
+    data = churn(client, {"from": "2026-05-01", "to": "2026-05-31"})
+    assert data["students_total"] == 1
+    assert data["retained"] == 1
+    assert data["churned"] == 0
+    assert data["students"] == []
+
+
+def test_one_person_is_one_departure_however_many_subscriptions(client):
+    """Два абонемента подряд — два документа, но один человек.
+
+    Отток — про людей: владелец смотрит на это число, чтобы понять,
+    теряет ли он клиентов, а не сколько бумаг закрылось.
+    """
+    sell(client, ALONE, "drums4", "2026-04-01")    # по 1 мая
+    sell(client, ALONE, "guitar4", "2026-05-02")   # по 1 июня, больше ничего
+
+    data = churn(client, {"from": "2026-04-01", "to": "2026-06-30"})
+    assert data["ended"] == 2       # документов закончилось два
+    assert data["renewed"] == 1     # второй документ продлевает первый
+    assert data["students_total"] == 1
+    assert data["churned"] == 1     # а ушёл один человек
+    assert data["churn_pct"] == 100
+    assert [row["student_id"] for row in data["students"]] == [student(ALONE)]
+
+
+def test_verdict_waits_until_the_grace_window_closes(client):
+    """Пока окно продления открыто, ученик в отток не попадает.
+
+    Продление покупают и через неделю после окончания. Отчёт обязан
+    отличать «не продлил» от «ещё не успел»: по первому звонят с удержанием,
+    по второму — нет.
+    """
+    sell(client, ALONE, "drums4", "2026-07-05")   # по 4 августа, отсрочка до 18-го
+    period = {"from": "2026-07-01", "to": "2026-08-31"}
+
+    patient = churn(client, period)
+    assert patient["pending"] == 1
+    assert patient["churned"] == 0
+    assert "в отсрочке" in patient["note"]
+
+    # Та же история при нулевой отсрочке: окно закрыто в день окончания.
+    strict = churn(client, period, grace_days=0)
+    assert strict["pending"] == 0
+    assert strict["churned"] == 1
+
+
+def test_frozen_student_is_on_holidays_not_gone(client, sql):
+    """Заморозка — каникулы, а не уход.
+
+    Школа, которая знает про каникулы ученика, не имеет права показывать
+    его в оттоке: удержание такому ученику не нужно, а число портится.
+    """
+    sold = sell(client, ALONE, "drums4", "2026-06-01")   # по 1 июля
+    period = {"from": "2026-06-01", "to": "2026-07-31"}
+    assert churn(client, period)["churned"] == 1
+
+    frozen = client.post(
+        f"/api/v1/subscriptions/{sold['subscription_id']}/holds",
+        json={"from": "2026-08-11", "to": "2026-08-18", "reason": "каникулы"},
         headers=HEADERS,
     )
-    assert sold.status_code == 201, sold.text
+    assert frozen.status_code == 201, frozen.text
 
-    after = get(client, "/api/v1/reports/churn", AUGUST)
-    assert after["ended"] == before["ended"]
-    assert after["churned"] == before["churned"] - 1
-    assert after["renewed"] == 1
-    assert student("sagyndyk") not in [s["student_id"] for s in after["students"]]
+    data = churn(client, period)
+    assert data["frozen"] == 1
+    assert data["churned"] == 0
 
 
-def test_churn_grace_period_is_honest_about_its_length(client):
-    """Продление через месяц при grace_days = 0 продлением уже не считается."""
-    client.post(
-        f"/api/v1/students/{student('sagyndyk')}/subscriptions",
-        json={"plan_id": seed_demo.plan_id("drums8"), "starts_on": "2026-10-01"},
-        headers=HEADERS,
+def test_churn_is_shown_next_to_the_archive(client, sql):
+    """Два числа вместо одного: уход по абонементам и перевод в архив.
+
+    Это две разные оценки одного события, и они расходятся всегда:
+    администратор архивирует ученика тогда, когда узнал об уходе, а не когда
+    кончился абонемент. Показывать одно число значит выдать оценку за факт.
+    """
+    sell(client, ALONE, "drums4", "2026-06-01")   # по 1 июля — ушёл по абонементам
+    sql.execute(
+        "UPDATE student SET archived_at = now() WHERE id IN (%s, %s)",
+        (student(ALONE), student("so")),          # «Со» продолжает ходить
     )
-    lenient = get(client, "/api/v1/reports/churn", {**AUGUST, "grace_days": 45})
-    strict = get(client, "/api/v1/reports/churn", {**AUGUST, "grace_days": 0})
-    assert lenient["renewed"] == 1
-    assert strict["renewed"] == 0
+    sql.commit()
+
+    data = churn(client, {"from": "2026-06-01", "to": "2026-08-31"})
+    assert data["churned"] == 1
+    assert data["archived"] == 2
+    assert data["archived_pct"] == round(2 / data["students_total"] * 100)
+    gone = next(row for row in data["students"] if row["student_id"] == student(ALONE))
+    assert gone["archived_on"] == "2026-08-11"
 
 
-def test_churn_points_at_the_teacher(client):
-    """«У кого из преподавателей это чаще» — вопрос, ради которого отчёт есть."""
-    data = get(client, "/api/v1/reports/churn", AUGUST)
+def test_churn_by_teacher_reports_the_size_of_its_base(client):
+    """Процент без базы нечитаем: 100% у преподавателя с одним учеником.
+
+    Прежний отчёт называл «худшим» преподавателя с 82% оттока, и по такому
+    числу увольняют. Рядом с процентом обязано стоять, из скольких человек
+    он посчитан.
+    """
+    sell(client, ALONE, "drums4", "2026-06-01")   # Амир Жанат ходит к Шарапову
+
+    data = churn(client, {"from": "2026-06-01", "to": "2026-08-31"})
     by_teacher = {row["teacher_id"]: row for row in data["by_teacher"]}
-    assert by_teacher[FEDKO]["churned"] == 11    # все гитаристы
-    assert by_teacher[SHARAPOV]["churned"] == 4
-    assert by_teacher[ISENOVA]["churned"] == 3
-    assert all(row["churn_pct"] == 100 for row in data["by_teacher"])
+    assert by_teacher[SHARAPOV]["churned"] == 1
+    assert by_teacher[SHARAPOV]["students"] == 5     # четверо барабанщиков и Амир
+    assert by_teacher[SHARAPOV]["churn_pct"] == 20
+    assert by_teacher[FEDKO]["churned"] == 0
+    assert by_teacher[ISENOVA]["churned"] == 0
     # Отсортировано по числу ушедших: первым идёт тот, к кому идти разбираться.
-    assert data["by_teacher"][0]["teacher_id"] == FEDKO
+    assert data["by_teacher"][0]["teacher_id"] == SHARAPOV
 
 
 def test_churn_names_the_students_with_their_last_lesson(client):
-    data = get(client, "/api/v1/reports/churn", AUGUST)
-    amina = next(s for s in data["students"] if s["student_id"] == student("sagyndyk"))
-    assert amina["name"] == "Амина Сагындык"
-    assert amina["teacher"] == "Дмитрий Шарапов"
-    assert amina["ended_on"] == "2026-08-31"
-    assert amina["last_lesson_on"] == "2026-08-07"
+    sell(client, ALONE, "drums4", "2026-06-01")
+    data = churn(client, {"from": "2026-06-01", "to": "2026-07-31"})
+    amir = next(row for row in data["students"] if row["student_id"] == student(ALONE))
+    assert amir["name"] == "Амир Жанат"
+    assert amir["teacher"] == "Дмитрий Шарапов"
+    assert amir["ended_on"] == "2026-07-01"
+    assert amir["archived_on"] is None
+
+
+def test_churn_grace_period_is_honest_about_its_length(client):
+    """Продление через месяц при grace_days = 0 продлением уже не считается.
+
+    Проверка про документы: `renewed` считает абонементы, и отсрочка здесь
+    ровно та, которую попросили.
+    """
+    sell(client, "sagyndyk", "drums8", "2026-10-01")
+    lenient = churn(client, AUGUST, grace_days=45)
+    strict = churn(client, AUGUST, grace_days=0)
+    assert lenient["renewed"] == 1
+    assert strict["renewed"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -562,8 +691,13 @@ def test_summary_gathers_the_four_numbers_of_the_screen(client):
     assert data["revenue"]["previous_period"] == {"from": "2026-07-01", "to": "2026-07-31"}
 
     assert 0 <= data["rooms"]["utilization_pct"] <= 100
-    assert data["churn"]["churned"] == 18
-    assert data["churn"]["worst_teacher"]["teacher_id"] == FEDKO
+    # Абонементы всех восемнадцати действуют по 31 августа: ушедших нет
+    # и «худшего преподавателя» нет тоже. Пустая карточка честнее, чем
+    # виноватый, назначенный из чисел, которых ещё не существует.
+    assert data["churn"]["students_total"] == 18
+    assert data["churn"]["churned"] == 0
+    assert data["churn"]["archived"] == 0
+    assert data["churn"]["worst_teacher"] is None
     assert data["payroll"]["total"] == 25900
     assert data["payroll"]["closed"] is False
 

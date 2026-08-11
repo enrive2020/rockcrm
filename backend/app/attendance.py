@@ -5,15 +5,22 @@
 в одной транзакции — частично применённая отметка означала бы, что занятие
 списано, а зарплата не начислена (или наоборот), и сверить это потом
 невозможно.
+
+Дата операции приходит параметром `effective_date` и по умолчанию равна
+сегодняшнему дню филиала (ADR-001). Отдельно от неё живёт дата занятия:
+абонемент ищется по дате урока, потому что списывается именно за урок,
+а `effective_date` отвечает на другой вопрос — когда администратор внёс
+запись. Их путаница и была причиной issue #15.
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
 from typing import Any
 
 import psycopg
 
-from . import journal, repository as repo
+from . import journal, opdate, repository as repo
 from .errors import ApiError, not_found
 from .rules import MARKS, MarkEffect, compute_effect, low_balance_alert
 
@@ -85,6 +92,7 @@ def apply_mark(
     lesson_id: str,
     student_id: str,
     mark: str,
+    effective_date: dt.date | None = None,
 ) -> dict[str, Any]:
     if mark not in MARKS:
         raise ApiError(
@@ -97,6 +105,11 @@ def apply_mark(
     if lesson["status"] == "cancelled":
         raise ApiError(409, "lesson_cancelled", "Занятие отменено — отмечать нечего.")
     _require_participant(cur, lesson, student_id)
+
+    # Дата операции проверяется до всякой записи: окно правки школы, а поверх
+    # него — закрытый зарплатный период, который не открывает никакое окно.
+    when = opdate.resolve(cur, tenant_id, effective_date, lesson["branch_timezone"])
+    opdate.refuse_closed_payroll(cur, when)
 
     # Действующая отметка — ровно одна на пару (занятие, ученик); это же
     # держит частичный индекс attendance_active_uniq. Проверяем и здесь,
@@ -142,13 +155,17 @@ def apply_mark(
     # 1. Отметка. Частичный индекс attendance_active_uniq ловит двойной клик
     #    и повторную доставку запроса в гонке, когда проверка выше прошла
     #    у обоих запросов, — ошибка переводится в 409 выше по стеку.
+    columns = ["tenant_id", "lesson_id", "student_id", "mark", "marked_by"]
+    values: list[Any] = [tenant_id, lesson_id, student_id, mark, actor_id]
+    # Пометка «внесено задним числом» приезжает миграцией 009; до неё
+    # отметка пишется как раньше — см. opdate.marks_backdating().
+    if opdate.marks_backdating(cur, "attendance"):
+        columns.append("backdated")
+        values.append(when.backdated)
     cur.execute(
-        """
-        INSERT INTO attendance (tenant_id, lesson_id, student_id, mark, marked_by)
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING id, marked_at
-        """,
-        (tenant_id, lesson_id, student_id, mark, actor_id),
+        f"INSERT INTO attendance ({', '.join(columns)}) "
+        f"VALUES ({', '.join(['%s'] * len(values))}) RETURNING id, marked_at",
+        values,
     )
     row = cur.fetchone()
     attendance_id = str(row["id"])
@@ -167,6 +184,7 @@ def apply_mark(
                 lesson_id=lesson_id,
                 reason=f"Отметка «{mark}»",
                 actor_id=actor_id,
+                backdated=when.backdated,
             )
         if effect.makeups_delta != 0:
             _add_entry(
@@ -180,6 +198,7 @@ def apply_mark(
                 lesson_id=lesson_id,
                 reason=f"Отметка «{mark}»",
                 actor_id=actor_id,
+                backdated=when.backdated,
             )
             # Отработка — отдельная валюта с собственным сроком: без поштучного
             # учёта «сгорает через 30 дней» не с чего отсчитывать.
@@ -251,6 +270,8 @@ def apply_mark(
             "makeups_delta": effect.makeups_delta,
             "teacher_amount": effect.teacher_amount,
             "subscription_id": subscription.id if subscription else None,
+            "effective_date": when.on.isoformat(),
+            "backdated": when.backdated,
         },
     )
 
@@ -273,6 +294,10 @@ def apply_mark(
             "subscription_id": subscription.id if subscription else None,
         },
         "lesson_status": lesson_status,
+        # Дата операции и пометка — наружу: интерфейс обязан показать, что
+        # запись внесена задним числом, ровно там, где её только что внесли.
+        "effective_date": when.on.isoformat(),
+        "backdated": when.backdated,
         "alerts": alerts,
     }
 
@@ -283,13 +308,20 @@ def apply_mark(
 
 
 def revoke_mark(
-    cur: psycopg.Cursor, tenant_id: str, actor_id: str, attendance_id: str
+    cur: psycopg.Cursor,
+    tenant_id: str,
+    actor_id: str,
+    attendance_id: str,
+    effective_date: dt.date | None = None,
 ) -> dict[str, Any]:
     cur.execute(
         """
-        SELECT a.id, a.lesson_id, a.student_id, a.mark, a.revoked_at, l.teacher_id
+        SELECT a.id, a.lesson_id, a.student_id, a.mark, a.revoked_at, l.teacher_id,
+               coalesce(b.timezone, t.timezone) AS branch_timezone
         FROM attendance a
         JOIN lesson l ON l.id = a.lesson_id
+        JOIN tenant t ON t.id = a.tenant_id
+        LEFT JOIN branch b ON b.id = l.branch_id
         WHERE a.id = %s
         FOR UPDATE OF a
         """,
@@ -300,6 +332,11 @@ def revoke_mark(
         raise not_found("Отметка не найдена")
     if att["revoked_at"] is not None:
         raise ApiError(409, "already_revoked", "Эта отметка уже отменена.")
+
+    # Отмена пишет корректировку в зарплату, поэтому подчиняется тем же
+    # границам, что и сама отметка: окну правки и закрытому периоду.
+    when = opdate.resolve(cur, tenant_id, effective_date, att["branch_timezone"])
+    opdate.refuse_closed_payroll(cur, when)
 
     # Гасим ровно те записи, которые породила отметка: суммы берём из журнала,
     # а не пересчитываем правилами заново. Правила школы могли смениться между
@@ -333,6 +370,7 @@ def revoke_mark(
                 reason="Отмена ошибочной отметки",
                 actor_id=actor_id,
                 reverses_id=entry["id"],
+                backdated=when.backdated,
             )
             lessons_back += -entry["lessons_delta"]
         if entry["makeups_delta"] > 0:
@@ -380,6 +418,7 @@ def revoke_mark(
                     reason="Отмена ошибочной отметки: отработка отозвана",
                     actor_id=actor_id,
                     reverses_id=entry["id"],
+                    backdated=when.backdated,
                 )
                 makeups_back += -revoked
 
@@ -458,6 +497,8 @@ def revoke_mark(
             "makeups_delta": makeups_back,
             "teacher_amount": teacher_amount_back,
             "subscription_id": subscription_id,
+            "effective_date": when.on.isoformat(),
+            "backdated": when.backdated,
         },
     )
 
@@ -465,6 +506,8 @@ def revoke_mark(
         "attendance_id": attendance_id,
         "mark": att["mark"],
         "revoked_at": revoked_at.isoformat(),
+        "effective_date": when.on.isoformat(),
+        "backdated": when.backdated,
         "reverted": {
             "lessons_delta": lessons_back,
             "lessons_after": lessons_after,

@@ -127,6 +127,11 @@ async def _validation_handler(request: Request, exc: RequestValidationError) -> 
 
 API = "/api/v1"
 
+# Текст один на все четыре операции: описание даты операции живёт
+# в schemas.EFFECTIVE_DATE, а параметры пути и запроса берут его оттуда,
+# чтобы в OpenAPI не оказалось двух разных объяснений одного правила.
+EFFECTIVE_DATE_DOC = schemas.EFFECTIVE_DATE.description
+
 
 @app.get(f"{API}/branches", response_model=list[schemas.Branch], tags=["Справочники"])
 def branches(who: CallerDep) -> list[dict[str, Any]]:
@@ -336,11 +341,22 @@ def lesson_card(who: CallerDep, lesson_id: str) -> dict[str, Any]:
 def mark_attendance(
     who: CallerDep, lesson_id: str, body: schemas.AttendanceRequest
 ) -> dict[str, Any]:
+    """Отметка посещаемости.
+
+    `effective_date` в теле задаёт дату операции; без него — сегодня в поясе
+    филиала, то есть прежнее поведение (ADR-001).
+    """
     student_id = _uuid_or_400(body.student_id, "student_id")
     with tenant_tx(who.tenant_id) as cur:
         attendance_service.require_actor(cur, who.user_id)
         return attendance_service.apply_mark(
-            cur, who.tenant_id, who.user_id, lesson_id, student_id, body.mark
+            cur,
+            who.tenant_id,
+            who.user_id,
+            lesson_id,
+            student_id,
+            body.mark,
+            body.effective_date,
         )
 
 
@@ -349,10 +365,22 @@ def mark_attendance(
     response_model=schemas.AttendanceRevoked,
     tags=["Посещаемость"],
 )
-def revoke_attendance(who: CallerDep, attendance_id: str) -> dict[str, Any]:
+def revoke_attendance(
+    who: CallerDep,
+    attendance_id: str,
+    effective_date: Annotated[dt.date | None, Query(description=EFFECTIVE_DATE_DOC)] = None,
+) -> dict[str, Any]:
+    """Отмена отметки.
+
+    Дата операции приезжает параметром запроса, а не телом: у DELETE тела нет,
+    и заводить его ради одного поля значило бы сделать метод неотличимым
+    от POST для всякого прокси на пути.
+    """
     with tenant_tx(who.tenant_id) as cur:
         attendance_service.require_actor(cur, who.user_id)
-        return attendance_service.revoke_mark(cur, who.tenant_id, who.user_id, attendance_id)
+        return attendance_service.revoke_mark(
+            cur, who.tenant_id, who.user_id, attendance_id, effective_date
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -438,11 +466,16 @@ def freeze_subscription(
     tags=["Абонементы"],
 )
 def unfreeze_subscription(
-    who: CallerDep, subscription_id: str, hold_id: str
+    who: CallerDep,
+    subscription_id: str,
+    hold_id: str,
+    effective_date: Annotated[dt.date | None, Query(description=EFFECTIVE_DATE_DOC)] = None,
 ) -> dict[str, Any]:
     with tenant_tx(who.tenant_id) as cur:
         attendance_service.require_actor(cur, who.user_id)
-        return billing.release_hold(cur, who.tenant_id, who.user_id, subscription_id, hold_id)
+        return billing.release_hold(
+            cur, who.tenant_id, who.user_id, subscription_id, hold_id, effective_date
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -706,10 +739,15 @@ def churn_report(
     ] = money.DEFAULT_GRACE_DAYS,
     limit: Annotated[int, Query(ge=0, le=200)] = money.DEFAULT_LIST_LIMIT,
 ) -> dict[str, Any]:
-    """Кто не продлил абонемент и у кого из преподавателей это чаще."""
+    """Сколько человек ушло из школы и у кого из преподавателей это чаще.
+
+    Считается по людям, а не по абонементам: ученик с двумя направлениями —
+    один человек, пауза между абонементами — не уход, а вердикт не выносится
+    раньше, чем истекла отсрочка продления (issue #25).
+    """
     with tenant_tx(who.tenant_id) as cur:
-        since, until, _ = _period(who, cur, from_, to)
-        return money.churn(cur, since, until, grace_days, limit)
+        since, until, tz_name = _period(who, cur, from_, to)
+        return money.churn(cur, since, until, grace_days, limit, tz_name)
 
 
 @app.get(f"{API}/reports/debts", response_model=schemas.DebtsReport, tags=["Деньги"])
