@@ -263,6 +263,14 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .rule li span { color: var(--ink-3); }
 .rule li em { font-style: normal; font-weight: 600; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 
+/* Отмена ошибочной отметки. Кнопки стоят в блоке участника, а не в подвале
+   панели: подвал относится к занятию целиком, а отменяют всегда одного
+   человека — на групповом занятии это разница между «исправил» и «сломал». */
+.row-actions { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
+/* .btn.slim двигает себя вправо через margin-left:auto — в паре кнопок это
+   разорвало бы их по краям, поэтому выравнивание задаёт контейнер */
+.row-actions .btn.slim { flex: none; margin-left: 0; }
+
 /* Счётчик занятий абонемента: количество читается, а не оценивается на глаз */
 .meter { display: flex; gap: 3px; margin: 8px 0; }
 .meter i { flex: 1; height: 18px; border-radius: 2px; background: var(--panel-3); border: 1px solid var(--line); }

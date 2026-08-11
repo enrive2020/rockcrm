@@ -152,6 +152,14 @@ export interface LessonParticipant {
   name: string;
   /** Уже проставленная отметка, иначе null. */
   attendance: AttendanceMark | null;
+  /**
+   * Идентификатор проставленной отметки — единственное, чем можно вызвать
+   * `DELETE /attendance/{id}`. Контракт этапа 1 его в карточке не описывал,
+   * поэтому отмена и не была сделана; бэкенд поле добавил (задача #10).
+   * `null` — участник не отмечен либо сервер поле ещё не отдаёт: в этом
+   * случае кнопка отмены не показывается, а не ломает панель.
+   */
+  attendance_id: string | null;
   /** null — действующего абонемента нет, занятие идёт разовой оплатой. */
   subscription: Subscription | null;
   mark_effects: MarkEffects;
@@ -213,12 +221,37 @@ export interface AttendanceResponse {
 
 /* ---------- DELETE /api/v1/attendance/{id} ---------- */
 
-/** Контракт описывает «200 с описанием компенсации», но не даёт тела.
- *  Держим форму по аналогии с POST и помечаем поля необязательными. */
+/**
+ * Что именно вернулось при отмене отметки. Знаки зеркальны применению:
+ * списанное занятие приходит как `lessons_delta: +1`, начисление
+ * преподавателю — как отрицательная корректировка.
+ *
+ * `*_after` допускают null: у ученика без абонемента возвращать некуда,
+ * и сервер честно отдаёт «остатка нет», а не ноль.
+ */
+export interface RevertedEffect {
+  lessons_delta: number;
+  lessons_after: number | null;
+  makeups_delta: number;
+  makeups_after: number | null;
+  teacher_amount: number;
+  teacher_id: string;
+  subscription_id: string | null;
+}
+
+/**
+ * Контракт этапа 1 описывает «200 с описанием компенсации», но тела не даёт.
+ * Форма списана с реализации бэкенда (`schemas.AttendanceRevoked`): держать
+ * здесь выдуманную по аналогии структуру означало бы молча разойтись
+ * с сервером на первом же вызове.
+ */
 export interface AttendanceRevokeResponse {
-  attendance_id?: string;
-  compensation?: Partial<AppliedEffect>;
-  lesson_status?: LessonStatus;
+  attendance_id: string;
+  mark: AttendanceMark;
+  revoked_at: string;
+  reverted: RevertedEffect;
+  /** `planned`, если действующих отметок на занятии не осталось. */
+  lesson_status: LessonStatus;
 }
 
 /* ==========================================================================
@@ -795,6 +828,45 @@ export interface FunnelReport {
   sources: FunnelSourceRow[];
   lost_reasons: { reason: LostReason; count: number }[];
   avg_days_to_won: number;
+}
+
+/* ==========================================================================
+   Справочники: GET /teachers, /rooms, /disciplines (задача #1)
+
+   В контрактах этих эндпоинтов нет — формы описаны по задаче #1 и по схеме
+   базы (`staff`, `staff_discipline`, `staff_branch`, `room`, `discipline`).
+   Всё, чего задача не гарантирует явно, объявлено необязательным: пока
+   бэкенд их не отдаёт, интерфейс должен работать на запасном пути,
+   а не падать на отсутствующем ключе.
+   ========================================================================== */
+
+export interface DirectoryTeacher {
+  id: string;
+  name: string;
+  /** Направления, которые преподаватель ведёт: «Барабаны», «Гитара». */
+  disciplines?: string[];
+  /** Филиалы, где он работает. Пусто — считаем, что во всех. */
+  branch_ids?: string[];
+  /** Цвет дорожки, тот же, что в расписании. */
+  color?: string;
+  rate?: number;
+}
+
+export interface DirectoryRoom {
+  id: string;
+  name: string;
+  branch_id: string;
+  /** `room.features`: барабанную установку под барабаны не подменишь. */
+  features?: Record<string, boolean>;
+}
+
+export interface Discipline {
+  id: string;
+  name: string;
+  /** Минимальный возраст: барабаны с 5 лет, скрипка с 7. null — порога нет. */
+  min_age?: number | null;
+  /** Требования к кабинету, сверяются с `room.features`. */
+  room_reqs?: Record<string, boolean>;
 }
 
 /* ---------- Ошибки ---------- */

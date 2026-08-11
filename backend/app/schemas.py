@@ -43,6 +43,58 @@ class TeacherBrief(BaseModel):
     color: str | None = None
 
 
+# Ссылка на объект по имени. Объявлена здесь, а не рядом с заявками, потому
+# что ею пользуются и справочники, и карточка заявки: одна форма ссылки
+# на всю систему избавляет фронтенд от разбора двух похожих.
+class NamedRef(BaseModel):
+    id: str
+    name: str | None = None
+
+
+class DisciplineRef(NamedRef):
+    # Минимальный возраст едет вместе с направлением везде, где его
+    # показывают рядом с возрастом ученика. Порог у каждой школы свой
+    # (`discipline.min_age`), и таблица порогов на клиенте сломалась бы
+    # на первой же школе, которая берёт на барабаны с четырёх лет.
+    min_age: int | None = None
+
+
+# ---------------------------------------------------------------------------
+# Справочники для форм интерфейса
+#
+# До них интерфейсу было негде взять списки: преподаватели и кабинеты
+# выковыривались из расписания дня, то есть из тех, у кого сегодня есть
+# занятия, а направление в форме заявки выбрать было нельзя вовсе.
+# ---------------------------------------------------------------------------
+
+
+class Discipline(DisciplineRef):
+    name: str
+    # Требования к кабинету — для диалога назначения пробного: барабаны
+    # требуют установки, и кабинет без неё можно погасить до отправки формы.
+    room_reqs: dict[str, Any] = {}
+
+
+class Teacher(BaseModel):
+    id: str
+    name: str
+    phone: str | None = None
+    color: str | None = None
+    # Объектами, а не строками: диалогу нужно отфильтровать преподавателей
+    # по выбранному направлению, а по названию это делается сравнением
+    # строк — то есть ломается на первом же переименовании.
+    disciplines: list[NamedRef] = []
+    branches: list[NamedRef] = []
+
+
+class Room(BaseModel):
+    id: str
+    name: str
+    branch: NamedRef
+    capacity: int
+    features: dict[str, Any] = {}
+
+
 class Conflict(BaseModel):
     kind: Literal["room", "teacher"]
     with_lesson_id: str
@@ -419,11 +471,6 @@ LostReason = Literal[
 ]
 
 
-class NamedRef(BaseModel):
-    id: str
-    name: str | None = None
-
-
 class TrialBrief(BaseModel):
     lesson_id: str
     starts_at: str
@@ -454,7 +501,10 @@ class LeadCard(BaseModel):
 class LeadFull(LeadCard):
     # Направление и филиал в карточке — объекты, а в списке хватает названия:
     # диалогу назначения пробного нужен идентификатор, доске — нет.
-    discipline: NamedRef | None = None
+    # У направления едет и min_age: контракт требует предупредить, если
+    # ребёнок младше минимального возраста, а без порога интерфейсу нечем
+    # ни сравнить, ни объяснить предупреждение («берут с 7, а ему 5»).
+    discipline: DisciplineRef | None = None
     branch: NamedRef | None = None
     lost_reason: LostReason | None = None
     utm: dict[str, Any] = {}

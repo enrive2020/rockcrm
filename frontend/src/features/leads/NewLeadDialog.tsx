@@ -1,15 +1,24 @@
 import { useState } from 'react';
-import { ApiError, SOURCES, SOURCE_LABELS, api, type Branch, type LeadCard, type LeadSource } from '../../api';
+import {
+  ApiError,
+  SOURCES,
+  SOURCE_LABELS,
+  api,
+  type Branch,
+  type Discipline,
+  type LeadCard,
+  type LeadSource,
+} from '../../api';
 import { useAsync } from '../../lib/useAsync';
 import { Dialog } from '../../components/Dialog';
 
 /**
  * Заведение заявки вручную — администратор принял звонок.
  *
- * Направление здесь не выбирается: справочника направлений контракт не даёт
- * ни одним эндпоинтом, а `discipline_id` — это uuid, который клиенту взять
- * неоткуда. Заявка создаётся без направления и с пометкой в комментарии;
- * как только появится `GET /disciplines`, поле встанет сюда за десять минут.
+ * Направление берётся из справочника `GET /disciplines` (задача #1).
+ * Пока эндпоинта нет на живом бэкенде, список приходит пустым, поле
+ * прячется и заявка создаётся без направления — как и раньше. Выдумывать
+ * `discipline_id` на клиенте нельзя: это uuid из базы школы.
  */
 export function NewLeadDialog({
   branchId,
@@ -21,6 +30,8 @@ export function NewLeadDialog({
   onCreated: (lead: LeadCard) => void;
 }) {
   const branches = useAsync<Branch[]>(() => api.branches(), []);
+  const disciplines = useAsync<Discipline[]>(() => api.disciplines(), []);
+  const [disciplineId, setDisciplineId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [studentName, setStudentName] = useState('');
@@ -42,6 +53,7 @@ export function NewLeadDialog({
         phone: phone.trim(),
         ...(studentName.trim() ? { student_name: studentName.trim() } : {}),
         ...(age ? { student_age: Number(age) } : {}),
+        discipline_id: disciplineId,
         branch_id: branch,
         source,
         ...(comment.trim() ? { comment: comment.trim() } : {}),
@@ -111,6 +123,26 @@ export function NewLeadDialog({
             onChange={(event) => setAge(event.target.value)}
           />
         </label>
+        {/* Пока справочник не отвечает, поля нет вовсе: пустой выпадающий
+            список выглядел бы как «направлений в школе нет» */}
+        {(disciplines.data ?? []).length > 0 && (
+          <label className="field">
+            <span>Направление</span>
+            <select
+              className="inp"
+              value={disciplineId ?? ''}
+              onChange={(event) => setDisciplineId(event.target.value || null)}
+            >
+              <option value="">Не указано</option>
+              {(disciplines.data ?? []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                  {d.min_age ? ` · с ${d.min_age} лет` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="field">
           <span>Источник</span>
           <select className="inp" value={source} onChange={(event) => setSource(event.target.value as LeadSource)}>

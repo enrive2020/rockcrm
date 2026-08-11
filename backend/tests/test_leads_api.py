@@ -270,6 +270,22 @@ def test_card_warns_about_age_below_minimum(client):
     assert ok_card(client, "alisa")["age_warning"] is None
 
 
+def test_card_discipline_carries_min_age(client):
+    """Порог возраста едет вместе с направлением, а не зашит в интерфейс.
+
+    Готовой фразы мало: интерфейсу нужно и само число — подсветить поле
+    возраста и сравнить его прямо при вводе, не дожидаясь ответа сервера.
+    Захардкоженная таблица порогов сломалась бы на первой же школе,
+    которая берёт на барабаны с четырёх: min_age — настройка школы.
+    """
+    body = ok_card(client, "aruzhan")
+    assert body["discipline"]["id"] == DISC_DRUMS
+    assert body["discipline"]["min_age"] == 5
+    # Порог и предупреждение считаются из одного поля и разъехаться не могут:
+    # иначе на экране было бы «берут с 5 лет», а подсветка срабатывала бы с 7.
+    assert f"с {body['discipline']['min_age']} лет" in body["age_warning"]
+
+
 def test_card_of_other_tenant_is_404(client):
     assert card(client, "alisa", headers=HEADERS_OTHER).status_code == 404
 

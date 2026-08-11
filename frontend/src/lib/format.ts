@@ -4,7 +4,12 @@
 export const money = (value: number): string =>
   `${Math.abs(value).toLocaleString('ru-RU').replace(/[  ,]/g, ' ')} ₸`;
 
-export const signedMoney = (value: number): string => (value > 0 ? `+${money(value)}` : money(value));
+/**
+ * Знак обязателен: «4 500 ₸» и «−4 500 ₸» — это начисление и его снятие,
+ * и путать их нельзя. `money` печатает модуль, поэтому минус ставится здесь.
+ */
+export const signedMoney = (value: number): string =>
+  value > 0 ? `+${money(value)}` : value < 0 ? `−${money(value)}` : money(0);
 
 export const plural = (n: number, one: string, few: string, many: string): string => {
   const a = Math.abs(n) % 100;

@@ -121,6 +121,139 @@ def get_branch(cur: psycopg.Cursor, branch_id: str) -> dict[str, Any] | None:
 
 
 # ---------------------------------------------------------------------------
+# Справочники для форм интерфейса
+#
+# Отдельные списки, а не выборка из расписания дня. Раньше интерфейс собирал
+# преподавателей и кабинеты из GET /schedule, то есть из тех, у кого в этот
+# день есть занятия: преподаватель с выходным в диалог назначения пробного
+# не попадал вовсе, а направление в форме заявки выбрать было не из чего.
+# Срез дня — не справочник, и совпадение его со справочником случайно.
+#
+# Архивные строки не отдаются: справочник заполняет форму, а поставить
+# занятие в закрытый кабинет или уволенному преподавателю нельзя.
+# ---------------------------------------------------------------------------
+
+
+def list_teachers(
+    cur: psycopg.Cursor, branch_id: str | None = None, discipline_id: str | None = None
+) -> list[dict[str, Any]]:
+    """Преподаватели школы вместе с направлениями и филиалами.
+
+    Направления и филиалы собираются подзапросами в json, а не отдельными
+    запросами по каждому преподавателю: список открывается на каждое
+    открытие диалога, и три десятка лишних обращений на нём не нужны.
+
+    Фильтры необязательны и сужают список ровно так, как спрашивает форма:
+    «кто ведёт барабаны в Аль-Фараби». Условие через EXISTS, а не через JOIN,
+    чтобы преподаватель с двумя направлениями не задвоился в выдаче.
+    """
+    cur.execute(
+        """
+        SELECT s.id,
+               btrim(concat_ws(' ', p.first_name, p.last_name)) AS name,
+               p.phone,
+               s.color,
+               coalesce((
+                 SELECT json_agg(json_build_object('id', d.id, 'name', d.name)
+                                 ORDER BY d.sort_order, d.name)
+                 FROM staff_discipline sd
+                 JOIN discipline d ON d.id = sd.discipline_id
+                 WHERE sd.staff_id = s.id AND d.archived_at IS NULL
+               ), '[]'::json) AS disciplines,
+               coalesce((
+                 SELECT json_agg(json_build_object('id', b.id, 'name', b.name)
+                                 ORDER BY b.name)
+                 FROM staff_branch sb
+                 JOIN branch b ON b.id = sb.branch_id
+                 WHERE sb.staff_id = s.id AND b.archived_at IS NULL
+               ), '[]'::json) AS branches
+        FROM staff s
+        JOIN person p ON p.id = s.person_id
+        WHERE s.kind = 'teacher'
+          AND s.archived_at IS NULL
+          AND (%(branch)s::uuid IS NULL OR EXISTS (
+                SELECT 1 FROM staff_branch sb
+                WHERE sb.staff_id = s.id AND sb.branch_id = %(branch)s::uuid))
+          AND (%(disc)s::uuid IS NULL OR EXISTS (
+                SELECT 1 FROM staff_discipline sd
+                WHERE sd.staff_id = s.id AND sd.discipline_id = %(disc)s::uuid))
+        ORDER BY p.last_name NULLS LAST, p.first_name
+        """,
+        {"branch": branch_id, "disc": discipline_id},
+    )
+    return [
+        {
+            "id": str(row["id"]),
+            "name": row["name"],
+            "phone": row["phone"],
+            "color": row["color"],
+            "disciplines": row["disciplines"],
+            "branches": row["branches"],
+        }
+        for row in cur.fetchall()
+    ]
+
+
+def list_rooms(cur: psycopg.Cursor, branch_id: str | None = None) -> list[dict[str, Any]]:
+    """Кабинеты вместе с филиалом и характеристиками.
+
+    `features` отдаётся как есть: диалог назначения пробного сверяет их
+    с `discipline.room_reqs` и гасит кабинет без установки до отправки формы,
+    а не ждёт 422 от сервера. Правило при этом остаётся на сервере —
+    интерфейс только избавляет администратора от заведомо неверного выбора.
+    """
+    cur.execute(
+        """
+        SELECT r.id, r.name, r.capacity, r.features,
+               r.branch_id, b.name AS branch_name
+        FROM room r
+        JOIN branch b ON b.id = r.branch_id
+        WHERE r.archived_at IS NULL
+          AND b.archived_at IS NULL
+          AND (%(branch)s::uuid IS NULL OR r.branch_id = %(branch)s::uuid)
+        ORDER BY b.name, r.name
+        """,
+        {"branch": branch_id},
+    )
+    return [
+        {
+            "id": str(row["id"]),
+            "name": row["name"],
+            "branch": {"id": str(row["branch_id"]), "name": row["branch_name"]},
+            "capacity": int(row["capacity"]),
+            "features": dict(row["features"] or {}),
+        }
+        for row in cur.fetchall()
+    ]
+
+
+def list_disciplines(cur: psycopg.Cursor) -> list[dict[str, Any]]:
+    """Направления школы с минимальным возрастом и требованиями к кабинету.
+
+    `min_age` отдаётся здесь же, а не зашивается в интерфейс: барабаны
+    с 5 лет и скрипка с 7 — настройка школы, и первая же школа, берущая
+    на барабаны с четырёх, сломала бы захардкоженную таблицу порогов.
+    """
+    cur.execute(
+        """
+        SELECT id, name, min_age, room_reqs
+        FROM discipline
+        WHERE archived_at IS NULL
+        ORDER BY sort_order, name
+        """
+    )
+    return [
+        {
+            "id": str(row["id"]),
+            "name": row["name"],
+            "min_age": int(row["min_age"]) if row["min_age"] is not None else None,
+            "room_reqs": dict(row["room_reqs"] or {}),
+        }
+        for row in cur.fetchall()
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Расписание на день
 # ---------------------------------------------------------------------------
 

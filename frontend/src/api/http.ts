@@ -1,10 +1,14 @@
 import type {
   AttendanceRequest,
   AttendanceResponse,
+  AttendanceRevokeResponse,
   Branch,
   ConvertRequest,
   ConvertResponse,
   CreateLeadRequest,
+  DirectoryRoom,
+  DirectoryTeacher,
+  Discipline,
   FunnelReport,
   HoldRequest,
   HoldReleaseResponse,
@@ -102,6 +106,25 @@ export const httpApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  /**
+   * Отмена ошибочной отметки. Идентификатор берётся из `participants[].attendance_id`
+   * карточки занятия — другого источника у интерфейса нет.
+   */
+  revokeAttendance: (attendanceId: string) =>
+    request<AttendanceRevokeResponse>(`/attendance/${encodeURIComponent(attendanceId)}`, { method: 'DELETE' }),
+
+  /* ---------- справочники (задача #1) ---------- */
+
+  /**
+   * Списки для форм. Пока эндпоинтов нет на живом бэкенде, запрос вернёт 404,
+   * и вызывающая сторона откатится на сбор списков из расписания — но
+   * основным источником считается справочник, а не срез дня.
+   */
+  teachers: (branchId?: string | null) =>
+    request<DirectoryTeacher[]>(`/teachers${branchId ? `?branch_id=${encodeURIComponent(branchId)}` : ''}`),
+  rooms: (branchId?: string | null) =>
+    request<DirectoryRoom[]>(`/rooms${branchId ? `?branch_id=${encodeURIComponent(branchId)}` : ''}`),
+  disciplines: () => request<Discipline[]>('/disciplines'),
 
   /* ---------- этап 2 ---------- */
 

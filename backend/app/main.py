@@ -134,6 +134,45 @@ def branches(who: CallerDep) -> list[dict[str, Any]]:
         return repo.list_branches(cur)
 
 
+@app.get(f"{API}/teachers", response_model=list[schemas.Teacher], tags=["Справочники"])
+def teachers(
+    who: CallerDep,
+    branch_id: Annotated[str | None, Query(description="Только работающие в филиале")] = None,
+    discipline_id: Annotated[
+        str | None, Query(description="Только ведущие это направление")
+    ] = None,
+) -> list[dict[str, Any]]:
+    """Преподаватели школы — справочник для диалога назначения пробного.
+
+    Не срез дня из расписания: преподаватель с выходным обязан быть в списке,
+    иначе назначить ему пробный на завтра нельзя.
+    """
+    with tenant_tx(who.tenant_id) as cur:
+        return repo.list_teachers(cur, branch_id, discipline_id)
+
+
+@app.get(f"{API}/rooms", response_model=list[schemas.Room], tags=["Справочники"])
+def rooms(
+    who: CallerDep,
+    branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
+) -> list[dict[str, Any]]:
+    """Кабинеты с филиалом и характеристиками (`features`)."""
+    with tenant_tx(who.tenant_id) as cur:
+        return repo.list_rooms(cur, branch_id)
+
+
+@app.get(f"{API}/disciplines", response_model=list[schemas.Discipline], tags=["Справочники"])
+def disciplines(who: CallerDep) -> list[dict[str, Any]]:
+    """Направления с `min_age` и требованиями к кабинету.
+
+    Без них форма заведения заявки не может предложить направление вовсе,
+    и заявка уходит в воронку с пустым `discipline_id` — то есть выпадает
+    из отчёта по направлениям.
+    """
+    with tenant_tx(who.tenant_id) as cur:
+        return repo.list_disciplines(cur)
+
+
 @app.get(f"{API}/schedule", response_model=schemas.Schedule, tags=["Расписание"])
 def schedule(
     who: CallerDep,

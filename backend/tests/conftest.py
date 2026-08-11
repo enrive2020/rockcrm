@@ -40,12 +40,29 @@ ADMIN_URL = config.ADMIN_DATABASE_URL.rsplit("/", 1)[0] + "/" + config.APP_DB_NA
 def fresh_data() -> None:
     """Перед каждым тестом база возвращается к демо-дню.
 
-    Отметка необратима по-настоящему: отменённая строка attendance остаётся
-    и занимает уникальный ключ (lesson_id, student_id). Значит, «откатить»
-    тест правкой данных нельзя — только пересеять.
+    Тесты идут через настоящее API и оставляют за собой отметки, записи
+    журнала, платежи и заявки. Журналы неизменяемы по устройству схемы,
+    так что «откатить» тест правкой данных нельзя — только пересеять.
     """
     with psycopg.connect(ADMIN_URL) as conn:
         seed_demo.seed(conn)
+
+
+def has_partial_attendance_index() -> bool:
+    """Накатана ли миграция 008 — частичный индекс attendance_active_uniq.
+
+    Переотметка занятия после отмены держится не на коде, а на схеме,
+    и проверять её на базе со сплошным UNIQUE (lesson_id, student_id)
+    бессмысленно: тест упал бы на отсутствующей миграции, а не на ошибке.
+    Проверка спрашивает базу, а не файлы в db/: значение имеет то, что
+    накатано, а не то, что лежит в репозитории.
+    """
+    with psycopg.connect(ADMIN_URL) as conn:
+        found = conn.execute(
+            "SELECT 1 FROM pg_indexes WHERE tablename = 'attendance' AND indexname = %s",
+            ("attendance_active_uniq",),
+        ).fetchone()
+    return found is not None
 
 
 @pytest.fixture

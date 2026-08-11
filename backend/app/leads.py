@@ -164,10 +164,24 @@ def _full(cur: psycopg.Cursor, row: dict[str, Any], now: dt.datetime) -> dict[st
     card = _card(cur, row, now)
     card.update(
         {
+            # min_age едет вместе с направлением, а не выводится клиентом:
+            # контракт требует предупредить, когда ребёнок младше порога
+            # («барабаны с 5, скрипка с 7»), а порог — настройка школы.
+            # Готовая фраза лежит в age_warning, но интерфейсу нужен и сам
+            # порог: подсветить поле возраста и назвать число в подсказке
+            # по тексту предупреждения нечем.
             "discipline": (
                 None
                 if row["discipline_id"] is None
-                else {"id": str(row["discipline_id"]), "name": row["discipline"]}
+                else {
+                    "id": str(row["discipline_id"]),
+                    "name": row["discipline"],
+                    "min_age": (
+                        int(row["discipline_min_age"])
+                        if row["discipline_min_age"] is not None
+                        else None
+                    ),
+                }
             ),
             "branch": (
                 None

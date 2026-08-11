@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react';
-import { ApiError, api, type LeadCard, type ScheduleResponse } from '../../api';
+import {
+  ApiError,
+  api,
+  type DirectoryRoom,
+  type DirectoryTeacher,
+  type LeadCard,
+  type ScheduleResponse,
+} from '../../api';
 import { useAsync } from '../../lib/useAsync';
 import { dateGen, money, plural, wallMinutes, wallTime } from '../../lib/format';
 import { TODAY } from '../../lib/today';
@@ -19,9 +26,11 @@ const DEFAULT_PRICE = 2000;
  * филиалы и параллельные брони, поэтому его `409` не считается ошибкой
  * интерфейса: он превращается в вопрос «поставить всё равно?».
  *
- * Справочник преподавателей и кабинетов контракт не даёт ни одним эндпоинтом,
- * поэтому он собирается из расписания: выбранный день плюс сегодняшний
- * как запасной источник, если на выбранную дату занятий ещё нет.
+ * Преподаватели и кабинеты берутся из справочников `GET /teachers` и
+ * `GET /rooms` (задача #1). Пока их нет на живом бэкенде, запрос отвечает
+ * 404, и списки собираются из расписания — выбранный день плюс сегодняшний.
+ * Запасной путь оставлен именно запасным: он даёт не справочник, а срез дня,
+ * и преподаватель без занятий в этот день в нём не появляется.
  */
 export function TrialDialog({
   lead,
@@ -55,15 +64,26 @@ export function TrialDialog({
     branchId !== null,
   );
 
+  const teacherBook = useAsync<DirectoryTeacher[]>(() => api.teachers(branchId), [branchId], branchId !== null);
+  const roomBook = useAsync<DirectoryRoom[]>(() => api.rooms(branchId), [branchId], branchId !== null);
+  /** Справочники отсутствуют или пусты — работаем по расписанию, но говорим об этом. */
+  const fromSchedule = (teacherBook.data ?? []).length === 0 || (roomBook.data ?? []).length === 0;
+
   const teachers = useMemo(() => {
+    if (teacherBook.data && teacherBook.data.length > 0) {
+      return teacherBook.data.map((t) => ({ id: t.id, name: t.name }));
+    }
     const map = new Map<string, string>();
     for (const schedule of [day.data, reference.data]) {
       for (const track of schedule?.tracks ?? []) map.set(track.teacher.id, track.teacher.name);
     }
     return [...map.entries()].map(([id, name]) => ({ id, name }));
-  }, [day.data, reference.data]);
+  }, [teacherBook.data, day.data, reference.data]);
 
   const rooms = useMemo(() => {
+    if (roomBook.data && roomBook.data.length > 0) {
+      return roomBook.data.map((r) => ({ id: r.id, name: r.name }));
+    }
     const map = new Map<string, string>();
     for (const schedule of [day.data, reference.data]) {
       for (const track of schedule?.tracks ?? []) {
@@ -71,7 +91,7 @@ export function TrialDialog({
       }
     }
     return [...map.entries()].map(([id, name]) => ({ id, name }));
-  }, [day.data, reference.data]);
+  }, [roomBook.data, day.data, reference.data]);
 
   const teacher = teachers.find((t) => t.id === teacherId) ?? teachers[0];
   const room = rooms.find((r) => r.id === roomId) ?? rooms[0];
@@ -185,10 +205,12 @@ export function TrialDialog({
         </div>
       )}
 
-      {(day.loading || reference.loading) && <div className="skeleton" style={{ height: 120 }} />}
+      {(day.loading || reference.loading || teacherBook.loading || roomBook.loading) && (
+        <div className="skeleton" style={{ height: 120 }} />
+      )}
       {day.error && <div className="err-inline">{day.error.message}</div>}
 
-      {branchId && !day.loading && !day.error && (
+      {branchId && !day.loading && !day.error && !teacherBook.loading && !roomBook.loading && (
         <>
           <div className="blk fields">
             <label className="field">
@@ -276,6 +298,13 @@ export function TrialDialog({
               />
             </label>
           </div>
+
+          {fromSchedule && (
+            <p className="hint" style={{ marginTop: -8 }}>
+              Справочники преподавателей и кабинетов недоступны — списки собраны из расписания филиала. Преподавателя
+              без занятий в эти дни в них не будет.
+            </p>
+          )}
 
           <div className="blk">
             <span className="lbl">Занятость на {dateGen(date)}</span>

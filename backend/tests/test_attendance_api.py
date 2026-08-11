@@ -8,9 +8,19 @@ from __future__ import annotations
 
 import datetime as dt
 
+import psycopg
 import pytest
 
-from conftest import HEADERS, TENANT, get_card, lesson, participant, student, subscription
+from conftest import (
+    HEADERS,
+    TENANT,
+    get_card,
+    has_partial_attendance_index,
+    lesson,
+    participant,
+    student,
+    subscription,
+)
 from scripts import seed_demo
 
 ALL_MARKS = ["came", "late", "no_show", "cancelled_early", "cancelled_late", "cancelled_teacher"]
@@ -80,6 +90,14 @@ def test_apply_writes_all_four_records_in_one_transaction(client, sql):
     assert response.json()["lesson_status"] == "held"
     status = sql.execute("SELECT status FROM lesson WHERE id = %s", (lesson(LESSON),)).fetchone()
     assert status["status"] == "held"
+
+
+def balance(sql, student_key: str) -> int:
+    row = sql.execute(
+        "SELECT lessons_balance FROM subscription WHERE id = %s",
+        (subscription(student_key),),
+    ).fetchone()
+    return int(row["lessons_balance"])
 
 
 def charges(sql, student_key: str) -> int:
@@ -389,14 +407,65 @@ def test_revoke_of_foreign_tenant_is_404(client):
     assert response.status_code == 404
 
 
-def test_remark_after_revoke_is_refused_with_explanation(client):
-    """База держит один ключ (занятие, ученик) даже для отменённых отметок.
+@pytest.mark.skipif(
+    not has_partial_attendance_index(),
+    reason="нужна миграция 008: частичный индекс attendance_active_uniq",
+)
+def test_remark_after_revoke_is_allowed(client, sql):
+    """Ошибся, отменил, отметил заново — сценарий обязан замыкаться.
 
-    Это ограничение схемы, и молчать о нём нельзя: администратор должен
-    понять, что переотметить то же занятие не выйдет.
+    Пока уникальный индекс (lesson_id, student_id) был сплошным, отменённая
+    строка продолжала занимать ключ, и занятие оставалось неотмеченным
+    навсегда: единственным выходом было бросить его как есть. Частичный
+    индекс `WHERE revoked_at IS NULL` снимает тупик, не трогая принцип —
+    отмена по-прежнему компенсация, а не удаление.
     """
-    applied = mark(client, LESSON, STUDENT, "came").json()
-    client.delete(f"/api/v1/attendance/{applied['attendance_id']}", headers=HEADERS)
-    again = mark(client, LESSON, STUDENT, "late")
-    assert again.status_code == 409
-    assert again.json()["error"]["code"] == "mark_revoked"
+    before = balance(sql, STUDENT)
+
+    wrong = mark(client, LESSON, STUDENT, "came").json()
+    assert balance(sql, STUDENT) == before - 1
+    assert client.delete(
+        f"/api/v1/attendance/{wrong['attendance_id']}", headers=HEADERS
+    ).status_code == 200
+    assert balance(sql, STUDENT) == before
+
+    right = mark(client, LESSON, STUDENT, "late")
+    assert right.status_code == 201, right.text
+    assert right.json()["attendance_id"] != wrong["attendance_id"]
+    # Списание пошло заново и ровно одно: остаток не должен ни застрять
+    # на возвращённом, ни уехать на два.
+    assert balance(sql, STUDENT) == before - 1
+
+    # Ошибочная отметка остаётся в базе отменённой: отмена — компенсация,
+    # а не стирание истории, и обе строки обязаны быть видны.
+    rows = sql.execute(
+        """SELECT mark, revoked_at FROM attendance
+            WHERE lesson_id = %s AND student_id = %s ORDER BY marked_at""",
+        (lesson(LESSON), student(STUDENT)),
+    ).fetchall()
+    assert [(r["mark"], r["revoked_at"] is None) for r in rows] == [
+        ("came", False),
+        ("late", True),
+    ]
+
+
+def test_second_active_mark_is_still_refused_by_the_index(client, sql):
+    """Частичный индекс ослабил ключ ровно на отменённые строки — и только.
+
+    Проверяем не через API (там раньше сработает предварительная проверка),
+    а вставкой напрямую: гарантию даёт база, а не порядок операторов
+    в приложении, и два администратора в гонке упрутся именно в неё.
+
+    Тест не привязан к миграции 008 намеренно: он обязан выполняться
+    и до неё, и после — в этом и смысл, что послабление коснулось только
+    отменённых отметок.
+    """
+    mark(client, LESSON, STUDENT, "came")
+
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        sql.execute(
+            """INSERT INTO attendance (tenant_id, lesson_id, student_id, mark)
+               VALUES (%s, %s, %s, 'no_show')""",
+            (TENANT, lesson(LESSON), student(STUDENT)),
+        )
+    sql.rollback()
