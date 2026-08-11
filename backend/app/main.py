@@ -1,0 +1,309 @@
+"""HTTP-слой RockCRM. Этап 1: расписание и отметка посещаемости."""
+from __future__ import annotations
+
+import datetime as dt
+import uuid
+from contextlib import asynccontextmanager
+from typing import Annotated, Any
+from zoneinfo import ZoneInfo
+
+import psycopg
+from fastapi import Depends, FastAPI, Header, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from . import attendance as attendance_service
+from . import config, repository as repo, schemas
+from .db import close_pool, get_pool, tenant_tx
+from .errors import ApiError, not_found, translate_db_error
+from .rules import compute_all_effects
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    get_pool()
+    yield
+    close_pool()
+
+
+app = FastAPI(
+    title="RockCRM API",
+    version="1.0.0",
+    description="Расписание и отметка посещаемости. Контракт этапа 1.",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=config.CORS_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ---------------------------------------------------------------------------
+# Заголовки тенанта и пользователя
+#
+# TODO: заглушка до появления входа. Настоящая авторизация придёт следующим
+# этапом и будет доставать тенанта и пользователя из токена, но контур изоляции
+# обязан работать уже сейчас — иначе он никогда не будет протестирован.
+# ---------------------------------------------------------------------------
+
+
+def _uuid_or_401(value: str | None, header: str) -> str:
+    if not value:
+        raise ApiError(401, "no_tenant", f"Заголовок {header} обязателен.")
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        raise ApiError(400, "bad_header", f"Заголовок {header} должен быть UUID.") from None
+
+
+class Caller:
+    def __init__(self, tenant_id: str, user_id: str) -> None:
+        self.tenant_id = tenant_id
+        self.user_id = user_id
+
+
+def caller(
+    x_tenant_id: Annotated[str | None, Header()] = None,
+    x_user_id: Annotated[str | None, Header()] = None,
+) -> Caller:
+    return Caller(
+        _uuid_or_401(x_tenant_id, "X-Tenant-Id"),
+        _uuid_or_401(x_user_id, "X-User-Id"),
+    )
+
+
+CallerDep = Annotated[Caller, Depends(caller)]
+
+
+# ---------------------------------------------------------------------------
+# Обработка ошибок: наружу всегда {"error": {...}}
+# ---------------------------------------------------------------------------
+
+
+@app.exception_handler(ApiError)
+async def _api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status, content=exc.body())
+
+
+@app.exception_handler(psycopg.Error)
+async def _db_error_handler(request: Request, exc: psycopg.Error) -> JSONResponse:
+    # Ограничения базы — это бизнес-правила, а не сбой: 409/422 с текстом,
+    # а не 500 «что-то пошло не так».
+    api = translate_db_error(exc)
+    return JSONResponse(status_code=api.status, content=api.body())
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    fields = ", ".join(".".join(str(p) for p in e["loc"][1:]) or "тело" for e in exc.errors())
+    api = ApiError(
+        400,
+        "bad_request",
+        f"Тело или параметры запроса не прошли проверку: {fields}.",
+        {"errors": [{"loc": list(e["loc"]), "msg": e["msg"]} for e in exc.errors()]},
+    )
+    return JSONResponse(status_code=api.status, content=api.body())
+
+
+# ---------------------------------------------------------------------------
+# Ресурсы
+# ---------------------------------------------------------------------------
+
+API = "/api/v1"
+
+
+@app.get(f"{API}/branches", response_model=list[schemas.Branch], tags=["Справочники"])
+def branches(who: CallerDep) -> list[dict[str, Any]]:
+    with tenant_tx(who.tenant_id) as cur:
+        return repo.list_branches(cur)
+
+
+@app.get(f"{API}/schedule", response_model=schemas.Schedule, tags=["Расписание"])
+def schedule(
+    who: CallerDep,
+    branch_id: Annotated[str, Query(description="UUID филиала")],
+    date: Annotated[dt.date, Query(description="День расписания, YYYY-MM-DD")],
+) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        branch = repo.get_branch(cur, branch_id)
+        if branch is None:
+            raise not_found("Филиал не найден")
+        tz = ZoneInfo(branch["timezone"])
+
+        lessons = repo.lessons_of_day(cur, branch_id, date, tz)
+        lesson_ids = [str(row["id"]) for row in lessons]
+        marks = repo.marks_by_lesson(cur, lesson_ids)
+        conflicts = repo.find_conflicts(lessons)
+        teacher_ids = list({str(row["teacher_id"]) for row in lessons})
+        disciplines = repo.disciplines_by_teacher(cur, teacher_ids)
+        rooms_total = repo.branch_room_count(cur, branch_id)
+
+        # Дорожки — только преподаватели с занятиями в этот день, в порядке
+        # первого занятия. Пустые дорожки съедали бы высоту экрана впустую.
+        tracks: dict[str, dict[str, Any]] = {}
+        for row in lessons:
+            teacher_id = str(row["teacher_id"])
+            track = tracks.setdefault(
+                teacher_id,
+                {
+                    "teacher": {
+                        "id": teacher_id,
+                        "name": row["teacher_name"],
+                        "disciplines": disciplines.get(teacher_id, []),
+                        "color": row["teacher_color"],
+                    },
+                    "lessons": [],
+                },
+            )
+            lesson_id = str(row["id"])
+            track["lessons"].append(
+                {
+                    "id": lesson_id,
+                    "starts_at": repo.iso(row["starts_at"], tz),
+                    "ends_at": repo.iso(row["ends_at"], tz),
+                    "duration_min": row["duration_min"],
+                    "kind": row["kind"],
+                    "status": row["status"],
+                    "title": row["title"],
+                    "student_id": str(row["student_id"]) if row["student_id"] else None,
+                    "room": {"id": str(row["room_id"]), "name": row["room_name"]},
+                    "attendance_mark": marks.get(lesson_id),
+                    "conflicts": conflicts.get(lesson_id, []),
+                }
+            )
+
+        open_minutes = _minutes_between(branch["opens_at"], branch["closes_at"])
+        busy_minutes = sum(row["duration_min"] for row in lessons)
+        capacity = rooms_total * open_minutes
+        conflict_pairs = {
+            frozenset((lesson_id, c["with_lesson_id"]))
+            for lesson_id, items in conflicts.items()
+            for c in items
+        }
+
+        return {
+            "date": date.isoformat(),
+            "branch": {
+                "id": str(branch["id"]),
+                "name": branch["name"],
+                "opens_at": branch["opens_at_txt"],
+                "closes_at": branch["closes_at_txt"],
+            },
+            "tracks": list(tracks.values()),
+            "summary": {
+                "lessons": len(lessons),
+                "trials": sum(1 for row in lessons if row["kind"] == "trial"),
+                "conflicts": len(conflict_pairs),
+                "room_utilization_pct": round(busy_minutes / capacity * 100) if capacity else 0,
+            },
+        }
+
+
+@app.get(f"{API}/lessons/{{lesson_id}}", response_model=schemas.LessonCard, tags=["Расписание"])
+def lesson_card(who: CallerDep, lesson_id: str) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        lesson = repo.get_lesson(cur, lesson_id)
+        if lesson is None:
+            raise not_found("Занятие не найдено")
+        tz = ZoneInfo(lesson["branch_timezone"])
+        rate_amount, rate_percent = repo.teacher_rate(cur, lesson)
+        marked = repo.attendance_by_student(cur, lesson_id)
+        on = lesson["starts_at"].date()
+
+        participants = []
+        for row in repo.lesson_participants(cur, lesson):
+            student_id = str(row["student_id"])
+            sub = repo.active_subscription(cur, student_id, on)
+            effects = compute_all_effects(sub, rate_amount, rate_percent)
+            att = marked.get(student_id)
+            participants.append(
+                {
+                    "student_id": student_id,
+                    "name": row["name"],
+                    "attendance": att["mark"] if att else None,
+                    "attendance_id": str(att["id"]) if att else None,
+                    "subscription": None
+                    if sub is None
+                    else {
+                        "id": sub.id,
+                        "lessons_total": sub.lessons_total,
+                        "lessons_balance": sub.lessons_balance,
+                        "makeups_balance": sub.makeups_balance,
+                        "valid_until": sub.valid_until.isoformat(),
+                        "status": sub.status,
+                    },
+                    "mark_effects": {m: e.api_dict() for m, e in effects.items()},
+                }
+            )
+
+        return {
+            "id": str(lesson["id"]),
+            "starts_at": repo.iso(lesson["starts_at"], tz),
+            "ends_at": repo.iso(lesson["ends_at"], tz),
+            "duration_min": lesson["duration_min"],
+            "kind": lesson["kind"],
+            "status": lesson["status"],
+            "title": lesson["title"],
+            "room": {"id": str(lesson["room_id"]), "name": lesson["room_name"]},
+            "teacher": {
+                "id": str(lesson["teacher_id"]),
+                "name": lesson["teacher_name"],
+                "rate": int(rate_amount) if rate_amount is not None else 0,
+            },
+            "participants": participants,
+            "note": repo.lesson_note(cur, lesson_id),
+        }
+
+
+@app.post(
+    f"{API}/lessons/{{lesson_id}}/attendance",
+    response_model=schemas.AttendanceApplied,
+    status_code=201,
+    tags=["Посещаемость"],
+)
+def mark_attendance(
+    who: CallerDep, lesson_id: str, body: schemas.AttendanceRequest
+) -> dict[str, Any]:
+    student_id = _uuid_or_400(body.student_id, "student_id")
+    with tenant_tx(who.tenant_id) as cur:
+        attendance_service.require_actor(cur, who.user_id)
+        return attendance_service.apply_mark(
+            cur, who.tenant_id, who.user_id, lesson_id, student_id, body.mark
+        )
+
+
+@app.delete(
+    f"{API}/attendance/{{attendance_id}}",
+    response_model=schemas.AttendanceRevoked,
+    tags=["Посещаемость"],
+)
+def revoke_attendance(who: CallerDep, attendance_id: str) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        attendance_service.require_actor(cur, who.user_id)
+        return attendance_service.revoke_mark(cur, who.tenant_id, who.user_id, attendance_id)
+
+
+@app.get(f"{API}/health", tags=["Служебное"])
+def health() -> dict[str, str]:
+    with get_pool().connection() as conn:
+        conn.execute("SELECT 1")
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+
+
+def _uuid_or_400(value: str, field: str) -> str:
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        raise ApiError(400, "bad_request", f"Поле {field} должно быть UUID.") from None
+
+
+def _minutes_between(start: dt.time, end: dt.time) -> int:
+    return (end.hour * 60 + end.minute) - (start.hour * 60 + start.minute)
