@@ -1229,9 +1229,21 @@ export const ROLE_LABELS: Record<Role, string> = {
   student: 'Ученик',
 };
 
+/**
+ * Контакты школы. Поля необязательные, потому что ни один контракт их
+ * не описывает (пробел 36): кабинету родителя они нужны обязательно —
+ * оплаты в нём нет намеренно, и он обязан вести к тому, кто её примет.
+ * Пока сервер их не отдаёт, кабинет берёт запасные из `VITE_SCHOOL_*`.
+ */
+export interface TenantContacts {
+  phone?: string | null;
+  whatsapp?: string | null;
+}
+
 export interface TenantRef {
   id: string;
   name: string;
+  contacts?: TenantContacts | null;
 }
 
 /** `GET /api/v1/auth/me` — единственный источник правды о роли. */
@@ -1286,6 +1298,184 @@ export interface LoggedOut {
   ok: boolean;
   /** «Вы вышли» и «Вы вышли из всех сеансов» — разные действия, разный текст. */
   message: string;
+}
+
+/* ==========================================================================
+   Этап 5: кабинет родителя (docs/contract-v5.md).
+
+   Ресурсы `/me/*` — ОТДЕЛЬНЫЕ, а не урезанная карточка ученика. Урезание —
+   операция вычитания, и она ошибается молча: стоит добавить поле в общую
+   карточку, и оно уедет родителю, если про него забыли. Здесь нет ни долга
+   семьи, ни риска оттока, ни внутренних заметок, ни ставки преподавателя,
+   и появиться они могут только сложением — осознанно.
+
+   Тенант и состав детей сервер берёт из сессии; идентификатор в пути
+   только сверяется со списком, чужой — 404, а не 403.
+   ========================================================================== */
+
+/** Абонемент в кабинете: остаток, срок и предупреждение. Ни цены, ни долга. */
+export interface MeSubscription {
+  lessons_balance: number;
+  lessons_total: number;
+  makeups_balance: number;
+  valid_until: string;
+  status: string;
+  /**
+   * СЧИТАЕТ СЕРВЕР. Порог «мало осталось» — правило школы, а не число
+   * в интерфейсе: зашитая на клиенте двойка разъедется с сервером
+   * при первой же правке настроек школы.
+   */
+  ends_soon: boolean;
+}
+
+export interface MeNextLesson {
+  lesson_id: string;
+  starts_at: string;
+  room: string | null;
+}
+
+/** `GET /api/v1/me/children` — свои дети с остатком и ближайшим занятием. */
+export interface MeChild {
+  student_id: string;
+  /** Короткое имя для обращения, `full_name` — полное. */
+  name: string;
+  full_name: string;
+  /** Возраст и направление у бэкенда допускают `null` — карточку это не ломает. */
+  age: number | null;
+  discipline: string | null;
+  teacher: { name: string } | null;
+  branch: { name: string; address: string } | null;
+  /** `null` — действующего абонемента нет. Это не ошибка, а повод продлить. */
+  subscription: MeSubscription | null;
+  next_lesson: MeNextLesson | null;
+}
+
+/** Занятие в расписании кабинета. Полей меньше, чем у сетки филиала. */
+export interface MeScheduleLesson {
+  lesson_id: string;
+  student_id: string;
+  student_name: string;
+  starts_at: string;
+  ends_at: string;
+  duration_min: number;
+  teacher: string | null;
+  branch: string | null;
+  room: string | null;
+  kind: LessonKind;
+  /** `cancelled` приходит и показывается: пустота в расписании страшнее отмены. */
+  status: LessonStatus;
+  attendance: AttendanceMark | null;
+  /** СЧИТАЕТ СЕРВЕР по правилам школы: порог отмены и «занятие уже проведено». */
+  can_request_reschedule: boolean;
+  /**
+   * Уже отправленная заявка на это занятие. Ключа нет в контракте — он снят
+   * с реализации (`schemas.FamilyLesson`) и объявлен необязательным. Без него
+   * «заявка отправлена» жила бы только в памяти вкладки, и после перезагрузки
+   * родитель увидел бы кнопку снова, нажал и получил `409` — то есть решил бы,
+   * что первая заявка потерялась.
+   */
+  reschedule_request?: { request_id: string; status: string } | null;
+}
+
+/** `GET /api/v1/me/schedule?from=&to=` — все дети сразу, а не по одному. */
+export interface MeSchedule {
+  period: { from: string; to: string };
+  lessons: MeScheduleLesson[];
+}
+
+/**
+ * Заметка преподавателя. Приходит только с `visible_to_family = true` —
+ * за это отвечает выборка на сервере, а не фильтр поверх ответа.
+ */
+export interface MeNote {
+  body: string;
+  homework: string | null;
+  tags: string[];
+}
+
+/** Движение абонемента вместе с занятием: видно, за что списано. */
+export interface MeHistoryEntry {
+  date: string;
+  /** Может отсутствовать у движений без занятия — см. пробел 38. */
+  starts_at: string | null;
+  /**
+   * Формулировка движения от сервера («Занятие проведено», «Прогул»).
+   * В контракте ключа нет, снят с реализации (`schemas.FamilyHistoryRow`)
+   * и объявлен необязательным: пересказывать движение своими словами значило
+   * бы завести второй источник правды рядом с журналом абонемента.
+   */
+  title?: string;
+  attendance: AttendanceMark | null;
+  lessons_delta: number;
+  /** Тоже сверх контракта: отработка, начисленная за отменённое занятие. */
+  makeups_delta?: number;
+  note: MeNote | null;
+}
+
+export interface MeMakeup {
+  expires_on: string;
+  days_left: number;
+}
+
+/** То, ради чего родитель платит и чего не видно в цифрах остатка. */
+export interface MeProgress {
+  lessons_attended: number;
+  months: number;
+  /** Собирается сервером из тегов заметок. */
+  repertoire: string[];
+}
+
+/** `GET /api/v1/me/children/{student_id}` — история одного ребёнка. */
+export interface MeChildCard {
+  student_id: string;
+  name: string;
+  age: number | null;
+  discipline: string | null;
+  teacher: string | null;
+  started_on: string;
+  subscription: MeSubscription | null;
+  makeups: MeMakeup[];
+  history: MeHistoryEntry[];
+  progress: MeProgress;
+}
+
+/**
+ * `POST /api/v1/me/lessons/{id}/reschedule-request` — ЗАЯВКА, а не перенос.
+ * Родитель не двигает расписание сам: слот может быть занят, преподаватель
+ * может быть занят, и решение принимает администратор.
+ */
+export interface RescheduleRequest {
+  reason: string;
+  /** Удобное время в ISO со смещением филиала. Может быть пустым. */
+  preferred: string[];
+}
+
+export interface RescheduleCreated {
+  request_id: string;
+  status: string;
+  lesson: { starts_at: string; student_name: string };
+  message: string;
+}
+
+/**
+ * `POST /api/v1/me/children/{id}/renew-request`. Оплаты в кабинете нет
+ * намеренно: обещать приём денег, которого нет, хуже, чем его отсутствие.
+ */
+export interface RenewRequest {
+  comment?: string;
+}
+
+/**
+ * Форма ответа контрактом не задана (пробел 37) — обязателен только текст.
+ * Остальные ключи сняты с реализации (`schemas.RenewCreated`) и объявлены
+ * необязательными: выдуманная «по аналогии» структура молча разошлась бы
+ * с сервером на первом же вызове.
+ */
+export interface RenewCreated {
+  message: string;
+  request_id?: string;
+  status?: string;
+  student?: { student_id?: string; name?: string };
 }
 
 /* ---------- Ошибки ---------- */
