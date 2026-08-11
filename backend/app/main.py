@@ -4,10 +4,12 @@
 Этап 2: поиск и карточка ученика, тарифы, продажа и продление абонемента,
 заморозка и её снятие.
 Этап 3: воронка заявок, пробный урок, конверсия в ученика, приём по вебхуку.
+Этап 5: вход по телефону, сессии и разграничение прав по ролям.
 """
 from __future__ import annotations
 
 import datetime as dt
+import ipaddress
 import uuid
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
@@ -20,7 +22,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import attendance as attendance_service
-from . import api_keys, billing, config, money, repository as repo, schemas
+from . import api_keys, auth, authz, billing, config, journal, money, phone
+from . import repository as repo, schemas
 from . import leads as leads_service
 from . import students as students_service
 from .db import close_pool, get_pool, set_tenant, tenant_tx, untenanted_tx
@@ -48,47 +51,89 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.CORS_ORIGINS,
-    allow_credentials=False,
+    # Кука с сессией не уедет и не приедет без этого флага, а «*» вместе
+    # с учётными данными запрещён стандартом — переключатель в config.py.
+    allow_credentials=config.CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
 # ---------------------------------------------------------------------------
-# Заголовки тенанта и пользователя
+# Кто спрашивает
 #
-# TODO: заглушка до появления входа. Настоящая авторизация придёт следующим
-# этапом и будет доставать тенанта и пользователя из токена, но контур изоляции
-# обязан работать уже сейчас — иначе он никогда не будет протестирован.
+# Заголовков X-Tenant-Id и X-User-Id больше нет. Тенант — следствие входа:
+# браузер предъявляет непрозрачный токен, приложение находит по нему сессию
+# и только из неё узнаёт школу и человека. Подменить школу теперь нельзя,
+# не имея чужого токена, а токена в базе нет — есть его хеш.
+#
+# Ключи внешних источников (X-Api-Key) работают как работали: они для систем,
+# а не для людей, и вход по телефону им не нужен.
 # ---------------------------------------------------------------------------
 
 
-def _uuid_or_401(value: str | None, header: str) -> str:
-    if not value:
-        raise ApiError(401, "no_tenant", f"Заголовок {header} обязателен.")
+def _presented_token(request: Request) -> str | None:
+    """Токен из куки или из заголовка Authorization.
+
+    Кука — путь браузера: она HttpOnly, и межсайтовый скрипт её не прочитает.
+    Bearer — путь всего остального: curl, мобильный клиент, интеграционные
+    тесты. Токен один и тот же, и это осознанно: два разных секрета означали бы
+    две разные таблицы и два разных способа их отозвать.
+    """
+    header = request.headers.get("authorization") or ""
+    if header[:7].lower() == "bearer ":
+        return header[7:].strip() or None
+    return request.cookies.get(auth.COOKIE_NAME)
+
+
+def _client_ip(request: Request) -> str | None:
+    """Адрес клиента для журнала попыток. Не адрес — не повод падать.
+
+    В тестах и за прокси без X-Forwarded-For сюда приезжает что угодно вплоть
+    до слова «testclient», а колонка объявлена inet: непроверенное значение
+    роняло бы вход, то есть ошибка в логировании стоила бы входа в систему.
+    """
+    host = getattr(request.client, "host", None)
+    if not host:
+        return None
     try:
-        return str(uuid.UUID(value))
+        return str(ipaddress.ip_address(host))
     except ValueError:
-        raise ApiError(400, "bad_header", f"Заголовок {header} должен быть UUID.") from None
+        return None
 
 
-class Caller:
-    def __init__(self, tenant_id: str, user_id: str) -> None:
-        self.tenant_id = tenant_id
-        self.user_id = user_id
+def current_actor(request: Request) -> authz.Actor:
+    """Сессия -> тенант -> учётная запись -> роль и филиалы.
+
+    Отдельная короткая транзакция до основной: сессия ищется ДО set_config,
+    потому что тенант — это то, что она сообщает (тот же единственный
+    обоснованный случай, что и у ключей источников, см. db.untenanted_tx).
+    """
+    token = _presented_token(request)
+    if not token:
+        raise ApiError(
+            401,
+            "no_session",
+            "Нужен вход. Запросите код на POST /api/v1/auth/request-code.",
+        )
+    with untenanted_tx() as cur:
+        session = auth.session_by_token(cur, token)
+        if session is None:
+            # Истёкшая, отозванная и выдуманная сессии отвечают одинаково:
+            # разница между ними ничего не даёт человеку и многое — тому,
+            # кто подбирает.
+            raise ApiError(
+                401, "bad_session", "Сессия недействительна или истекла. Войдите заново."
+            )
+        set_tenant(cur, str(session["tenant_id"]))
+        auth.touch_session(cur, str(session["id"]))
+        return authz.load_actor(cur, str(session["user_id"]), str(session["id"]))
 
 
-def caller(
-    x_tenant_id: Annotated[str | None, Header()] = None,
-    x_user_id: Annotated[str | None, Header()] = None,
-) -> Caller:
-    return Caller(
-        _uuid_or_401(x_tenant_id, "X-Tenant-Id"),
-        _uuid_or_401(x_user_id, "X-User-Id"),
-    )
-
-
-CallerDep = Annotated[Caller, Depends(caller)]
+ActorDep = Annotated[authz.Actor, Depends(current_actor)]
+# Прежнее имя оставлено, потому что ниже по коду `who.tenant_id`
+# и `who.user_id` читаются два десятка раз и означают ровно то же самое.
+CallerDep = ActorDep
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +172,243 @@ async def _validation_handler(request: Request, exc: RequestValidationError) -> 
 
 API = "/api/v1"
 
+
+# ---------------------------------------------------------------------------
+# Вход
+#
+# Основной сценарий — телефон и одноразовый код: родители не помнят паролей,
+# а кабинет родителя без входа не существует. Пароль оставлен сотрудникам:
+# администратор ресепшена входит по двадцать раз в день, и SMS на каждый вход
+# была бы не безопасностью, а счётом от оператора.
+# ---------------------------------------------------------------------------
+
+
+def _normalize_login(value: str) -> str:
+    """Логин к одному виду. Телефон — в E.164, всё остальное — как есть.
+
+    Телефон приводится ровно тем же правилом, что и везде в системе
+    (`phone.normalize`): «8 701 555 24 18», «+7 (701) 555-24-18»
+    и «77015552418» — один человек, и вход обязан это знать так же,
+    как это знают поиск и вебхук.
+    """
+    text = (value or "").strip()
+    return phone.normalize(text) or text.lower()
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=auth.COOKIE_NAME,
+        value=token,
+        httponly=True,          # межсайтовый скрипт не прочитает
+        secure=config.AUTH_COOKIE_SECURE,
+        samesite=config.AUTH_COOKIE_SAMESITE,
+        max_age=int(auth.SESSION_TTL.total_seconds()),
+        path="/",
+    )
+
+
+def _tenant_or_404(cur: Any, slug: str) -> dict[str, Any]:
+    row = auth.tenant_by_slug(cur, slug)
+    if row is None:
+        raise ApiError(
+            404,
+            "unknown_tenant",
+            "Школа не найдена. Проверьте адрес, по которому открыт кабинет.",
+        )
+    return row
+
+
+def _me(cur: Any, actor: authz.Actor) -> dict[str, Any]:
+    cur.execute("SELECT id, name FROM tenant WHERE id = %s", (actor.tenant_id,))
+    tenant = cur.fetchone()
+    visible = authz.visible_student_ids(cur, actor)
+    return {
+        "user_id": actor.user_id,
+        "name": actor.name,
+        "role": actor.role,
+        "tenant": {"id": str(tenant["id"]), "name": tenant["name"]},
+        "person_id": actor.person_id,
+        "staff_id": actor.staff_id,
+        "branch_ids": sorted(actor.branch_ids),
+        # У владельца и администратора список пуст: ограничения по ученикам
+        # у них нет, и перечислять всю школу здесь незачем. У родителя это
+        # его дети — кабинету они нужны сразу, без второго запроса.
+        "student_ids": sorted(visible) if visible is not None else [],
+    }
+
+
+@app.post(
+    f"{API}/auth/request-code",
+    response_model=schemas.CodeSent,
+    status_code=202,
+    tags=["Вход"],
+)
+def request_code(request: Request, body: schemas.CodeRequest) -> dict[str, Any]:
+    """Выслать одноразовый код на телефон.
+
+    Ответ одинаков для существующего и несуществующего телефона — включая
+    маску адреса, которая собирается из того, что прислали, а не из того, что
+    нашлось в базе. Иначе форма входа отвечала бы на вопрос «ходит ли этот
+    ребёнок в эту школу», а это чужие персональные данные.
+
+    Код кладётся в очередь уведомлений (`notification`) — ту же, в которой
+    живут напоминания об уроке. Воркера, который относит их в SMS, пока нет.
+    """
+    login = _normalize_login(body.login)
+    ip = _client_ip(request)
+    failure: ApiError | None = None
+
+    with untenanted_tx() as cur:
+        tenant = _tenant_or_404(cur, body.tenant)
+        set_tenant(cur, str(tenant["id"]))
+        try:
+            # Лимит считается ДО поиска пользователя: перебор телефонов школы
+            # не должен обходиться тем, что таких учётных записей ещё нет.
+            auth.guard_code_request(cur, login, ip)
+        except ApiError as exc:
+            failure = exc
+        else:
+            user = auth.user_by_login(cur, login)
+            ok = user is not None and user["is_active"]
+            # Попытка пишется в ЛЮБОМ случае и до всякого возможного отказа:
+            # запись, потерянная откатом, означала бы лимит, который
+            # не накапливается, то есть лимита нет.
+            auth.record_attempt(cur, str(tenant["id"]), "code_request", login, ip, ok)
+            if ok:
+                auth.issue_code(cur, str(tenant["id"]), user, ip)
+
+    if failure is not None:
+        raise failure
+    return {
+        "sent": True,
+        "to": auth.mask_phone(login),
+        "expires_in": int(auth.CODE_TTL.total_seconds()),
+        "message": "Если такая учётная запись есть, код придёт в течение минуты.",
+    }
+
+
+@app.post(f"{API}/auth/login", response_model=schemas.LoggedIn, tags=["Вход"])
+def login(
+    request: Request, response: Response, body: schemas.LoginRequest
+) -> dict[str, Any]:
+    """Вход по коду или по паролю. В ответ — сессия в куке и она же токеном."""
+    if bool(body.code) == bool(body.password):
+        raise ApiError(
+            400,
+            "bad_credentials_form",
+            "Пришлите либо одноразовый код, либо пароль — что-то одно.",
+        )
+
+    login_value = _normalize_login(body.login)
+    ip = _client_ip(request)
+    kind = "code_verify" if body.code else "password"
+    result: dict[str, Any] | None = None
+    failure: ApiError | None = None
+
+    # Вся работа идёт внутри транзакции, а отказ возвращается наружу
+    # значением: исключение откатило бы и счётчик попыток по коду,
+    # и строку в журнале попыток — то есть перебор снова стал бы бесплатным.
+    with untenanted_tx() as cur:
+        tenant = _tenant_or_404(cur, body.tenant)
+        set_tenant(cur, str(tenant["id"]))
+        try:
+            if body.code:
+                auth.guard_code_verify(cur, login_value)
+            else:
+                auth.guard_password(cur, login_value)
+        except ApiError as exc:
+            failure = exc
+        else:
+            user = auth.user_by_login(cur, login_value)
+            ok = False
+            if user is not None and user["is_active"]:
+                ok = (
+                    auth.consume_code(cur, str(user["id"]), body.code)
+                    if body.code
+                    else auth.verify_secret(body.password, user["password_hash"])
+                )
+            auth.record_attempt(cur, str(tenant["id"]), kind, login_value, ip, ok)
+
+            if not ok:
+                # Неверный код, неверный пароль, выключенная учётная запись
+                # и несуществующий телефон отвечают одинаково.
+                failure = ApiError(
+                    401,
+                    "bad_credentials",
+                    "Не подошло. Проверьте номер и код — или запросите новый код.",
+                )
+            else:
+                token, session = auth.create_session(
+                    cur,
+                    str(tenant["id"]),
+                    str(user["id"]),
+                    ip,
+                    request.headers.get("user-agent"),
+                )
+                actor = authz.load_actor(cur, str(user["id"]), str(session["id"]))
+                journal.audit(
+                    cur,
+                    str(tenant["id"]),
+                    str(user["id"]),
+                    "auth.login",
+                    "user_session",
+                    str(session["id"]),
+                    {"method": "code" if body.code else "password", "ip": ip},
+                )
+                result = {
+                    "user": _me(cur, actor),
+                    "expires_at": session["expires_at"].isoformat(),
+                    "token": token,
+                }
+
+    if failure is not None:
+        raise failure
+    _set_session_cookie(response, result["token"])
+    return result
+
+
+@app.post(f"{API}/auth/logout", response_model=schemas.LoggedOut, tags=["Вход"])
+def logout(
+    who: ActorDep,
+    response: Response,
+    everywhere: Annotated[
+        bool, Query(description="Погасить все сессии, а не только текущую")
+    ] = False,
+) -> dict[str, Any]:
+    """Выход. Сессия гасится в базе, а не только забывается браузером.
+
+    Строка `user_session` остаётся: «когда вышли» — такой же факт, как «когда
+    вошли». Удаление куки без гашения строки означало бы, что украденный токен
+    продолжает работать ещё месяц.
+    """
+    with tenant_tx(who.tenant_id) as cur:
+        if everywhere:
+            count = auth.revoke_user_sessions(cur, who.user_id)
+        else:
+            auth.revoke_session(cur, who.session_id)
+            count = 1
+        journal.audit(
+            cur, who.tenant_id, who.user_id, "auth.logout", "user_session",
+            who.session_id, {"everywhere": everywhere, "sessions": count},
+        )
+    response.delete_cookie(auth.COOKIE_NAME, path="/")
+    return {
+        "ok": True,
+        "message": "Вы вышли из всех сеансов." if everywhere else "Вы вышли.",
+    }
+
+
+@app.get(f"{API}/auth/me", response_model=schemas.Me, tags=["Вход"])
+def whoami(who: ActorDep) -> dict[str, Any]:
+    """Кто вошёл, с какой ролью и что ему видно.
+
+    Интерфейс рисует разные экраны разным ролям, и спрашивать об этом
+    он обязан сервер: роль, вычисленная на клиенте, — это роль, которую
+    клиент себе назначил.
+    """
+    with tenant_tx(who.tenant_id) as cur:
+        return _me(cur, who)
+
 # Текст один на все четыре операции: описание даты операции живёт
 # в schemas.EFFECTIVE_DATE, а параметры пути и запроса берут его оттуда,
 # чтобы в OpenAPI не оказалось двух разных объяснений одного правила.
@@ -135,6 +417,7 @@ EFFECTIVE_DATE_DOC = schemas.EFFECTIVE_DATE.description
 
 @app.get(f"{API}/branches", response_model=list[schemas.Branch], tags=["Справочники"])
 def branches(who: CallerDep) -> list[dict[str, Any]]:
+    authz.require_staff(who)
     with tenant_tx(who.tenant_id) as cur:
         return repo.list_branches(cur)
 
@@ -152,6 +435,7 @@ def teachers(
     Не срез дня из расписания: преподаватель с выходным обязан быть в списке,
     иначе назначить ему пробный на завтра нельзя.
     """
+    authz.require_staff(who)
     with tenant_tx(who.tenant_id) as cur:
         return repo.list_teachers(cur, branch_id, discipline_id)
 
@@ -162,6 +446,7 @@ def rooms(
     branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
 ) -> list[dict[str, Any]]:
     """Кабинеты с филиалом и характеристиками (`features`)."""
+    authz.require_staff(who)
     with tenant_tx(who.tenant_id) as cur:
         return repo.list_rooms(cur, branch_id)
 
@@ -174,6 +459,7 @@ def disciplines(who: CallerDep) -> list[dict[str, Any]]:
     и заявка уходит в воронку с пустым `discipline_id` — то есть выпадает
     из отчёта по направлениям.
     """
+    authz.require_staff(who)
     with tenant_tx(who.tenant_id) as cur:
         return repo.list_disciplines(cur)
 
@@ -184,6 +470,13 @@ def schedule(
     branch_id: Annotated[str, Query(description="UUID филиала")],
     date: Annotated[dt.date, Query(description="День расписания, YYYY-MM-DD")],
 ) -> dict[str, Any]:
+    """День филиала. Преподаватель видит в нём только свои занятия (§2).
+
+    Родитель сюда не ходит: это сетка филиала со всеми чужими детьми
+    в дорожках. Расписание своего ребёнка — отдельный ресурс кабинета
+    родителя (issue #5).
+    """
+    authz.require_staff(who)
     with tenant_tx(who.tenant_id) as cur:
         branch = repo.get_branch(cur, branch_id)
         if branch is None:
@@ -191,6 +484,13 @@ def schedule(
         tz = ZoneInfo(branch["timezone"])
 
         lessons = repo.lessons_of_day(cur, branch_id, date, tz)
+        if who.is_teacher:
+            # Фильтр стоит до сборки дорожек и до сводки: посчитать конфликты
+            # и загрузку по чужим занятиям, а показать свои — значит выдать
+            # преподавателю числа, которые он не может проверить.
+            lessons = [
+                row for row in lessons if str(row["teacher_id"]) == (who.staff_id or "")
+            ]
         lesson_ids = [str(row["id"]) for row in lessons]
         marks = repo.marks_by_lesson(cur, lesson_ids)
         conflicts = repo.find_conflicts(lessons)
@@ -261,19 +561,36 @@ def schedule(
 
 @app.get(f"{API}/lessons/{{lesson_id}}", response_model=schemas.LessonCard, tags=["Расписание"])
 def lesson_card(who: CallerDep, lesson_id: str) -> dict[str, Any]:
+    """Карточка занятия с предпросмотром последствий отметки.
+
+    Кто что видит: преподаватель — только свои занятия, родитель — только те,
+    где стоит его ребёнок, и в них только своего ребёнка. Ставка
+    преподавателя — только владельцу и самому преподавателю (§2).
+    """
     with tenant_tx(who.tenant_id) as cur:
         lesson = repo.get_lesson(cur, lesson_id)
         if lesson is None:
             raise not_found("Занятие не найдено")
+        # 404, а не 403: «есть, но не ваше» подтверждало бы, что занятие
+        # существует, и по перебору идентификаторов читалась бы вся школа.
+        if not authz.may_see_lesson(cur, who, lesson):
+            raise not_found("Занятие не найдено")
+
         tz = ZoneInfo(lesson["branch_timezone"])
         rate_amount, rate_percent = repo.teacher_rate(cur, lesson)
         marked = repo.attendance_by_student(cur, lesson_id)
         applied = repo.applied_effects(cur, lesson_id)
         on = lesson["starts_at"].date()
+        # Родителю в групповом занятии видно только своего ребёнка: имя, остаток
+        # и абонемент соседа по ансамблю — чужие персональные данные, и утечь
+        # они могут именно здесь, а не в списке учеников.
+        visible = authz.visible_student_ids(cur, who)
 
         participants = []
         for row in repo.lesson_participants(cur, lesson):
             student_id = str(row["student_id"])
+            if visible is not None and student_id not in visible:
+                continue
             sub = repo.active_subscription(cur, student_id, on)
             att = marked.get(student_id)
             fact = applied.get(student_id)
@@ -325,10 +642,16 @@ def lesson_card(who: CallerDep, lesson_id: str) -> dict[str, Any]:
             "teacher": {
                 "id": str(lesson["teacher_id"]),
                 "name": lesson["teacher_name"],
-                "rate": int(rate_amount) if rate_amount is not None else 0,
+                # None — «вам не видно», а не «ставки нет»: ноль читался бы
+                # как «работает бесплатно» и однажды попал бы в разговор.
+                "rate": (int(rate_amount or 0))
+                if authz.may_see_teacher_rate(who, str(lesson["teacher_id"]))
+                else None,
             },
             "participants": participants,
-            "note": repo.lesson_note(cur, lesson_id),
+            "note": repo.lesson_note(
+                cur, lesson_id, None if visible is None else sorted(visible)
+            ),
         }
 
 
@@ -343,12 +666,20 @@ def mark_attendance(
 ) -> dict[str, Any]:
     """Отметка посещаемости.
 
+    Отмечать может владелец, администратор своего филиала и преподаватель —
+    только СВОИ занятия. Чужая отметка двигает чужой абонемент и чужую
+    зарплату, а объяснить родителю списанное занятие, которого не было,
+    потом нечем.
+
     `effective_date` в теле задаёт дату операции; без него — сегодня в поясе
     филиала, то есть прежнее поведение (ADR-001).
     """
     student_id = _uuid_or_400(body.student_id, "student_id")
     with tenant_tx(who.tenant_id) as cur:
-        attendance_service.require_actor(cur, who.user_id)
+        lesson = repo.get_lesson(cur, lesson_id)
+        if lesson is None:
+            raise not_found("Занятие не найдено")
+        authz.require_lesson_write(who, lesson)
         return attendance_service.apply_mark(
             cur,
             who.tenant_id,
@@ -377,7 +708,13 @@ def revoke_attendance(
     от POST для всякого прокси на пути.
     """
     with tenant_tx(who.tenant_id) as cur:
-        attendance_service.require_actor(cur, who.user_id)
+        # Право проверяется по ЗАНЯТИЮ, а не по отметке: отменяют не строку
+        # в таблице, а чужой урок. Ненайденная отметка до проверки не доходит
+        # и получает свой 404 от самой операции — чужой тенант обязан
+        # отвечать так же, как несуществующий идентификатор.
+        lesson = repo.lesson_of_attendance(cur, attendance_id)
+        if lesson is not None:
+            authz.require_lesson_write(who, lesson)
         return attendance_service.revoke_mark(
             cur, who.tenant_id, who.user_id, attendance_id, effective_date
         )
@@ -395,15 +732,33 @@ def find_students(
     branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> list[dict[str, Any]]:
+    """Поиск ученика.
+
+    Выдача урезается по роли: преподаватель находит только своих учеников,
+    родитель — только своих детей. Ограничение уезжает в тот же запрос,
+    а не накладывается на ответ: `limit` иначе отрезал бы детей родителя
+    раньше, чем до них дошла бы очередь, и кабинет показал бы пустой список.
+    Второй, «родительской», версии запроса при этом не появилось — она
+    разошлась бы с первой при первой же правке поиска по телефону.
+    """
     with tenant_tx(who.tenant_id) as cur:
-        return students_service.search(cur, query, branch_id, limit)
+        visible = authz.visible_student_ids(cur, who)
+        return students_service.search(
+            cur, query, branch_id, limit, None if visible is None else sorted(visible)
+        )
 
 
 @app.get(
     f"{API}/students/{{student_id}}", response_model=schemas.StudentCard, tags=["Ученики"]
 )
 def student_card(who: CallerDep, student_id: str) -> dict[str, Any]:
+    """Карточка ученика: семья, абонемент, журнал движений, отработки, заметки.
+
+    Чужой ребёнок отвечает 404, а не 403: 403 подтверждал бы, что такой ученик
+    в школе есть, и перебором идентификаторов можно было бы пересчитать всех.
+    """
     with tenant_tx(who.tenant_id) as cur:
+        authz.require_student(cur, who, student_id)
         card = students_service.card(cur, student_id)
         if card is None:
             raise not_found("Ученик не найден")
@@ -416,6 +771,7 @@ def plans(
     discipline_id: Annotated[str | None, Query(description="UUID направления")] = None,
     format: Annotated[str | None, Query(description="individual | pair | group | trial")] = None,
 ) -> list[dict[str, Any]]:
+    authz.require_staff(who)
     with tenant_tx(who.tenant_id) as cur:
         return [
             {
@@ -441,8 +797,13 @@ def plans(
 def sell_subscription(
     who: CallerDep, student_id: str, body: schemas.SellRequest
 ) -> dict[str, Any]:
+    """Продажа и продление. Деньги принимает ресепшен, а не преподаватель (§2)."""
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
-        attendance_service.require_actor(cur, who.user_id)
+        student = repo.get_student(cur, student_id)
+        if student is None:
+            raise not_found("Ученик не найден")
+        authz.require_branch(who, str(student["branch_id"]) if student["branch_id"] else None)
         return billing.sell_subscription(cur, who.tenant_id, who.user_id, student_id, body)
 
 
@@ -455,8 +816,8 @@ def sell_subscription(
 def freeze_subscription(
     who: CallerDep, subscription_id: str, body: schemas.HoldRequest
 ) -> dict[str, Any]:
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
-        attendance_service.require_actor(cur, who.user_id)
         return billing.create_hold(cur, who.tenant_id, who.user_id, subscription_id, body)
 
 
@@ -471,8 +832,8 @@ def unfreeze_subscription(
     hold_id: str,
     effective_date: Annotated[dt.date | None, Query(description=EFFECTIVE_DATE_DOC)] = None,
 ) -> dict[str, Any]:
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
-        attendance_service.require_actor(cur, who.user_id)
         return billing.release_hold(
             cur, who.tenant_id, who.user_id, subscription_id, hold_id, effective_date
         )
@@ -500,6 +861,8 @@ def leads_board(
         int, Query(ge=0, description="Сколько карточек колонки пропустить")
     ] = 0,
 ) -> dict[str, Any]:
+    """Доска воронки. Заявками занимается ресепшен, а не преподаватель (§2)."""
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
         return leads_service.board(
             cur, stage, source, assigned_to, branch_id, limit, offset
@@ -514,6 +877,7 @@ def leads_funnel(
     from_: Annotated[dt.date | None, Query(alias="from", description="Начало периода")] = None,
     to: Annotated[dt.date | None, Query(description="Конец периода, включительно")] = None,
 ) -> dict[str, Any]:
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
         # Пояс школы, а не сервера: «за август» у школы в Алматы начинается
         # раньше, чем в UTC, и заявка первого числа иначе выпала бы из отчёта.
@@ -530,6 +894,7 @@ def leads_funnel(
 
 @app.get(f"{API}/leads/{{lead_id}}", response_model=schemas.LeadFull, tags=["Заявки"])
 def lead_card(who: CallerDep, lead_id: str) -> dict[str, Any]:
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
         card = leads_service.card(cur, lead_id)
         if card is None:
@@ -539,15 +904,15 @@ def lead_card(who: CallerDep, lead_id: str) -> dict[str, Any]:
 
 @app.post(f"{API}/leads", response_model=schemas.LeadFull, status_code=201, tags=["Заявки"])
 def create_lead(who: CallerDep, body: schemas.LeadCreate) -> dict[str, Any]:
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
-        attendance_service.require_actor(cur, who.user_id)
         return leads_service.create_lead(cur, who.tenant_id, who.user_id, body)
 
 
 @app.patch(f"{API}/leads/{{lead_id}}", response_model=schemas.LeadFull, tags=["Заявки"])
 def patch_lead(who: CallerDep, lead_id: str, body: schemas.LeadPatch) -> dict[str, Any]:
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
-        attendance_service.require_actor(cur, who.user_id)
         return leads_service.update_lead(cur, who.tenant_id, who.user_id, lead_id, body)
 
 
@@ -558,8 +923,13 @@ def patch_lead(who: CallerDep, lead_id: str, body: schemas.LeadPatch) -> dict[st
     tags=["Заявки"],
 )
 def book_trial(who: CallerDep, lead_id: str, body: schemas.TrialRequest) -> dict[str, Any]:
+    """Пробный урок. Это запись в расписание — то есть тот самый случай,
+    где §2 запрещает администратору одного филиала трогать другой."""
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
-        attendance_service.require_actor(cur, who.user_id)
+        room = repo.get_room(cur, body.room_id) if body.room_id else None
+        if room is not None:
+            authz.require_branch(who, str(room["branch_id"]))
         return leads_service.book_trial(cur, who.tenant_id, who.user_id, lead_id, body)
 
 
@@ -570,8 +940,8 @@ def book_trial(who: CallerDep, lead_id: str, body: schemas.TrialRequest) -> dict
     tags=["Заявки"],
 )
 def convert_lead(who: CallerDep, lead_id: str, body: schemas.ConvertRequest) -> dict[str, Any]:
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
-        attendance_service.require_actor(cur, who.user_id)
         return leads_service.convert(cur, who.tenant_id, who.user_id, lead_id, body)
 
 
@@ -609,7 +979,7 @@ def leads_webhook(
 
 
 def _period(
-    who: Caller,
+    who: authz.Actor,
     cur: Any,
     from_: dt.date | None,
     to: dt.date | None,
@@ -632,7 +1002,12 @@ def payroll_sheet(
     Если период закрыт, суммы берутся по штампу `period_id` и больше
     не меняются. Открытый период собирается по датам и тянет в себя правки
     за уже закрытые месяцы — это и есть «корректировка в следующем».
+
+    Только владелец. §2 разрешает администратору видеть всё, КРОМЕ ставок
+    ЗП других сотрудников, а ведомость целиком из них и состоит; преподаватель
+    смотрит свою расшифровку через `/payroll/teachers/{его staff_id}`.
     """
+    authz.require_owner(who, "Ведомость")
     with tenant_tx(who.tenant_id) as cur:
         since, until, tz_name = _period(who, cur, from_, to)
         return money.sheet(cur, since, until, branch_id, tz_name)
@@ -647,6 +1022,8 @@ def payroll_periods(
     who: CallerDep,
     limit: Annotated[int, Query(ge=1, le=120)] = 24,
 ) -> list[dict[str, Any]]:
+    """Закрытые периоды с итогами. Итоги — те же деньги людей, что и ведомость."""
+    authz.require_owner(who, "Список периодов")
     with tenant_tx(who.tenant_id) as cur:
         tz_name = repo.tenant_timezone(cur, who.tenant_id)
         return money.periods(cur, tz_name, limit)
@@ -668,9 +1045,12 @@ def close_payroll_period(
     штампует все непроштампованные начисления с датой до конца периода;
     всё, что появится позже, штампа не получит и уйдёт в следующую
     ведомость (spec.md §6.2).
+
+    Закрывает период владелец: это подпись под тем, что деньги посчитаны
+    и отданы, и открыть период обратно нельзя ничем.
     """
+    authz.require_owner(who, "Закрытие периода")
     with tenant_tx(who.tenant_id) as cur:
-        attendance_service.require_actor(cur, who.user_id)
         tz_name = repo.tenant_timezone(cur, who.tenant_id)
         return money.close_period(
             cur, who.tenant_id, who.user_id, body.from_, body.to, tz_name
@@ -689,7 +1069,17 @@ def payroll_teacher(
     to: Annotated[dt.date | None, Query(description="Включительно")] = None,
     branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
 ) -> dict[str, Any]:
-    """Расшифровка ведомости: за что именно начислено, занятие за занятием."""
+    """Расшифровка ведомости: за что именно начислено, занятие за занятием.
+
+    Свою расшифровку преподаватель видит — §2 прямо это разрешает: «видит
+    своё расписание, своих учеников, свою ЗП». Чужую не видит никто, кроме
+    владельца, включая администратора ресепшена.
+    """
+    if not authz.may_see_teacher_rate(who, staff_id):
+        raise authz.forbidden(
+            "Чужую ведомость видит только владелец школы. Свою — сам преподаватель.",
+            "owner_only",
+        )
     with tenant_tx(who.tenant_id) as cur:
         since, until, tz_name = _period(who, cur, from_, to)
         card = money.teacher_sheet(cur, staff_id, since, until, branch_id, tz_name)
@@ -710,7 +1100,11 @@ def revenue_report(
     Считается по поступившим деньгам, а не по проданным абонементам: продажа
     с долгом — обычное дело, и выручка, показывающая невыплаченное, отвечает
     не на тот вопрос.
+
+    Отчёты — владельцу и администратору: §2 закрывает от администратора
+    ставки ЗП, а не кассу школы, которую он же и принимает.
     """
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
         since, until, tz_name = _period(who, cur, from_, to)
         return money.revenue(cur, since, until, branch_id, tz_name)
@@ -724,6 +1118,7 @@ def rooms_report(
     branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
 ) -> dict[str, Any]:
     """Загрузка кабинетов в процентах — ответ на «пора ли открывать филиал»."""
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
         since, until, tz_name = _period(who, cur, from_, to)
         return money.rooms(cur, since, until, branch_id, tz_name)
@@ -745,6 +1140,7 @@ def churn_report(
     один человек, пауза между абонементами — не уход, а вердикт не выносится
     раньше, чем истекла отсрочка продления (issue #25).
     """
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
         since, until, tz_name = _period(who, cur, from_, to)
         return money.churn(cur, since, until, grace_days, limit, tz_name)
@@ -756,6 +1152,7 @@ def debts_report(
     limit: Annotated[int, Query(ge=1, le=200)] = money.DEFAULT_LIST_LIMIT,
 ) -> dict[str, Any]:
     """Долги: у кого и сколько. Периода нет — долг всегда на сейчас."""
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
         return money.debts(cur, limit)
 
@@ -772,9 +1169,16 @@ def money_summary(
     Одним запросом, потому что это четыре числа наверху экрана, а каждый
     отчёт под ними тяжелее, чем нужно ради одной цифры.
     """
+    authz.require_admin(who)
     with tenant_tx(who.tenant_id) as cur:
         since, until, tz_name = _period(who, cur, from_, to)
-        return money.summary(cur, since, until, branch_id, tz_name)
+        head = money.summary(cur, since, until, branch_id, tz_name)
+        if not who.is_owner:
+            # Фонд оплаты труда — это те же деньги людей, что и ведомость,
+            # просто одной строкой. Число занятий и признак закрытия периода
+            # остаются: они говорят о работе школы, а не о чужой зарплате.
+            head["payroll"] = dict(head["payroll"], total=None)
+        return head
 
 
 @app.get(f"{API}/health", tags=["Служебное"])

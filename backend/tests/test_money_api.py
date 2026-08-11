@@ -194,10 +194,14 @@ def test_close_period_stamps_its_accruals(client, sql):
 
 
 def test_closed_sheet_reads_by_stamp_and_reports_who_closed_it(client):
+    # Имя сверяется с тем, кто РЕАЛЬНО закрыл период, а не с литералом
+    # из посева: «кто закрыл» — свойство сессии, и тест, знающий имя фикстуры
+    # наизусть, ломается от любой правки демо-данных, ничего не проверив.
+    closer = get(client, "/api/v1/auth/me")["name"]
     close(client, EARLY_AUGUST)
     data = sheet(client, EARLY_AUGUST)
     assert data["closed"] is True
-    assert data["closed_by"] == "Асель Нурланова"
+    assert data["closed_by"] == closer
     assert data["closed_at"].endswith("+05:00")
     assert data["totals"]["total"] == 13500
     assert "Период закрыт" in data["note"]
@@ -729,7 +733,7 @@ def test_summary_attention_block_counts_facts(client):
         "/api/v1/reports/summary",
     ],
 )
-def test_money_screens_require_headers(client, path):
+def test_money_screens_require_session(client, path):
     assert client.get(path).status_code == 401
 
 

@@ -81,7 +81,7 @@ from psycopg.types.json import Json
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app import billing, config, db, journal, leads as leads_app, schemas  # noqa: E402
+from app import auth, billing, config, db, journal, leads as leads_app, schemas  # noqa: E402
 from app.attendance import apply_mark, revoke_mark  # noqa: E402
 from app.errors import ApiError  # noqa: E402
 
@@ -1468,6 +1468,23 @@ def close_payroll(
 # ---------------------------------------------------------------------------
 
 
+def _measurement_session(tenant_id: str, admin_id: str) -> dict[str, str]:
+    """Короткая сессия для замеров. Токен нигде не сохраняется.
+
+    Строка `user_session` ничем не отличается от выданной входом: приложение
+    проверяет её теми же двумя запросами, и замер поэтому меряет в том числе
+    стоимость проверки сессии — то есть то, что заплатит настоящий запрос.
+    """
+    token = auth.new_session_token()
+    with db.untenanted_tx() as cur:
+        cur.execute(
+            """INSERT INTO user_session (tenant_id, user_id, token_hash, expires_at)
+               VALUES (%s, %s, %s, now() + interval '1 day')""",
+            (tenant_id, admin_id, auth.hash_token(token)),
+        )
+    return {"Authorization": f"Bearer {token}"}
+
+
 def measure(tenant_id: str, admin_id: str, branch_id: str, start: dt.date, end: dt.date) -> None:
     """Сколько занимают главные экраны на полной истории.
 
@@ -1479,7 +1496,10 @@ def measure(tenant_id: str, admin_id: str, branch_id: str, start: dt.date, end: 
 
     from app.main import app as fastapi_app
 
-    headers = {"X-Tenant-Id": tenant_id, "X-User-Id": admin_id}
+    # Заголовков-заглушек больше нет: API узнаёт школу из сессии. Замер идёт
+    # тем же путём, что и живой запрос, поэтому сессия здесь настоящая —
+    # просто выданная напрямую, без SMS.
+    headers = _measurement_session(tenant_id, admin_id)
 
     with db.tenant_tx(tenant_id) as cur:
         cur.execute(

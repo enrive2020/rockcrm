@@ -804,9 +804,10 @@ def test_payroll_matches_marks(sql, tenant: str) -> None:
 # 5. Изоляция школ
 # ---------------------------------------------------------------------------
 
-# Все таблицы с собственным tenant_id — из db/005_rls.sql. Список продублирован
-# сознательно: если в схеме появится таблица без политики, тест обязан
-# об этом сказать, а не молча перестать её проверять.
+# Все таблицы с собственным tenant_id и политикой изоляции — из db/005_rls.sql
+# и db/010_auth.sql. Список продублирован сознательно: если в схеме появится
+# таблица без политики, тест обязан об этом сказать, а не молча перестать
+# её проверять.
 TENANT_TABLES = [
     "person", "app_user", "branch", "room", "discipline", "staff", "family",
     "student", "study_group", "lesson_series", "lesson", "attendance", "lesson_note",
@@ -814,23 +815,80 @@ TENANT_TABLES = [
     "payment", "teacher_rate", "payroll_period", "payroll_entry",
     "lead", "lead_stage_history", "notification", "task",
     "subscription_entry", "audit_log",
+    # Вход: одноразовые коды и журнал попыток. Политика у них возможна и нужна —
+    # к моменту работы с кодом школа уже названа (слаг приходит в запросе входа),
+    # то есть app.tenant_id выставлен.
+    "auth_code", "auth_attempt",
 ]
+
+# Связующие таблицы без собственного tenant_id: их закрывает подзапрос
+# к родителю, который сам под политикой (db/005_rls.sql).
+LINK_TABLES = {"family_member", "group_member", "staff_discipline", "staff_branch"}
+
+# Таблицы, у которых tenant_id есть, а политик нет — и это осознанно, а не
+# недосмотр. Обе ищутся по хешу секрета ДО того, как тенант станет известен:
+# тенант и есть то, что они сообщают. Политика на current_tenant() отсекла бы
+# строку раньше, чем тенант выяснен, — и ни приём заявок по ключу
+# (db/006_api_keys.sql), ни вход человека (db/010_auth.sql) не работали бы
+# вовсе, потому что искать было бы нечего.
+#
+# Защита у них строится на двух других вещах. Первая: в таблице лежит хеш,
+# а не секрет, поэтому даже полное чтение не даёт ни войти, ни слать заявки.
+# Вторая: права. У api_key приложению не выданы INSERT и DELETE — выпуск
+# и отзыв идут административным каналом; у user_session права полные, потому
+# что выдавать и гасить сессии — это и есть работа приложения.
+#
+# Список закрытый и короткий намеренно: каждая новая строка здесь — это
+# осознанное решение с обоснованием, а не «ну эта тоже пусть будет».
+UNPOLICED_TABLES = {"api_key", "user_session"}
 
 
 def test_every_tenant_table_is_covered_by_policy(sql) -> None:
-    """Список таблиц теста не отстал от схемы."""
-    actual = {
+    """Список таблиц теста не отстал от схемы — и схема не отстала от себя.
+
+    Три разных способа проехать молча, и каждый закрыт отдельной проверкой:
+
+    1. таблица с политиками появилась, а в списке теста её нет — тогда
+       `test_first_school_sees_nothing_of_the_second` её не смотрит;
+    2. таблица с `tenant_id` появилась вообще БЕЗ RLS — самый опасный случай:
+       в выборку «таблицы с RLS» она не попадает, и первая проверка о ней
+       никогда не узнает;
+    3. RLS включён, а политик ноль — выборка отдаёт пусто, приложение видит
+       «данных нет» вместо ошибки, и разбираться будут не с тем.
+    """
+    schema = rows(
+        sql,
+        """
+        SELECT c.relname AS table_name,
+               c.relrowsecurity AS rls,
+               (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies,
+               EXISTS (SELECT 1 FROM pg_attribute a
+                        WHERE a.attrelid = c.oid AND a.attname = 'tenant_id'
+                          AND a.attnum > 0 AND NOT a.attisdropped) AS has_tenant_id
+          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relkind = 'r'
+        """,
+    )
+    known = set(TENANT_TABLES) | LINK_TABLES
+
+    unknown = {row["table_name"] for row in schema if row["rls"]} - known
+    assert unknown == set(), f"в схеме появились таблицы с RLS, которых нет в тесте: {unknown}"
+
+    # Таблица с tenant_id и без RLS не показалась бы в проверке выше вовсе:
+    # её просто не было бы в выборке. Именно так утечка и заезжает тихо.
+    unprotected = {
         row["table_name"]
-        for row in rows(
-            sql,
-            """SELECT c.relname AS table_name
-                 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-                WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity""",
-        )
-    }
-    missing = actual - set(TENANT_TABLES) - {"family_member", "group_member",
-                                             "staff_discipline", "staff_branch"}
-    assert missing == set(), f"в схеме появились таблицы с RLS, которых нет в тесте: {missing}"
+        for row in schema
+        if row["has_tenant_id"] and not row["rls"]
+    } - UNPOLICED_TABLES
+    assert unprotected == set(), (
+        f"таблицы с tenant_id и без изоляции строк: {unprotected}. "
+        "Либо добавьте политику в db/, либо — если политика здесь невозможна — "
+        "внесите таблицу в UNPOLICED_TABLES вместе с объяснением, почему"
+    )
+
+    silent = {row["table_name"] for row in schema if row["rls"] and not row["policies"]}
+    assert silent == set(), f"RLS включён, а политик нет — выборка молча пуста: {silent}"
 
 
 def test_first_school_sees_nothing_of_the_second(sql) -> None:
@@ -855,8 +913,11 @@ def test_first_school_sees_nothing_of_the_second(sql) -> None:
             empty.append(table)
     assert leaks == [], "\n".join(leaks)
     # Таблицы, которые симуляция не наполняет, ожидаемо пусты — на них тест
-    # ничего не доказывает, но и не должен падать.
-    unexpected_empty = set(empty) - {"study_group", "lesson_series", "task", "lesson_note"}
+    # ничего не доказывает, но и не должен падать. Вход симуляция не проходит:
+    # она работает через код приложения напрямую, а не через HTTP, поэтому
+    # ни кодов, ни попыток входа в её истории нет.
+    unexpected_empty = set(empty) - {"study_group", "lesson_series", "task", "lesson_note",
+                                     "auth_code", "auth_attempt"}
     assert unexpected_empty == set(), f"под тенантом не видно и своих данных: {unexpected_empty}"
 
 
@@ -876,13 +937,34 @@ def test_joins_do_not_leak_across_tenants(sql) -> None:
         assert int(visible["n"]) == 0, f"{table}: видны строки без своего родителя"
 
 
+def _session_headers(tenant_id: str, user_id: str) -> dict[str, str]:
+    """Настоящая сессия, выданная напрямую в базу.
+
+    Заголовков-заглушек больше нет: школу API узнаёт из `user_session`.
+    Служебного входа «для тестов» в приложении не заводилось — здесь просто
+    кладётся такая же строка, какую положил бы вход по коду, и приложение
+    проверяет её ровно теми же двумя запросами.
+    """
+    from app import auth
+
+    token = auth.new_session_token()
+    with psycopg.connect(ADMIN_URL) as conn:
+        conn.execute(
+            """INSERT INTO user_session (tenant_id, user_id, token_hash, expires_at)
+               VALUES (%s, %s, %s, now() + interval '1 hour')""",
+            (tenant_id, user_id, auth.hash_token(token)),
+        )
+        conn.commit()
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_api_isolates_schools() -> None:
     """То же самое через HTTP: чужие идентификаторы дают 404, а не данные."""
     from fastapi.testclient import TestClient
 
     from app.main import app
 
-    headers_a = {"X-Tenant-Id": TENANT_A, "X-User-Id": ADMIN_A}
+    headers_a = _session_headers(TENANT_A, ADMIN_A)
     with psycopg.connect(ADMIN_URL, row_factory=dict_row) as conn:
         cur = conn.cursor()
         cur.execute("SELECT id FROM student WHERE tenant_id = %s LIMIT 1", (TENANT_B,))

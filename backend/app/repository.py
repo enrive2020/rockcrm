@@ -578,16 +578,26 @@ def applied_effects(cur: psycopg.Cursor, lesson_id: str) -> dict[str, dict[str, 
     return {str(row["student_id"]): row for row in cur.fetchall()}
 
 
-def lesson_note(cur: psycopg.Cursor, lesson_id: str) -> dict[str, Any] | None:
+def lesson_note(
+    cur: psycopg.Cursor, lesson_id: str, student_ids: list[str] | None = None
+) -> dict[str, Any] | None:
+    """Заметка к занятию.
+
+    `student_ids` ограничивает выборку теми учениками, которых спрашивающему
+    видно. Заметка привязана к ученику, а групповое занятие одно на всех:
+    без этого ограничения родитель читал бы в карточке ансамбля разбор
+    домашней работы чужого ребёнка.
+    """
     cur.execute(
         """
         SELECT body, homework, tags
         FROM lesson_note
-        WHERE lesson_id = %s
+        WHERE lesson_id = %(lesson)s
+          AND (%(students)s::uuid[] IS NULL OR student_id = ANY(%(students)s::uuid[]))
         ORDER BY created_at
         LIMIT 1
         """,
-        (lesson_id,),
+        {"lesson": lesson_id, "students": student_ids},
     )
     row = cur.fetchone()
     if row is None:
@@ -653,7 +663,11 @@ _STUDENT_JOINS = """
 
 
 def search_students(
-    cur: psycopg.Cursor, query: str, branch_id: str | None, limit: int
+    cur: psycopg.Cursor,
+    query: str,
+    branch_id: str | None,
+    limit: int,
+    only_ids: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Поиск для строки поиска в интерфейсе.
 
@@ -662,6 +676,12 @@ def search_students(
 
     Телефон сравнивается по цифрам: в базе он в E.164 (+77015552418),
     а в трубке его диктуют как «8 701 555 24 18» или «555-24-18».
+
+    `only_ids` ограничивает выборку теми учениками, кого спрашивающему видно
+    (родителю — своих детей, преподавателю — своих). Ограничение стоит
+    в SQL, а не поверх ответа, именно из-за `limit`: у школы на пять тысяч
+    учеников двое детей одного родителя в первую страницу могли и не попасть,
+    и кабинет показал бы родителю пустой список вместо его же семьи.
     """
     text = (query or "").strip()
     digits = phone.digits_of(text)
@@ -670,6 +690,7 @@ def search_students(
         SELECT {_STUDENT_COLUMNS}
         {_STUDENT_JOINS}
         WHERE s.archived_at IS NULL
+          AND (%(only)s::uuid[] IS NULL OR s.id = ANY(%(only)s::uuid[]))
           AND (%(branch)s::uuid IS NULL OR s.branch_id = %(branch)s::uuid)
           AND (
             %(text)s = ''
@@ -682,6 +703,7 @@ def search_students(
         LIMIT %(limit)s
         """,
         {
+            "only": only_ids,
             "branch": branch_id,
             "text": text,
             "like": f"%{text}%",
@@ -1495,6 +1517,135 @@ def family_of_payer(cur: psycopg.Cursor, person_id: str) -> dict[str, Any] | Non
 def user_exists(cur: psycopg.Cursor, user_id: str) -> bool:
     cur.execute("SELECT 1 FROM app_user WHERE id = %s AND is_active", (user_id,))
     return cur.fetchone() is not None
+
+
+# ---------------------------------------------------------------------------
+# Кто спрашивает: учётная запись, её сотрудник, её филиалы и её ученики.
+#
+# Всё это читается ПОСЛЕ set_config, то есть уже под политиками изоляции:
+# сессия сообщает тенанта, а дальше запрос ничем не отличается от любого
+# другого — забытое условие даёт пустую выборку, а не чужую школу.
+# ---------------------------------------------------------------------------
+
+
+def actor_row(cur: psycopg.Cursor, user_id: str) -> dict[str, Any] | None:
+    """Учётная запись вместе с её записью сотрудника.
+
+    `staff` подбирается по виду, соответствующему роли: один человек бывает
+    и преподавателем, и администратором (UNIQUE (tenant_id, person_id, kind)
+    это разрешает), и взять «любую его запись» значило бы выдать преподавателю
+    права администратора при первом же совмещении.
+    """
+    cur.execute(
+        """
+        SELECT u.id, u.tenant_id, u.person_id, u.role, u.is_active, u.login,
+               btrim(concat_ws(' ', p.first_name, p.last_name)) AS name,
+               s.id AS staff_id
+        FROM app_user u
+        JOIN person p ON p.id = u.person_id
+        LEFT JOIN staff s
+               ON s.person_id = u.person_id
+              AND s.archived_at IS NULL
+              AND s.kind = CASE u.role
+                             WHEN 'owner'   THEN 'owner'
+                             WHEN 'admin'   THEN 'admin'
+                             WHEN 'teacher' THEN 'teacher'
+                           END
+        WHERE u.id = %s
+        """,
+        (user_id,),
+    )
+    return cur.fetchone()
+
+
+def staff_branch_ids(cur: psycopg.Cursor, staff_id: str) -> list[str]:
+    cur.execute("SELECT branch_id FROM staff_branch WHERE staff_id = %s", (staff_id,))
+    return [str(row["branch_id"]) for row in cur.fetchall()]
+
+
+def guardian_student_ids(cur: psycopg.Cursor, person_id: str) -> list[str]:
+    """Дети родителя — через семью, а не через «фамилия совпала».
+
+    Плательщик учитывается двумя способами: строкой в `family_member`
+    и полем `family.payer_id`. Они должны совпадать, но семья, заведённая
+    конверсией заявки, может получить плательщика без строки в составе,
+    и терять из-за этого доступ родителя к собственному ребёнку нельзя.
+    """
+    cur.execute(
+        """
+        SELECT DISTINCT st.id
+        FROM student st
+        JOIN family f ON f.id = st.family_id
+        WHERE st.archived_at IS NULL
+          AND (
+            f.payer_id = %(person)s
+            OR EXISTS (
+              SELECT 1 FROM family_member fm
+              WHERE fm.family_id = f.id
+                AND fm.person_id = %(person)s
+                AND fm.relation IN ('payer', 'guardian')
+            )
+          )
+        """,
+        {"person": person_id},
+    )
+    return [str(row["id"]) for row in cur.fetchall()]
+
+
+def own_student_ids(cur: psycopg.Cursor, person_id: str) -> list[str]:
+    """Учебные профили самой персоны: взрослый ученик платит за себя сам."""
+    cur.execute(
+        "SELECT id FROM student WHERE person_id = %s AND archived_at IS NULL",
+        (person_id,),
+    )
+    return [str(row["id"]) for row in cur.fetchall()]
+
+
+def teacher_student_ids(cur: psycopg.Cursor, staff_id: str) -> list[str]:
+    """Ученики преподавателя: закреплённые за ним и те, кого он реально ведёт.
+
+    Одного `main_teacher_id` мало — на замене преподаватель ведёт чужого
+    ученика и обязан открыть его карточку; одних занятий мало — новый ученик
+    закреплён, но первого урока ещё не было. Участники группы входят через
+    `group_member`: ансамбль ведёт он же.
+    """
+    if not staff_id:
+        return []
+    cur.execute(
+        """
+        SELECT DISTINCT s.id
+        FROM student s
+        WHERE s.archived_at IS NULL
+          AND (
+            s.main_teacher_id = %(staff)s
+            OR EXISTS (
+              SELECT 1 FROM lesson l
+              WHERE l.teacher_id = %(staff)s AND l.student_id = s.id
+            )
+            OR EXISTS (
+              SELECT 1 FROM lesson l
+              JOIN group_member gm ON gm.group_id = l.group_id
+              WHERE l.teacher_id = %(staff)s AND gm.student_id = s.id
+            )
+          )
+        """,
+        {"staff": staff_id},
+    )
+    return [str(row["id"]) for row in cur.fetchall()]
+
+
+def lesson_of_attendance(cur: psycopg.Cursor, attendance_id: str) -> dict[str, Any] | None:
+    """Занятие, к которому относится отметка. Нужно, чтобы проверить право
+    на ОТМЕНУ: отменяют не отметку саму по себе, а чужой урок."""
+    cur.execute(
+        """
+        SELECT l.id, l.teacher_id, l.branch_id, l.student_id, l.group_id, l.starts_at
+        FROM attendance a JOIN lesson l ON l.id = a.lesson_id
+        WHERE a.id = %s
+        """,
+        (attendance_id,),
+    )
+    return cur.fetchone()
 
 
 # ---------------------------------------------------------------------------

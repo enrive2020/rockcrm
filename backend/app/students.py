@@ -42,9 +42,14 @@ def _payer(row: dict[str, Any]) -> dict[str, str] | None:
 
 
 def search(
-    cur: psycopg.Cursor, query: str, branch_id: str | None, limit: int
+    cur: psycopg.Cursor,
+    query: str,
+    branch_id: str | None,
+    limit: int,
+    only_ids: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    rows = repo.search_students(cur, query, branch_id, limit)
+    """`only_ids` — кого спрашивающему вообще позволено видеть (см. authz)."""
+    rows = repo.search_students(cur, query, branch_id, limit, only_ids)
     out = []
     for row in rows:
         # «Сегодня» берётся в поясе филиала ученика: у школы с филиалом
