@@ -194,7 +194,13 @@ export interface LessonParticipant {
 export interface LessonTeacher {
   id: string;
   name: string;
-  rate: number;
+  /**
+   * `null` — «вам не видно», а не «ставка ноль» (этап 5). Свою ставку видит
+   * сам преподаватель, чужую — только владелец; администратору ресепшена
+   * сервер присылает `null`. Ноль на экране прочитался бы как «работает
+   * бесплатно» и однажды попал бы в разговор, поэтому здесь только прочерк.
+   */
+  rate: number | null;
 }
 
 export interface LessonNote {
@@ -1159,7 +1165,12 @@ export interface SummaryRooms {
 }
 
 export interface SummaryPayroll {
-  total: number;
+  /**
+   * `null` — фонд оплаты труда скрыт от роли (администратору его не видно,
+   * §2). Это те же деньги людей, что и ведомость, только одной строкой,
+   * и показывать вместо них ноль значило бы соврать.
+   */
+  total: number | null;
   lessons: number;
   closed: boolean;
 }
@@ -1194,6 +1205,87 @@ export interface MoneySummary {
   churn: SummaryChurn;
   payroll: SummaryPayroll;
   attention: SummaryAttention;
+}
+
+/* ==========================================================================
+   Этап 5: вход, сессия и роли.
+
+   Контракта у этапа не было — формы сняты со схем бэкенда
+   (`schemas.CodeSent`, `LoginRequest`, `Me`, `LoggedIn`, `LoggedOut`).
+   Токен сессии в этих типах не появляется намеренно: он приезжает в куке
+   `HttpOnly`, и прочитать его интерфейс не может — в этом весь смысл.
+   Поле `token` в ответе входа существует для curl и мобильного клиента,
+   и класть его в `localStorage` нельзя: оттуда его унесёт первый же XSS.
+   ========================================================================== */
+
+export type Role = 'owner' | 'admin' | 'teacher' | 'guardian' | 'student';
+
+/** Подписи ролей. Рядом с типом: новая роль в контракте обязана ломать сборку. */
+export const ROLE_LABELS: Record<Role, string> = {
+  owner: 'Владелец',
+  admin: 'Администратор',
+  teacher: 'Преподаватель',
+  guardian: 'Родитель',
+  student: 'Ученик',
+};
+
+export interface TenantRef {
+  id: string;
+  name: string;
+}
+
+/** `GET /api/v1/auth/me` — единственный источник правды о роли. */
+export interface Me {
+  user_id: string;
+  name: string;
+  role: Role;
+  tenant: TenantRef;
+  person_id: string;
+  /** Есть у сотрудника: владельца, администратора, преподавателя. */
+  staff_id: string | null;
+  /**
+   * ПУСТОЙ МАССИВ ОЗНАЧАЕТ «ВСЕ ФИЛИАЛЫ», а не «ни одного». Школа из одного
+   * филиала связь `staff_branch` не заполняет вовсе, и прочтение пустоты
+   * как запрета выключило бы владельцу всю школу.
+   */
+  branch_ids: string[];
+  /** Дети родителя или ученики преподавателя. У владельца и админа пуст. */
+  student_ids: string[];
+}
+
+/** `POST /api/v1/auth/request-code` — всегда 202, даже на чужой номер. */
+export interface CodeSent {
+  sent: boolean;
+  /**
+   * Замаскированный адрес. Собран из того, что прислали, а не из того, что
+   * нашлось в базе: иначе форма входа отвечала бы на вопрос «ходит ли этот
+   * ребёнок в эту школу».
+   */
+  to: string;
+  /** Секунд до протухания кода — из него считается обратный отсчёт. */
+  expires_in: number;
+  message: string;
+}
+
+/** `POST /api/v1/auth/login`. Код и пароль вместе — 400, поэтому ровно одно. */
+export interface LoginRequest {
+  tenant: string;
+  login: string;
+  code?: string;
+  password?: string;
+}
+
+export interface LoggedIn {
+  user: Me;
+  expires_at: string;
+  /** Для curl и мобильного клиента. Браузеру не нужен: он получил куку. */
+  token?: string;
+}
+
+export interface LoggedOut {
+  ok: boolean;
+  /** «Вы вышли» и «Вы вышли из всех сеансов» — разные действия, разный текст. */
+  message: string;
 }
 
 /* ---------- Ошибки ---------- */

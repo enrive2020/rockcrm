@@ -19,10 +19,19 @@ export function StudentsScreen({
   query,
   onQueryChange,
   onOpen,
+  ownOnly = false,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
   onOpen: (studentId: string) => void;
+  /**
+   * Родитель и взрослый ученик видят только своих: выдачу урезает сервер
+   * (`authz.visible_student_ids`), а не интерфейс. Поэтому пустой запрос
+   * для них осмыслен — вернутся их дети, а не половина школы. Требовать
+   * «введите две буквы» от родителя двоих детей значило бы спрятать
+   * за поиском список из двух строк.
+   */
+  ownOnly?: boolean;
 }) {
   // Запрос отстаёт от ввода: иначе на каждую букву уходил бы запрос,
   // а список мигал бы промежуточными результатами
@@ -32,7 +41,7 @@ export function StudentsScreen({
     return () => clearTimeout(timer);
   }, [query]);
 
-  const enabled = debounced.length >= MIN_QUERY;
+  const enabled = ownOnly || debounced.length >= MIN_QUERY;
   const results = useAsync<StudentSearchItem[]>(() => api.students(debounced), [debounced], enabled);
   const found = results.data ?? [];
 
@@ -40,8 +49,12 @@ export function StudentsScreen({
     <section className="screen">
       <div className="tl-head">
         <div>
-          <h1 className="h1">Ученики</h1>
-          <p className="sub">Поиск по имени ученика, имени родителя и телефону — звонит родитель, искать нужно по нему</p>
+          <h1 className="h1">{ownOnly ? 'Мои ученики' : 'Ученики'}</h1>
+          <p className="sub">
+            {ownOnly
+              ? 'Здесь только ваши: список приходит с сервера уже урезанным, чужого ребёнка в нём нет'
+              : 'Поиск по имени ученика, имени родителя и телефону — звонит родитель, искать нужно по нему'}
+          </p>
         </div>
       </div>
 
@@ -51,7 +64,7 @@ export function StudentsScreen({
           type="search"
           value={query}
           autoFocus
-          placeholder="Амина, Гульнара или +7 701 555 00 03"
+          placeholder={ownOnly ? 'Имя ребёнка' : 'Амина, Гульнара или +7 701 555 00 03'}
           aria-label="Поиск ученика"
           onChange={(event) => onQueryChange(event.target.value)}
         />
@@ -76,8 +89,13 @@ export function StudentsScreen({
         <ErrorState error={results.error} onRetry={results.reload} title="Поиск не выполнился" />
       )}
       {enabled && !results.loading && !results.error && found.length === 0 && (
-        <EmptyState label="Ничего не найдено" title={`По запросу «${debounced}» никого нет`}>
-          Проверьте раскладку и попробуйте фамилию родителя или последние четыре цифры номера.
+        <EmptyState
+          label="Ничего не найдено"
+          title={debounced ? `По запросу «${debounced}» никого нет` : 'Учеников не привязано'}
+        >
+          {ownOnly && !debounced
+            ? 'К вашей учётной записи не привязан ни один ученик. Это чинится в школе: там же, где заводят договор.'
+            : 'Проверьте раскладку и попробуйте фамилию родителя или последние четыре цифры номера.'}
         </EmptyState>
       )}
       {enabled && !results.loading && !results.error && found.length > 0 && (

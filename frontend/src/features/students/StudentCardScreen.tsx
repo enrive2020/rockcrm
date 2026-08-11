@@ -33,11 +33,19 @@ export function StudentCardScreen({
   onBack,
   onOpenStudent,
   onToast,
+  canSell = true,
 }: {
   studentId: string;
   onBack: () => void;
   onOpenStudent: (id: string) => void;
   onToast: (toast: Toast) => void;
+  /**
+   * Продажа, продление и заморозка требуют роли администратора
+   * (`require_admin`). Преподавателю и родителю кнопок здесь быть не должно:
+   * они дадут 403 после заполнения формы — то есть после того, как сумма
+   * уже названа родителю вслух.
+   */
+  canSell?: boolean;
 }) {
   const card = useAsync<StudentCard>(() => api.student(studentId), [studentId]);
   const [dialog, setDialog] = useState<'sell' | 'freeze' | null>(null);
@@ -80,6 +88,7 @@ export function StudentCardScreen({
             <div className="col-stack">
               <SubscriptionCard
                 subscription={student.subscription}
+                canSell={canSell}
                 onSell={() => setDialog('sell')}
                 onFreeze={() => setDialog('freeze')}
                 onReleaseHold={async (holdId) => {
@@ -151,11 +160,13 @@ export function StudentCardScreen({
 
 function SubscriptionCard({
   subscription,
+  canSell,
   onSell,
   onFreeze,
   onReleaseHold,
 }: {
   subscription: StudentSubscription | null;
+  canSell: boolean;
   onSell: () => void;
   onFreeze: () => void;
   onReleaseHold: (holdId: string) => void;
@@ -168,9 +179,11 @@ function SubscriptionCard({
         <p className="trend">
           Действующего абонемента нет — занятия идут разовой оплатой, и остаток списывать неоткуда.
         </p>
-        <button className="btn pri" style={{ flex: 'none', marginTop: 12 }} onClick={onSell}>
-          Продать абонемент
-        </button>
+        {canSell && (
+          <button className="btn pri" style={{ flex: 'none', marginTop: 12 }} onClick={onSell}>
+            Продать абонемент
+          </button>
+        )}
       </div>
     );
   }
@@ -222,22 +235,26 @@ function SubscriptionCard({
                   {hold.reason ? ` · ${hold.reason}` : ''}
                 </small>
               </div>
-              <button className="btn slim" onClick={() => onReleaseHold(hold.id)} title="Снять заморозку и вернуть срок назад">
-                Снять
-              </button>
+              {canSell && (
+                <button className="btn slim" onClick={() => onReleaseHold(hold.id)} title="Снять заморозку и вернуть срок назад">
+                  Снять
+                </button>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      <div className="actions">
-        <button className="btn pri" onClick={onSell}>
-          Продать продление
-        </button>
-        <button className="btn" onClick={onFreeze}>
-          Заморозить
-        </button>
-      </div>
+      {canSell && (
+        <div className="actions">
+          <button className="btn pri" onClick={onSell}>
+            Продать продление
+          </button>
+          <button className="btn" onClick={onFreeze}>
+            Заморозить
+          </button>
+        </div>
+      )}
     </div>
   );
 }
