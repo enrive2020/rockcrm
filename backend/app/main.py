@@ -20,12 +20,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import attendance as attendance_service
-from . import api_keys, billing, config, repository as repo, schemas
+from . import api_keys, billing, config, money, repository as repo, schemas
 from . import leads as leads_service
 from . import students as students_service
 from .db import close_pool, get_pool, set_tenant, tenant_tx, untenanted_tx
 from .errors import ApiError, not_found, translate_db_error
-from .rules import compute_all_effects
+from .rules import applied_summary, compute_all_effects, rolled_back as compute_rollback
 
 
 @asynccontextmanager
@@ -263,14 +263,30 @@ def lesson_card(who: CallerDep, lesson_id: str) -> dict[str, Any]:
         tz = ZoneInfo(lesson["branch_timezone"])
         rate_amount, rate_percent = repo.teacher_rate(cur, lesson)
         marked = repo.attendance_by_student(cur, lesson_id)
+        applied = repo.applied_effects(cur, lesson_id)
         on = lesson["starts_at"].date()
 
         participants = []
         for row in repo.lesson_participants(cur, lesson):
             student_id = str(row["student_id"])
             sub = repo.active_subscription(cur, student_id, on)
-            effects = compute_all_effects(sub, rate_amount, rate_percent)
             att = marked.get(student_id)
+            fact = applied.get(student_id)
+
+            # У отмеченного участника остаток в базе УЖЕ уменьшен, и предпросмотр
+            # от него вычел бы занятие второй раз (issue #22). Считаем от остатка
+            # до списания: переотметка всё равно начинается с отмены прежней
+            # отметки, а она вернёт занятие назад — предпросмотр обязан обещать
+            # именно тот остаток, который получится.
+            base = (
+                sub
+                if fact is None
+                else compute_rollback(
+                    sub, int(fact["lessons_delta"]), int(fact["makeups_delta"])
+                )
+            )
+            effects = compute_all_effects(base, rate_amount, rate_percent)
+
             participants.append(
                 {
                     "student_id": student_id,
@@ -288,6 +304,7 @@ def lesson_card(who: CallerDep, lesson_id: str) -> dict[str, Any]:
                         "status": sub.status,
                     },
                     "mark_effects": {m: e.api_dict() for m, e in effects.items()},
+                    "applied_effect": _applied_effect(fact, sub),
                 }
             )
 
@@ -549,6 +566,179 @@ def leads_webhook(
         return card
 
 
+# ---------------------------------------------------------------------------
+# Деньги и ЗП — этап 4
+#
+# Всё читается из того, что уже посчитано отметкой посещаемости: зарплата
+# лежит в payroll_entry, деньги в payment. Второго расчёта здесь нет
+# намеренно — он разошёлся бы с первым при первой смене ставки.
+# ---------------------------------------------------------------------------
+
+
+def _period(
+    who: Caller,
+    cur: Any,
+    from_: dt.date | None,
+    to: dt.date | None,
+) -> tuple[dt.date, dt.date, str]:
+    """Границы отчёта и пояс школы. По умолчанию — текущий месяц."""
+    tz_name = repo.tenant_timezone(cur, who.tenant_id)
+    since, until = money.resolve_period(from_, to, tz_name)
+    return since, until, tz_name
+
+
+@app.get(f"{API}/payroll", response_model=schemas.PayrollSheet, tags=["Деньги"])
+def payroll_sheet(
+    who: CallerDep,
+    from_: Annotated[dt.date | None, Query(alias="from", description="Начало периода")] = None,
+    to: Annotated[dt.date | None, Query(description="Конец периода, включительно")] = None,
+    branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
+) -> dict[str, Any]:
+    """Ведомость по преподавателям за период.
+
+    Если период закрыт, суммы берутся по штампу `period_id` и больше
+    не меняются. Открытый период собирается по датам и тянет в себя правки
+    за уже закрытые месяцы — это и есть «корректировка в следующем».
+    """
+    with tenant_tx(who.tenant_id) as cur:
+        since, until, tz_name = _period(who, cur, from_, to)
+        return money.sheet(cur, since, until, branch_id, tz_name)
+
+
+# Объявлено ДО /payroll/teachers/{staff_id}: иначе FastAPI сопоставил бы
+# «periods» с параметром пути и список периодов вечно отвечал бы 404.
+@app.get(
+    f"{API}/payroll/periods", response_model=list[schemas.PayrollPeriod], tags=["Деньги"]
+)
+def payroll_periods(
+    who: CallerDep,
+    limit: Annotated[int, Query(ge=1, le=120)] = 24,
+) -> list[dict[str, Any]]:
+    with tenant_tx(who.tenant_id) as cur:
+        tz_name = repo.tenant_timezone(cur, who.tenant_id)
+        return money.periods(cur, tz_name, limit)
+
+
+@app.post(
+    f"{API}/payroll/periods",
+    response_model=schemas.PeriodClosed,
+    status_code=201,
+    tags=["Деньги"],
+)
+def close_payroll_period(
+    who: CallerDep, body: schemas.ClosePeriodRequest
+) -> dict[str, Any]:
+    """Закрыть период начисления.
+
+    Открытого периода в системе не существует: строка в `payroll_period`
+    появляется ровно тогда, когда деньги посчитаны и отданы. Закрытие
+    штампует все непроштампованные начисления с датой до конца периода;
+    всё, что появится позже, штампа не получит и уйдёт в следующую
+    ведомость (spec.md §6.2).
+    """
+    with tenant_tx(who.tenant_id) as cur:
+        attendance_service.require_actor(cur, who.user_id)
+        tz_name = repo.tenant_timezone(cur, who.tenant_id)
+        return money.close_period(
+            cur, who.tenant_id, who.user_id, body.from_, body.to, tz_name
+        )
+
+
+@app.get(
+    f"{API}/payroll/teachers/{{staff_id}}",
+    response_model=schemas.PayrollDetail,
+    tags=["Деньги"],
+)
+def payroll_teacher(
+    who: CallerDep,
+    staff_id: str,
+    from_: Annotated[dt.date | None, Query(alias="from")] = None,
+    to: Annotated[dt.date | None, Query(description="Включительно")] = None,
+    branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
+) -> dict[str, Any]:
+    """Расшифровка ведомости: за что именно начислено, занятие за занятием."""
+    with tenant_tx(who.tenant_id) as cur:
+        since, until, tz_name = _period(who, cur, from_, to)
+        card = money.teacher_sheet(cur, staff_id, since, until, branch_id, tz_name)
+        if card is None:
+            raise not_found("Преподаватель не найден")
+        return card
+
+
+@app.get(f"{API}/reports/revenue", response_model=schemas.Revenue, tags=["Деньги"])
+def revenue_report(
+    who: CallerDep,
+    from_: Annotated[dt.date | None, Query(alias="from")] = None,
+    to: Annotated[dt.date | None, Query(description="Включительно")] = None,
+    branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
+) -> dict[str, Any]:
+    """Выручка по филиалам, направлениям и месяцам.
+
+    Считается по поступившим деньгам, а не по проданным абонементам: продажа
+    с долгом — обычное дело, и выручка, показывающая невыплаченное, отвечает
+    не на тот вопрос.
+    """
+    with tenant_tx(who.tenant_id) as cur:
+        since, until, tz_name = _period(who, cur, from_, to)
+        return money.revenue(cur, since, until, branch_id, tz_name)
+
+
+@app.get(f"{API}/reports/rooms", response_model=schemas.RoomsReport, tags=["Деньги"])
+def rooms_report(
+    who: CallerDep,
+    from_: Annotated[dt.date | None, Query(alias="from")] = None,
+    to: Annotated[dt.date | None, Query(description="Включительно")] = None,
+    branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
+) -> dict[str, Any]:
+    """Загрузка кабинетов в процентах — ответ на «пора ли открывать филиал»."""
+    with tenant_tx(who.tenant_id) as cur:
+        since, until, tz_name = _period(who, cur, from_, to)
+        return money.rooms(cur, since, until, branch_id, tz_name)
+
+
+@app.get(f"{API}/reports/churn", response_model=schemas.ChurnReport, tags=["Деньги"])
+def churn_report(
+    who: CallerDep,
+    from_: Annotated[dt.date | None, Query(alias="from")] = None,
+    to: Annotated[dt.date | None, Query(description="Включительно")] = None,
+    grace_days: Annotated[
+        int, Query(ge=0, le=90, description="Сколько дней ждём продления")
+    ] = money.DEFAULT_GRACE_DAYS,
+    limit: Annotated[int, Query(ge=0, le=200)] = money.DEFAULT_LIST_LIMIT,
+) -> dict[str, Any]:
+    """Кто не продлил абонемент и у кого из преподавателей это чаще."""
+    with tenant_tx(who.tenant_id) as cur:
+        since, until, _ = _period(who, cur, from_, to)
+        return money.churn(cur, since, until, grace_days, limit)
+
+
+@app.get(f"{API}/reports/debts", response_model=schemas.DebtsReport, tags=["Деньги"])
+def debts_report(
+    who: CallerDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = money.DEFAULT_LIST_LIMIT,
+) -> dict[str, Any]:
+    """Долги: у кого и сколько. Периода нет — долг всегда на сейчас."""
+    with tenant_tx(who.tenant_id) as cur:
+        return money.debts(cur, limit)
+
+
+@app.get(f"{API}/reports/summary", response_model=schemas.MoneySummary, tags=["Деньги"])
+def money_summary(
+    who: CallerDep,
+    from_: Annotated[dt.date | None, Query(alias="from")] = None,
+    to: Annotated[dt.date | None, Query(description="Включительно")] = None,
+    branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
+) -> dict[str, Any]:
+    """Шапка экрана: выручка, загрузка, отток и блок «Требует внимания».
+
+    Одним запросом, потому что это четыре числа наверху экрана, а каждый
+    отчёт под ними тяжелее, чем нужно ради одной цифры.
+    """
+    with tenant_tx(who.tenant_id) as cur:
+        since, until, tz_name = _period(who, cur, from_, to)
+        return money.summary(cur, since, until, branch_id, tz_name)
+
+
 @app.get(f"{API}/health", tags=["Служебное"])
 def health() -> dict[str, str]:
     with get_pool().connection() as conn:
@@ -557,6 +747,38 @@ def health() -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
+
+
+def _applied_effect(
+    fact: dict[str, Any] | None, sub: Any
+) -> dict[str, Any] | None:
+    """Факт применённой отметки — то, что уже списалось, а не то, что списалось бы.
+
+    Остаток «после» здесь — настоящий текущий остаток абонемента, а не сумма
+    правил: если после этой отметки было ещё движение (продление, отработка),
+    интерфейс обязан показать то же число, что и карточка ученика.
+    """
+    if fact is None:
+        return None
+    lessons_after = sub.lessons_balance if sub is not None else None
+    makeups_after = sub.makeups_balance if sub is not None else None
+    amount = int(fact["teacher_amount"] or 0)
+    return {
+        "mark": fact["mark"],
+        "attendance_id": str(fact["attendance_id"]),
+        "lessons_delta": int(fact["lessons_delta"]),
+        "makeups_delta": int(fact["makeups_delta"]),
+        "lessons_after": lessons_after,
+        "makeups_after": makeups_after,
+        "teacher_amount": amount,
+        "summary": applied_summary(
+            fact["mark"],
+            int(fact["lessons_delta"]),
+            int(fact["makeups_delta"]),
+            lessons_after,
+            amount,
+        ),
+    }
 
 
 def _uuid_or_400(value: str, field: str) -> str:

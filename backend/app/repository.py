@@ -529,6 +529,40 @@ def attendance_by_student(cur: psycopg.Cursor, lesson_id: str) -> dict[str, dict
     return {str(row["student_id"]): row for row in cur.fetchall()}
 
 
+def applied_effects(cur: psycopg.Cursor, lesson_id: str) -> dict[str, dict[str, Any]]:
+    """Что действующие отметки занятия уже сделали — по журналам, а не по правилам.
+
+    Суммы берутся из subscription_entry и payroll_entry, то есть из того, что
+    реально легло в базу. Пересчитать их правилами нельзя: правила школы могли
+    смениться между отметкой и открытием карточки, а проданный абонемент живёт
+    по правилам момента покупки — пересчёт показал бы не ту цифру, которая
+    ушла в остаток и в ведомость.
+
+    Компенсирующие записи отмены сюда не попадают: у них attendance_id пуст
+    (уникальный индекс держит одну charge на отметку), а сама отменённая
+    отметка отсеяна условием revoked_at IS NULL.
+    """
+    cur.execute(
+        """
+        SELECT a.id AS attendance_id,
+               a.student_id,
+               a.mark,
+               coalesce(sum(e.lessons_delta), 0)::int AS lessons_delta,
+               coalesce(sum(e.makeups_delta), 0)::int AS makeups_delta,
+               (SELECT coalesce(sum(p.amount), 0)
+                  FROM payroll_entry p
+                 WHERE p.attendance_id = a.id AND p.kind = 'lesson') AS teacher_amount
+        FROM attendance a
+        LEFT JOIN subscription_entry e
+               ON e.attendance_id = a.id AND e.kind IN ('charge', 'makeup_grant')
+        WHERE a.lesson_id = %s AND a.revoked_at IS NULL
+        GROUP BY a.id, a.student_id, a.mark
+        """,
+        (lesson_id,),
+    )
+    return {str(row["student_id"]): row for row in cur.fetchall()}
+
+
 def lesson_note(cur: psycopg.Cursor, lesson_id: str) -> dict[str, Any] | None:
     cur.execute(
         """
@@ -1575,3 +1609,689 @@ def funnel_days_to_won(
     )
     row = cur.fetchone()
     return None if row is None or row["days"] is None else float(row["days"])
+
+
+# ---------------------------------------------------------------------------
+# Деньги и ЗП: ведомость, периоды, отчёты
+#
+# Всё здесь считается в поясе ФИЛИАЛА, а не сервера: занятие в 20:00 в Алматы
+# для базы в UTC приходится ещё на предыдущие сутки, и последний день месяца
+# уехал бы в соседний период — ровно на том занятии, из-за которого
+# преподаватель и приходит спорить о ведомости.
+#
+# Начисление относится к периоду ПО КОЛОНКЕ period_id, а не по дате занятия.
+# Дата занятия отвечает на «когда это было», а period_id — на «в какой
+# ведомости это уже выплачено», и после закрытия периода это разные вопросы:
+# отметка, внесённая задним числом за июль, обязана попасть в августовскую
+# выплату, потому что июльская уже отдана людям на руки (spec.md §6.2).
+# ---------------------------------------------------------------------------
+
+# День, к которому относится начисление. У начисления за занятие это день
+# занятия в поясе его филиала; у бонуса и корректировки без занятия —
+# день создания записи в поясе школы.
+_PAYROLL_DAY = """
+  coalesce(
+    (l.starts_at AT TIME ZONE coalesce(b.timezone, t.timezone))::date,
+    (pe.created_at AT TIME ZONE t.timezone)::date
+  )
+"""
+
+# Строки начислений, попадающие в ведомость. Два режима выборки, и разница
+# между ними — весь смысл закрытия периода:
+#   закрытый период — ровно те строки, что были проштампованы при закрытии;
+#   открытый период — всё непроштампованное с датой до конца периода, включая
+#   правки за уже закрытые месяцы (они и есть «корректировка в следующем»).
+_PAYROLL_SOURCE = (
+    """
+  WITH entry AS (
+    SELECT pe.id, pe.staff_id, pe.kind, pe.amount, pe.calc, pe.period_id,
+           pe.lesson_id, pe.attendance_id, pe.created_at,
+           l.branch_id,
+           l.starts_at,
+           (extract(epoch FROM (l.ends_at - l.starts_at)) / 60)::int AS duration_min,
+           coalesce(b.timezone, t.timezone) AS tz,
+           -- Отметка берётся из attendance, а не из снимка calc: calc пишет
+           -- приложение, и у начислений, попавших в базу мимо него (посев,
+           -- перенос из старой системы), ключа mark в нём нет. Отметка —
+           -- факт в своей таблице, и колонка «прогулы» обязана считаться
+           -- по факту, а не по тому, насколько полон снимок.
+           a.mark,
+           """
+    + _PAYROLL_DAY
+    + """ AS on_day
+    FROM payroll_entry pe
+    JOIN tenant t ON t.id = pe.tenant_id
+    LEFT JOIN lesson     l ON l.id = pe.lesson_id
+    LEFT JOIN branch     b ON b.id = l.branch_id
+    LEFT JOIN attendance a ON a.id = pe.attendance_id
+    WHERE CASE
+            WHEN %(period_id)s::uuid IS NOT NULL THEN pe.period_id = %(period_id)s::uuid
+            ELSE pe.period_id IS NULL AND """
+    + _PAYROLL_DAY
+    + """ < %(to)s
+          END
+      AND (%(branch)s::uuid IS NULL OR l.branch_id = %(branch)s::uuid)
+  )
+"""
+)
+
+
+def payroll_sheet(
+    cur: psycopg.Cursor,
+    *,
+    period_id: str | None,
+    since: dt.date,
+    until: dt.date,
+    branch_id: str | None,
+) -> list[dict[str, Any]]:
+    """Ведомость: строка на преподавателя. `until` — граница исключительно."""
+    cur.execute(
+        _PAYROLL_SOURCE
+        + """
+        SELECT st.id AS teacher_id,
+               btrim(concat_ws(' ', p.first_name, p.last_name)) AS name,
+               st.color,
+               count(DISTINCT e.lesson_id) FILTER (WHERE e.kind = 'lesson')::int AS lessons,
+               count(*) FILTER (WHERE e.kind = 'lesson')::int AS entries,
+               -- Прогул и поздняя отмена оплачиваются по одному правилу
+               -- (pay_teacher_on_no_show) и стоят одной колонкой: спор
+               -- преподавателя с ведомостью всегда именно про неё.
+               count(*) FILTER (
+                 WHERE e.kind = 'lesson'
+                   AND e.mark IN ('no_show', 'cancelled_late')
+               )::int AS no_shows,
+               -- В прототипе ставка — одна цифра, но у преподавателя их
+               -- несколько (55 и 85 минут, индивидуальное и группа).
+               -- Показываем самую частую и отдельным флагом честно говорим,
+               -- что она не одна: «4 500 ₸» без оговорки не сходится с суммой.
+               --
+               -- Ставка берётся из самих начислений, а не из teacher_rate:
+               -- в ведомости обязана стоять та цифра, по которой посчитали,
+               -- а не та, что действует сегодня. Неоплаченные отметки
+               -- (отмена заранее) в расчёт ставки не идут — это не ставка 0.
+               mode() WITHIN GROUP (ORDER BY e.amount)
+                 FILTER (WHERE e.kind = 'lesson' AND e.amount > 0) AS rate,
+               count(DISTINCT e.amount)
+                 FILTER (WHERE e.kind = 'lesson' AND e.amount > 0)::int AS rate_kinds,
+               coalesce(sum(e.amount) FILTER (WHERE e.kind = 'lesson'), 0) AS accrued,
+               coalesce(sum(e.amount) FILTER (WHERE e.kind IN ('correction','deduction')), 0)
+                 AS corrections,
+               coalesce(sum(e.amount) FILTER (WHERE e.kind = 'bonus'), 0) AS bonuses,
+               coalesce(sum(e.amount), 0) AS total,
+               coalesce(sum(e.amount) FILTER (WHERE e.on_day < %(from)s), 0) AS carried_amount,
+               count(*) FILTER (WHERE e.on_day < %(from)s)::int AS carried_entries
+        FROM entry e
+        JOIN staff  st ON st.id = e.staff_id
+        JOIN person p  ON p.id  = st.person_id
+        GROUP BY st.id, p.first_name, p.last_name, st.color
+        ORDER BY total DESC, name
+        """,
+        {"period_id": period_id, "from": since, "to": until, "branch": branch_id},
+    )
+    return cur.fetchall()
+
+
+def payroll_entries(
+    cur: psycopg.Cursor,
+    staff_id: str,
+    *,
+    period_id: str | None,
+    since: dt.date,
+    until: dt.date,
+    branch_id: str | None,
+) -> list[dict[str, Any]]:
+    """Расшифровка ведомости: строка на начисление.
+
+    Это тот список, которым администратор отвечает преподавателю на «откуда
+    сумма»: дата, ученик, отметка и снимок расчёта из `calc`. Без снимка
+    через полгода объяснить сумму нечем — ставки к тому времени поменяются.
+    """
+    cur.execute(
+        _PAYROLL_SOURCE
+        + """
+        SELECT e.id,
+               e.kind,
+               e.amount,
+               e.calc,
+               e.on_day,
+               e.duration_min,
+               e.lesson_id,
+               e.starts_at,
+               e.tz,
+               e.mark,
+               d.name  AS discipline,
+               br.name AS branch,
+               coalesce(
+                 nullif(btrim(concat_ws(' ', sp.first_name, sp.last_name)), ''),
+                 g.name
+               ) AS student
+        FROM entry e
+        LEFT JOIN lesson      l  ON l.id  = e.lesson_id
+        LEFT JOIN branch      br ON br.id = l.branch_id
+        LEFT JOIN discipline  d  ON d.id  = l.discipline_id
+        LEFT JOIN study_group g  ON g.id  = l.group_id
+        LEFT JOIN attendance  a  ON a.id  = e.attendance_id
+        LEFT JOIN student     s  ON s.id  = a.student_id
+        LEFT JOIN person      sp ON sp.id = s.person_id
+        WHERE e.staff_id = %(staff)s
+        ORDER BY e.on_day, e.starts_at NULLS LAST, e.id
+        """,
+        {
+            "period_id": period_id,
+            "from": since,
+            "to": until,
+            "branch": branch_id,
+            "staff": staff_id,
+        },
+    )
+    return cur.fetchall()
+
+
+def get_teacher(cur: psycopg.Cursor, staff_id: str) -> dict[str, Any] | None:
+    cur.execute(
+        """
+        SELECT st.id, st.color,
+               btrim(concat_ws(' ', p.first_name, p.last_name)) AS name
+        FROM staff st
+        JOIN person p ON p.id = st.person_id
+        WHERE st.id = %s
+        """,
+        (staff_id,),
+    )
+    return cur.fetchone()
+
+
+# ---------------------------------------------------------------------------
+# Периоды начисления
+# ---------------------------------------------------------------------------
+
+
+def payroll_period_by_range(
+    cur: psycopg.Cursor, since: dt.date, until: dt.date
+) -> dict[str, Any] | None:
+    """Период ровно по этим границам, если он заведён.
+
+    Сравниваем диапазоны целиком, а не «пересекается»: ведомость за половину
+    закрытого месяца — другой вопрос, и отвечать на него всем закрытым
+    периодом значило бы показать суммы, которых в запрошенных днях нет.
+    """
+    cur.execute(
+        """
+        SELECT pp.id, lower(pp.period) AS from_day, upper(pp.period) AS to_day,
+               pp.closed_at, pp.closed_by,
+               btrim(concat_ws(' ', p.first_name, p.last_name)) AS closed_by_name
+        FROM payroll_period pp
+        LEFT JOIN app_user u ON u.id = pp.closed_by
+        LEFT JOIN person   p ON p.id = u.person_id
+        WHERE pp.period = daterange(%s, %s, '[)')
+        """,
+        (since, until),
+    )
+    return cur.fetchone()
+
+
+def list_payroll_periods(cur: psycopg.Cursor, limit: int = 24) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT pp.id, lower(pp.period) AS from_day, upper(pp.period) AS to_day,
+               pp.closed_at, pp.closed_by,
+               btrim(concat_ws(' ', p.first_name, p.last_name)) AS closed_by_name,
+               (SELECT count(*) FROM payroll_entry pe WHERE pe.period_id = pp.id)::int
+                 AS entries,
+               (SELECT count(DISTINCT pe.staff_id) FROM payroll_entry pe
+                 WHERE pe.period_id = pp.id)::int AS teachers,
+               (SELECT coalesce(sum(pe.amount), 0) FROM payroll_entry pe
+                 WHERE pe.period_id = pp.id) AS total
+        FROM payroll_period pp
+        LEFT JOIN app_user u ON u.id = pp.closed_by
+        LEFT JOIN person   p ON p.id = u.person_id
+        ORDER BY lower(pp.period) DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return cur.fetchall()
+
+
+def close_payroll_period(
+    cur: psycopg.Cursor, since: dt.date, until: dt.date, actor_id: str
+) -> dict[str, Any]:
+    """Заводит период и сразу помечает его закрытым.
+
+    Открытого периода в этой системе не существует, и строки под него нет:
+    пока месяц идёт, начисления просто не проштампованы, а ведомость
+    собирается по датам. Строка в payroll_period появляется ровно в тот
+    момент, когда деньги посчитаны и отданы, — то есть при закрытии.
+    Пересечение периодов ловит ограничение исключения в схеме.
+    """
+    cur.execute(
+        """
+        INSERT INTO payroll_period (tenant_id, period, closed_at, closed_by)
+        VALUES (current_tenant(), daterange(%s, %s, '[)'), now(), %s)
+        RETURNING id, closed_at
+        """,
+        (since, until, actor_id),
+    )
+    return cur.fetchone()
+
+
+def stamp_payroll_entries(cur: psycopg.Cursor, period_id: str, until: dt.date) -> list[dict[str, Any]]:
+    """Проштамповать непроштампованные начисления с датой до конца периода.
+
+    Условие `period_id IS NULL` — единственный ключ идемпотентности. Оно же
+    и есть правило «закрытый период не пересчитывается»: начисление,
+    появившееся после закрытия, остаётся непроштампованным, в закрытую
+    ведомость уже не попадает и уходит в следующую — корректировкой,
+    как требует spec.md §6.2.
+    """
+    cur.execute(
+        """
+        WITH target AS (
+          SELECT pe.id
+          FROM payroll_entry pe
+          JOIN tenant t ON t.id = pe.tenant_id
+          LEFT JOIN lesson l ON l.id = pe.lesson_id
+          LEFT JOIN branch b ON b.id = l.branch_id
+          WHERE pe.period_id IS NULL AND """
+        + _PAYROLL_DAY
+        + """ < %(to)s
+        )
+        UPDATE payroll_entry pe SET period_id = %(period)s
+        FROM target WHERE pe.id = target.id
+        RETURNING pe.staff_id, pe.amount
+        """,
+        {"to": until, "period": period_id},
+    )
+    return cur.fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Выручка
+#
+# Выручка = поступившие деньги (payment), а не выставленные счета. Считать её
+# по проданным абонементам значило бы показать владельцу деньги, которых он
+# ещё не получил: продажа с долгом — обычное дело, а решение «пора ли
+# открывать третий филиал» принимается по кассе. Возврат лежит в той же
+# таблице отрицательной суммой и вычитается сам.
+# ---------------------------------------------------------------------------
+
+_REVENUE_SOURCE = """
+  WITH paid AS (
+    SELECT pm.id, pm.amount, pm.method, pm.paid_at,
+           t.timezone AS tz,
+           stu.branch_id,
+           coalesce(pl.discipline_id, stu.discipline_id) AS discipline_id
+    FROM payment pm
+    JOIN tenant t ON t.id = pm.tenant_id
+    LEFT JOIN subscription      sub ON sub.id = pm.subscription_id
+    LEFT JOIN student           stu ON stu.id = sub.student_id
+    LEFT JOIN subscription_plan pl  ON pl.id  = sub.plan_id
+    WHERE pm.status = 'succeeded'
+      AND pm.paid_at >= %(from)s AND pm.paid_at < %(to)s
+      AND (%(branch)s::uuid IS NULL OR stu.branch_id = %(branch)s::uuid)
+  )
+"""
+
+
+def revenue_total(
+    cur: psycopg.Cursor, since: dt.datetime, until: dt.datetime, branch_id: str | None
+) -> dict[str, Any]:
+    cur.execute(
+        _REVENUE_SOURCE
+        + "SELECT coalesce(sum(amount), 0) AS amount, count(*)::int AS payments FROM paid",
+        {"from": since, "to": until, "branch": branch_id},
+    )
+    return cur.fetchone()
+
+
+def revenue_by_branch(
+    cur: psycopg.Cursor, since: dt.datetime, until: dt.datetime, branch_id: str | None
+) -> list[dict[str, Any]]:
+    cur.execute(
+        _REVENUE_SOURCE
+        + """
+        SELECT p.branch_id AS id, b.name,
+               coalesce(sum(p.amount), 0) AS amount,
+               count(*)::int AS payments
+        FROM paid p
+        LEFT JOIN branch b ON b.id = p.branch_id
+        GROUP BY p.branch_id, b.name
+        ORDER BY amount DESC, b.name
+        """,
+        {"from": since, "to": until, "branch": branch_id},
+    )
+    return cur.fetchall()
+
+
+def revenue_by_discipline(
+    cur: psycopg.Cursor, since: dt.datetime, until: dt.datetime, branch_id: str | None
+) -> list[dict[str, Any]]:
+    cur.execute(
+        _REVENUE_SOURCE
+        + """
+        SELECT p.discipline_id AS id, d.name,
+               coalesce(sum(p.amount), 0) AS amount,
+               count(*)::int AS payments
+        FROM paid p
+        LEFT JOIN discipline d ON d.id = p.discipline_id
+        GROUP BY p.discipline_id, d.name
+        ORDER BY amount DESC, d.name
+        """,
+        {"from": since, "to": until, "branch": branch_id},
+    )
+    return cur.fetchall()
+
+
+def revenue_by_month(
+    cur: psycopg.Cursor, since: dt.datetime, until: dt.datetime, branch_id: str | None
+) -> list[dict[str, Any]]:
+    cur.execute(
+        _REVENUE_SOURCE
+        + """
+        SELECT to_char(p.paid_at AT TIME ZONE p.tz, 'YYYY-MM') AS month,
+               coalesce(sum(p.amount), 0) AS amount,
+               count(*)::int AS payments
+        FROM paid p
+        GROUP BY month
+        ORDER BY month
+        """,
+        {"from": since, "to": until, "branch": branch_id},
+    )
+    return cur.fetchall()
+
+
+def revenue_by_method(
+    cur: psycopg.Cursor, since: dt.datetime, until: dt.datetime, branch_id: str | None
+) -> list[dict[str, Any]]:
+    cur.execute(
+        _REVENUE_SOURCE
+        + """
+        SELECT p.method, coalesce(sum(p.amount), 0) AS amount, count(*)::int AS payments
+        FROM paid p
+        GROUP BY p.method
+        ORDER BY amount DESC, p.method
+        """,
+        {"from": since, "to": until, "branch": branch_id},
+    )
+    return cur.fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Загрузка кабинетов
+#
+# Ёмкость = часы работы филиала × число дней, когда филиал работал × кабинеты.
+# «Дни, когда филиал работал» берутся из фактов — это дни, в которые в филиале
+# было хотя бы одно занятие. Календаря рабочих дней в схеме нет, а считать
+# рабочими все семь дней недели значило бы занизить загрузку школы, закрытой
+# по воскресеньям, ровно на седьмую часть — и ответить «филиал не нужен» там,
+# где он нужен. Число дней уходит в ответ: цифру, на которую опираются
+# при открытии филиала, надо уметь проверить, а не принимать на веру.
+# ---------------------------------------------------------------------------
+
+
+def room_load(
+    cur: psycopg.Cursor, since: dt.datetime, until: dt.datetime, branch_id: str | None
+) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT r.id AS room_id, r.name AS room_name,
+               b.id AS branch_id, b.name AS branch_name,
+               (extract(epoch FROM (b.closes_at - b.opens_at)) / 60)::int AS open_minutes,
+               count(l.id)::int AS lessons,
+               coalesce(
+                 sum(extract(epoch FROM (l.ends_at - l.starts_at)) / 60), 0
+               )::int AS busy_minutes
+        FROM room r
+        JOIN branch b ON b.id = r.branch_id
+        LEFT JOIN lesson l
+               ON l.room_id = r.id
+              AND l.status <> 'cancelled'
+              AND l.starts_at >= %(from)s AND l.starts_at < %(to)s
+        WHERE r.archived_at IS NULL AND b.archived_at IS NULL
+          AND (%(branch)s::uuid IS NULL OR b.id = %(branch)s::uuid)
+        GROUP BY r.id, r.name, b.id, b.name, b.opens_at, b.closes_at
+        ORDER BY b.name, r.name
+        """,
+        {"from": since, "to": until, "branch": branch_id},
+    )
+    return cur.fetchall()
+
+
+def branch_open_days(
+    cur: psycopg.Cursor, since: dt.datetime, until: dt.datetime, branch_id: str | None
+) -> dict[str, int]:
+    """Сколько дней филиал работал: дни, в которые было хотя бы одно занятие."""
+    cur.execute(
+        """
+        SELECT l.branch_id,
+               count(DISTINCT
+                 (l.starts_at AT TIME ZONE coalesce(b.timezone, t.timezone))::date
+               )::int AS days
+        FROM lesson l
+        JOIN branch b ON b.id = l.branch_id
+        JOIN tenant t ON t.id = l.tenant_id
+        WHERE l.status <> 'cancelled'
+          AND l.starts_at >= %(from)s AND l.starts_at < %(to)s
+          AND (%(branch)s::uuid IS NULL OR l.branch_id = %(branch)s::uuid)
+        GROUP BY l.branch_id
+        """,
+        {"from": since, "to": until, "branch": branch_id},
+    )
+    return {str(row["branch_id"]): int(row["days"]) for row in cur.fetchall()}
+
+
+# ---------------------------------------------------------------------------
+# Отток
+#
+# Ушедшим считается ученик, у которого абонемент закончился в периоде и
+# не появилось следующего в течение grace_days. Отсрочка нужна потому, что
+# продление покупают и через неделю после окончания: школа, считающая такого
+# ученика ушедшим, увидела бы отток в тридцать процентов и перестала бы
+# верить отчёту вовсе.
+#
+# На ученика берётся ОДИН абонемент — последний закончившийся в периоде.
+# Иначе ученик, у которого в месяце закрылись два абонемента, весил бы
+# в отчёте вдвое больше соседа.
+# ---------------------------------------------------------------------------
+
+_CHURN_SOURCE = """
+  WITH ended AS (
+    SELECT DISTINCT ON (s.student_id)
+           s.id, s.student_id, s.valid_from, s.valid_until
+    FROM subscription s
+    WHERE s.status <> 'cancelled'
+      AND s.valid_until >= %(from)s AND s.valid_until < %(to)s
+    ORDER BY s.student_id, s.valid_until DESC
+  ),
+  verdict AS (
+    SELECT e.student_id, e.valid_until,
+           EXISTS (
+             SELECT 1 FROM subscription n
+             WHERE n.student_id = e.student_id
+               AND n.id <> e.id
+               AND n.status <> 'cancelled'
+               AND n.valid_until > e.valid_until
+               AND n.valid_from <= e.valid_until + %(grace)s
+           ) AS renewed
+    FROM ended e
+  )
+"""
+
+
+def churn_totals(
+    cur: psycopg.Cursor, since: dt.date, until: dt.date, grace_days: int
+) -> dict[str, Any]:
+    cur.execute(
+        _CHURN_SOURCE
+        + """
+        SELECT count(*)::int AS ended,
+               count(*) FILTER (WHERE renewed)::int AS renewed,
+               count(*) FILTER (WHERE NOT renewed)::int AS churned
+        FROM verdict
+        """,
+        {"from": since, "to": until, "grace": dt.timedelta(days=grace_days)},
+    )
+    return cur.fetchone()
+
+
+def churn_by_teacher(
+    cur: psycopg.Cursor, since: dt.date, until: dt.date, grace_days: int
+) -> list[dict[str, Any]]:
+    cur.execute(
+        _CHURN_SOURCE
+        + """
+        SELECT st.id AS teacher_id,
+               btrim(concat_ws(' ', tp.first_name, tp.last_name)) AS name,
+               count(*)::int AS ended,
+               count(*) FILTER (WHERE NOT v.renewed)::int AS churned
+        FROM verdict v
+        JOIN student s   ON s.id  = v.student_id
+        LEFT JOIN staff  st ON st.id = s.main_teacher_id
+        LEFT JOIN person tp ON tp.id = st.person_id
+        GROUP BY st.id, tp.first_name, tp.last_name
+        ORDER BY churned DESC, ended DESC, name
+        """,
+        {"from": since, "to": until, "grace": dt.timedelta(days=grace_days)},
+    )
+    return cur.fetchall()
+
+
+def churned_students(
+    cur: psycopg.Cursor, since: dt.date, until: dt.date, grace_days: int, limit: int
+) -> list[dict[str, Any]]:
+    cur.execute(
+        _CHURN_SOURCE
+        + """
+        SELECT v.student_id, v.valid_until AS ended_on,
+               btrim(concat_ws(' ', p.first_name, p.last_name)) AS name,
+               d.name  AS discipline,
+               b.name  AS branch,
+               st.id   AS teacher_id,
+               btrim(concat_ws(' ', tp.first_name, tp.last_name)) AS teacher,
+               (SELECT max((l.starts_at AT TIME ZONE coalesce(b.timezone, t.timezone))::date)
+                  FROM attendance a
+                  JOIN lesson l ON l.id = a.lesson_id
+                 WHERE a.student_id = v.student_id AND a.revoked_at IS NULL
+               ) AS last_lesson_on
+        FROM verdict v
+        JOIN student s  ON s.id = v.student_id
+        JOIN person  p  ON p.id = s.person_id
+        JOIN tenant  t  ON t.id = s.tenant_id
+        LEFT JOIN branch     b  ON b.id  = s.branch_id
+        LEFT JOIN discipline d  ON d.id  = s.discipline_id
+        LEFT JOIN staff      st ON st.id = s.main_teacher_id
+        LEFT JOIN person     tp ON tp.id = st.person_id
+        WHERE NOT v.renewed
+        ORDER BY v.valid_until DESC, name
+        LIMIT %(limit)s
+        """,
+        {
+            "from": since,
+            "to": until,
+            "grace": dt.timedelta(days=grace_days),
+            "limit": limit,
+        },
+    )
+    return cur.fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Долги
+#
+# Формула та же, что в карточке семьи (family_card): начислено по абонементам
+# семьи минус поступившие платежи. Держать её в двух местах разной нельзя —
+# родитель, которому в карточке назвали одну сумму, а в отчёте другую,
+# перестанет верить обеим.
+# ---------------------------------------------------------------------------
+
+# Начисленное и оплаченное считаются одним проходом по каждой таблице, а
+# не подзапросом на семью: коррелированный вариант повторял его сто семьдесят
+# раз и стоил 180 мс на полугодовых данных — на экране, который открывают
+# каждое утро, это заметно.
+_DEBT_SQL = """
+  charged AS (
+    SELECT sub.family_id,
+           sum(round(sub.price * (100 - sub.discount_pct) / 100)) AS charged,
+           min(sub.valid_from) AS since_on
+    FROM subscription sub
+    WHERE sub.status <> 'cancelled' AND sub.family_id IS NOT NULL
+    GROUP BY sub.family_id
+  ),
+  settled AS (
+    SELECT pm.family_id, sum(pm.amount) AS paid, max(pm.paid_at) AS last_paid_at
+    FROM payment pm
+    WHERE pm.status = 'succeeded' AND pm.family_id IS NOT NULL
+    GROUP BY pm.family_id
+  ),
+  owed AS (
+    SELECT f.id,
+           btrim(concat_ws(' ', p.first_name, p.last_name)) AS payer_name,
+           p.phone AS payer_phone,
+           coalesce(c.charged, 0) AS charged,
+           coalesce(s.paid, 0)    AS paid,
+           s.last_paid_at,
+           c.since_on
+    FROM family f
+    LEFT JOIN person  p ON p.id = f.payer_id
+    LEFT JOIN charged c ON c.family_id = f.id
+    LEFT JOIN settled s ON s.family_id = f.id
+  )
+"""
+
+
+def debtors(cur: psycopg.Cursor, limit: int) -> list[dict[str, Any]]:
+    cur.execute(
+        "WITH " + _DEBT_SQL + """
+        SELECT o.*, (o.charged - o.paid) AS debt,
+               (SELECT array_agg(btrim(concat_ws(' ', sp.first_name, sp.last_name))
+                                 ORDER BY sp.first_name)
+                  FROM student s
+                  JOIN person sp ON sp.id = s.person_id
+                 WHERE s.family_id = o.id AND s.archived_at IS NULL) AS students
+        FROM owed o
+        WHERE o.charged - o.paid > 0
+        ORDER BY debt DESC, payer_name
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return cur.fetchall()
+
+
+def debt_totals(cur: psycopg.Cursor) -> dict[str, Any]:
+    cur.execute(
+        "WITH " + _DEBT_SQL + """
+        SELECT count(*)::int AS families,
+               coalesce(sum(o.charged - o.paid), 0) AS amount
+        FROM owed o WHERE o.charged - o.paid > 0
+        """
+    )
+    return cur.fetchone()
+
+
+# ---------------------------------------------------------------------------
+# Блок «Требует внимания» — счётные факты, а не оценки. Каждое число
+# администратор обязан уметь развернуть в список и позвонить по нему.
+# ---------------------------------------------------------------------------
+
+
+def attention_counts(cur: psycopg.Cursor, low_threshold: int) -> dict[str, Any]:
+    cur.execute(
+        """
+        SELECT
+          -- Исчерпанный абонемент со ещё живым сроком — тот же повод звонить,
+          -- что и остаток 2: ученик придёт на занятие, а списывать нечего.
+          -- Истёкшие сюда не идут: это уже отток, а не «пора продлить».
+          (SELECT count(*) FROM subscription
+            WHERE status IN ('active', 'exhausted')
+              AND lessons_balance <= %(low)s
+              AND valid_until >= current_date)::int
+            AS subscriptions_running_low,
+          (SELECT count(*) FROM makeup_credit
+            WHERE used_at IS NULL AND expired_at IS NULL)::int AS makeups_open,
+          (SELECT count(*) FROM subscription_hold
+            WHERE period @> current_date)::int AS frozen_now
+        """,
+        {"low": low_threshold},
+    )
+    return cur.fetchone()

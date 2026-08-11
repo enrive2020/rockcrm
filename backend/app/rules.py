@@ -12,6 +12,7 @@ tenant.default_rules: проданный абонемент — договор �
 """
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -303,6 +304,68 @@ def compute_all_effects(
     return {
         mark: compute_effect(mark, subscription, rate_amount, rate_percent) for mark in MARKS
     }
+
+
+# ---------------------------------------------------------------------------
+# Уже применённая отметка
+#
+# Предпросмотр отвечает на «что будет, если нажать», и считается от текущего
+# остатка. Для участника, который УЖЕ отмечен, тот же расчёт врёт: занятие
+# из остатка вычтено, и правило вычитает его второй раз — карточка показывает
+# «−1 → 3» при фактическом остатке 4 (issue #22).
+#
+# Лечится двумя разными полями, потому что это два разных вопроса.
+# `applied_effect` — что отметка сделала на самом деле; он собирается
+# из записей журнала, а не пересчётом правил: правила школы могли смениться
+# между отметкой и открытием карточки, и пересчёт вернул бы не то, что списал.
+# `mark_effects` остаётся предпросмотром «что будет, если переотметить», но
+# считается от остатка ДО списания — переотметка начинается с отмены прежней
+# отметки, и она вернёт занятие назад.
+# ---------------------------------------------------------------------------
+
+
+def rolled_back(
+    subscription: SubscriptionState | None, lessons_delta: int, makeups_delta: int
+) -> SubscriptionState | None:
+    """Снимок абонемента, каким он был до применённой отметки."""
+    if subscription is None:
+        return None
+    return dataclasses.replace(
+        subscription,
+        lessons_balance=subscription.lessons_balance - lessons_delta,
+        makeups_balance=subscription.makeups_balance - makeups_delta,
+    )
+
+
+def applied_summary(
+    mark: str,
+    lessons_delta: int,
+    makeups_delta: int,
+    lessons_after: int | None,
+    teacher_amount: int,
+) -> str:
+    """Что отметка уже сделала — прошедшим временем.
+
+    Отдельная формулировка, а не та же, что у предпросмотра: «спишется»
+    и «списано» администратор читает по-разному, и в блоке «Отмечено»
+    будущее время выглядит как несделанная работа.
+    """
+    label = MARK_LABELS.get(mark, mark)
+
+    if lessons_delta < 0:
+        head = f"{label}: списано {-lessons_delta} {lessons_word(lessons_delta)}"
+        if lessons_after is not None:
+            head += f", осталось {lessons_after}"
+        head += "."
+    elif lessons_delta > 0:
+        head = f"{label}: возвращено {lessons_delta} {lessons_word(lessons_delta)}."
+    else:
+        head = f"{label}: занятие не списано."
+
+    if makeups_delta > 0:
+        head += f" Начислено {makeups_delta} {plural(makeups_delta, 'отработка', 'отработки', 'отработок')}."
+
+    return f"{head} Преподавателю {money(teacher_amount)}."
 
 
 # Порог остатка, при котором администратору пора продавать продление
