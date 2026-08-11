@@ -18,7 +18,7 @@ import psycopg
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app import config  # noqa: E402
+from app import api_keys, config  # noqa: E402
 
 # --- идентификаторы, на которые может опереться фронтенд и тесты -------------
 TENANT = "0189b0de-0000-7000-8000-00000000000a"   # RockSchool Алматы
@@ -153,8 +153,72 @@ PLAN_BY_DISCIPLINE = {"drums": "drums8", "guitar": "guitar8", "vocal": "vocal8"}
 GROUP_ENSEMBLE = _id("070")
 ENSEMBLE_MEMBERS = ["seit", "kim_zh", "bek_n", "murat"]
 
-LEAD_ALISA = _id("071")
-LEAD_ILYAS = _id("072")
+MANAGER_USER = "0189b0de-0000-7000-8000-0000000000u3".replace("u", "9")
+
+# Ключи внешних источников. Открытый текст здесь известен заранее только
+# потому, что это демо: тестам и curl-примерам нужен ключ, переживающий
+# пересев. В базу и здесь уходит один хеш — восстановить ключ из неё нельзя.
+# (открытый ключ, тенант, имя, области, отозван)
+DEMO_API_KEYS = [
+    ("rck_demo_rockschool_leads_key", None, "Telegram-бот", ["leads:write"], False),
+    ("rck_demo_leadhub_key", None, "LeadHub", ["leads:write"], False),
+    ("rck_demo_revoked_key", None, "Старая форма сайта", ["leads:write"], True),
+    ("rck_demo_readonly_key", None, "Дашборд (только чтение)", ["leads:read"], False),
+    ("rck_demo_other_school_key", "other", "Бот соседней школы", ["leads:write"], False),
+]
+
+# Сколько часов занимает путь от заявки до оплаты у тех, кто дошёл.
+# Ровно 4 дня — та цифра, что стоит в прототипе под доской.
+WON_PATH_HOURS = 96
+
+# Путь заявки по стадиям. Отказ ставится с той стадии, на которой человек
+# передумал: отказ после проведённого пробного и отказ после первого звонка —
+# это разные проблемы школы, и отчёт обязан их различать.
+LEAD_PATHS = {
+    "new": ["new"],
+    "contacting": ["new", "contacting"],
+    "trial_booked": ["new", "contacting", "trial_booked"],
+    "trial_held": ["new", "contacting", "trial_booked", "trial_held"],
+    "won": ["new", "contacting", "trial_booked", "trial_held", "won"],
+    "lost": ["new", "contacting", "lost"],
+}
+
+# Воронка демо-школы: доска из прототипа плюс отказы с причинами, без которых
+# отчёт не показывает, что чинить.
+# (ключ, имя, телефон, ученик, возраст, направление, филиал, источник,
+#  стадия, причина отказа, попыток дозвона, ответственный, часов назад,
+#  через сколько часов перезвонить)
+LEADS = [
+    # Пробный назначен — у Алисы он стоит в занятой Барабанной A (см. les05).
+    ("alisa",   "Алиса Ким",       "+77013330001", "Алиса",   7, "drums",  "AF", "telegram_bot", "trial_booked", None, 1, "manager", 26, None),
+    ("ilyas",   "Ильяс Абен",      "+77013330002", "Ильяс",  11, "drums",  "AB", "instagram",    "trial_booked", None, 1, "admin",   30, None),
+    # Новые
+    ("yerzhan", "Ержан Тулеу",     "+77013330003", "Ержан",  28, "guitar", "AF", "instagram",    "new",          None, 0, "manager",  4, None),
+    ("madina",  "Мадина Абишева",  "+77013330004", "Мадина", 10, "vocal",  "AF", "site_form",    "new",          None, 2, "manager", 20, None),
+    # Возраст ниже минимального для барабан (5 лет) — предупреждение, не отказ.
+    ("aruzhan", "Аружан Сапар",    "+77013330005", "Аружан",  4, "drums",  "AF", "telegram_bot", "new",          None, 0, None,       2, None),
+    # Дозвон. У Ольги напоминание в прошлом — карточка обязана загореться overdue.
+    ("sanzhar", "Санжар Тлеу",     "+77013330006", "Санжар", 13, "drums",  "AF", "whatsapp",     "contacting",   None, 1, "admin",   34, 6),
+    ("olga",    "Ольга Ким",       "+77013330007", "Ольга",  34, "piano",  "AF", "referral",     "contacting",   None, 1, "manager", 50, -2),
+    # Пробный проведён — думают
+    ("damir",   "Дамир Ералы",     "+77013330008", "Дамир",   9, "drums",  "AF", "site_form",    "trial_held",   None, 1, "admin",   72, 20),
+    ("aisulu",  "Айсулу Бек",      "+77013330009", "Айсулу",  8, "vocal",  "AF", "referral",     "trial_held",   None, 1, "manager", 96, None),
+    # Купили
+    ("mark",    "Марк Ли",         "+77013330010", "Марк",   12, "drums",  "AF", "instagram",    "won",          None, 1, "admin",  240, None),
+    ("danial",  "Даниал Ким",      "+77013330011", "Даниал", 11, "guitar", "AF", "telegram_bot", "won",          None, 1, "manager", 216, None),
+    ("kamila",  "Камила Ер",       "+77013330012", "Камила", 14, "vocal",  "AF", "referral",     "won",          None, 1, "admin",  190, None),
+    # Отказы с причинами
+    ("nurbek",  "Нурбек Асан",     "+77013330013", "Нурбек",  9, "guitar", "AF", "telegram_bot", "lost", "price",     2, "admin",  150, None),
+    ("dinara",  "Динара Ким",      "+77013330014", "Динара",  7, "vocal",  "AF", "site_form",    "lost", "schedule",  1, "manager", 130, None),
+    ("ruslan",  "Руслан Ким",      "+77013330015", "Руслан", 15, "drums",  "AB", "whatsapp",     "lost", "no_answer", 3, "admin",  110, None),
+    ("aliya",   "Алия Нур",        "+77013330016", "Алия",    6, "drums",  "AF", "instagram",    "lost", "price",     1, "manager", 100, None),
+]
+
+
+# Пробные уроки в расписании ссылаются на эти две заявки — отсюда и порядок
+# в LEADS: первые две строки должны оставаться первыми.
+LEAD_ALISA = _id("600")
+LEAD_ILYAS = _id("601")
 
 # Занятия 12 августа 2026. Время местное, как его видит администратор.
 #
@@ -251,6 +315,10 @@ def student_id(key: str) -> str:
 
 def subscription_id(key: str) -> str:
     return _id(f"3{[s[0] for s in STUDENTS].index(key):02d}")
+
+
+def lead_id(key: str) -> str:
+    return _id(f"6{[l[0] for l in LEADS].index(key):02d}")
 
 
 def plan_id(key: str) -> str:
@@ -578,15 +646,77 @@ def seed(conn: psycopg.Connection) -> None:
             (GROUP_ENSEMBLE, student_id(key)),
         )
 
-    # --- заявки под пробные ----------------------------------------------
+    # --- второй администратор ---------------------------------------------
+    # Заявки надо на кого-то назначать, а один администратор на всю школу
+    # не показывает ни назначения, ни фильтра «мои».
+    manager_person = _id("1fb")
     cur.execute(
-        """INSERT INTO lead (id, tenant_id, name, phone, student_name, student_age,
-                             discipline_id, branch_id, stage, source) VALUES
-             (%s, %s, 'Алиса Ким',  '+77013330001', 'Алиса Ким',  9, %s, %s, 'trial_booked', 'telegram_bot'),
-             (%s, %s, 'Ильяс Абен', '+77013330002', 'Ильяс Абен', 11, %s, %s, 'trial_booked', 'instagram')""",
-        (LEAD_ALISA, TENANT, DISC["drums"], BRANCH_AF,
-         LEAD_ILYAS, TENANT, DISC["drums"], BRANCH_AB),
+        """INSERT INTO person (id, tenant_id, first_name, last_name, phone, pd_consent_at)
+           VALUES (%s, %s, 'Айгерим', 'Дюсенова', '+77015550101', now())""",
+        (manager_person, TENANT),
     )
+    cur.execute(
+        """INSERT INTO app_user (id, tenant_id, person_id, login, role)
+           VALUES (%s, %s, %s, '+77015550101', 'admin')""",
+        (MANAGER_USER, TENANT, manager_person),
+    )
+
+    # --- ключи внешних источников ------------------------------------------
+    # В базу уходит только хеш — как и в бою. Открытый текст здесь известен
+    # заранее лишь потому, что это демо: тестам и curl-примерам нужен ключ,
+    # который переживёт пересев. Настоящие выпускаются scripts/make_api_key.py.
+    for raw, tenant, name, scopes, revoked in DEMO_API_KEYS:
+        cur.execute(
+            """INSERT INTO api_key (tenant_id, name, key_hash, prefix, scopes, revoked_at)
+               VALUES (%s, %s, %s, %s, %s, CASE WHEN %s THEN now() END)""",
+            (TENANT_OTHER if tenant == "other" else TENANT, name,
+             api_keys.hash_key(raw), raw[:12], scopes, revoked),
+        )
+
+    # --- воронка заявок ----------------------------------------------------
+    for key, name, phone, student, age, disc, branch, source, stage, lost, \
+            attempts, assigned, hours_ago, next_action_hours in LEADS:
+        cur.execute(
+            """INSERT INTO lead (id, tenant_id, name, phone, student_name, student_age,
+                                 discipline_id, branch_id, stage, lost_reason, source,
+                                 assigned_to, contact_attempts, next_action_at,
+                                 created_at, updated_at)
+               VALUES (%(id)s, %(t)s, %(name)s, %(phone)s, %(student)s, %(age)s,
+                       %(disc)s, %(branch)s, %(stage)s, %(lost)s, %(source)s,
+                       %(assigned)s, %(attempts)s,
+                       CASE WHEN %(next)s::int IS NULL THEN NULL
+                            ELSE now() + make_interval(hours => %(next)s::int) END,
+                       now() - make_interval(hours => %(ago)s),
+                       now() - make_interval(hours => %(ago)s))""",
+            {
+                "id": lead_id(key), "t": TENANT, "name": name, "phone": phone,
+                "student": student, "age": age,
+                "disc": DISC[disc] if disc else None,
+                "branch": {"AF": BRANCH_AF, "AB": BRANCH_AB}[branch], "stage": stage, "lost": lost, "source": source,
+                "assigned": {"admin": ADMIN_USER, "manager": MANAGER_USER}.get(assigned),
+                "attempts": attempts, "ago": hours_ago, "next": next_action_hours,
+            },
+        )
+
+        # История стадий. Без неё отчёт по воронке считать не из чего:
+        # заявка, дошедшая до покупки, в колонке «пробный проведён» уже
+        # не лежит, и конверсия по текущим стадиям вышла бы заниженной.
+        path = LEAD_PATHS[stage]
+        # Купившие проходят путь ровно за WON_PATH_HOURS — это и есть «средний
+        # путь от заявки до оплаты» на доске. Остальные растягивают свой путь
+        # по прожитому времени, и последний шаг остаётся свежим: иначе каждая
+        # открытая заявка выглядела бы застрявшей с самого посева.
+        span = WON_PATH_HOURS if stage == "won" else hours_ago * 0.7
+        previous = None
+        for index, to_stage in enumerate(path):
+            at = hours_ago - (span * index / (len(path) - 1) if len(path) > 1 else 0)
+            cur.execute(
+                """INSERT INTO lead_stage_history
+                     (tenant_id, lead_id, from_stage, to_stage, changed_by, changed_at)
+                   VALUES (%s, %s, %s, %s, %s, now() - make_interval(secs => %s))""",
+                (TENANT, lead_id(key), previous, to_stage, ADMIN_USER, int(at * 3600)),
+            )
+            previous = to_stage
 
     # --- занятия ---------------------------------------------------------
     for key, branch, teacher, room, minutes, start, target, kind, mark in LESSONS:

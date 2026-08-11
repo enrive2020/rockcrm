@@ -3,6 +3,7 @@
 Этап 1: расписание и отметка посещаемости.
 Этап 2: поиск и карточка ученика, тарифы, продажа и продление абонемента,
 заморозка и её снятие.
+Этап 3: воронка заявок, пробный урок, конверсия в ученика, приём по вебхуку.
 """
 from __future__ import annotations
 
@@ -13,15 +14,16 @@ from typing import Annotated, Any
 from zoneinfo import ZoneInfo
 
 import psycopg
-from fastapi import Depends, FastAPI, Header, Query, Request
+from fastapi import Depends, FastAPI, Header, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import attendance as attendance_service
-from . import billing, config, repository as repo, schemas
+from . import api_keys, billing, config, repository as repo, schemas
+from . import leads as leads_service
 from . import students as students_service
-from .db import close_pool, get_pool, tenant_tx
+from .db import close_pool, get_pool, set_tenant, tenant_tx, untenanted_tx
 from .errors import ApiError, not_found, translate_db_error
 from .rules import compute_all_effects
 
@@ -35,10 +37,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RockCRM API",
-    version="2.0.0",
+    version="3.0.0",
     description=(
-        "Расписание, отметка посещаемости и жизненный цикл абонемента. "
-        "Контракты этапов 1 и 2."
+        "Расписание, отметка посещаемости, жизненный цикл абонемента "
+        "и воронка заявок. Контракты этапов 1–3."
     ),
     lifespan=lifespan,
 )
@@ -385,6 +387,116 @@ def unfreeze_subscription(
     with tenant_tx(who.tenant_id) as cur:
         attendance_service.require_actor(cur, who.user_id)
         return billing.release_hold(cur, who.tenant_id, who.user_id, subscription_id, hold_id)
+
+
+# ---------------------------------------------------------------------------
+# Воронка заявок — этап 3
+# ---------------------------------------------------------------------------
+
+
+@app.get(f"{API}/leads", response_model=schemas.Board, tags=["Заявки"])
+def leads_board(
+    who: CallerDep,
+    stage: Annotated[str | None, Query(description="Одна стадия вместо всей доски")] = None,
+    source: Annotated[str | None, Query(description="Источник заявки")] = None,
+    assigned_to: Annotated[str | None, Query(description="UUID сотрудника")] = None,
+    branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
+) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        return leads_service.board(cur, stage, source, assigned_to, branch_id)
+
+
+# Отчёт объявлен ДО /leads/{lead_id}: иначе FastAPI сопоставит «funnel»
+# с параметром пути, и отчёт будет вечно отвечать «заявка не найдена».
+@app.get(f"{API}/leads/funnel", response_model=schemas.Funnel, tags=["Заявки"])
+def leads_funnel(
+    who: CallerDep,
+    from_: Annotated[dt.date | None, Query(alias="from", description="Начало периода")] = None,
+    to: Annotated[dt.date | None, Query(description="Конец периода, включительно")] = None,
+) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        # Пояс школы, а не сервера: «за август» у школы в Алматы начинается
+        # раньше, чем в UTC, и заявка первого числа иначе выпала бы из отчёта.
+        tz_name = repo.tenant_timezone(cur, who.tenant_id)
+        today = dt.datetime.now(ZoneInfo(tz_name)).date()
+        until = to or today
+        since = from_ or (until - dt.timedelta(days=30))
+        if since > until:
+            raise ApiError(
+                400, "bad_period", "Начало периода позже его конца — проверьте from и to."
+            )
+        return leads_service.funnel(cur, since, until, tz_name)
+
+
+@app.get(f"{API}/leads/{{lead_id}}", response_model=schemas.LeadFull, tags=["Заявки"])
+def lead_card(who: CallerDep, lead_id: str) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        card = leads_service.card(cur, lead_id)
+        if card is None:
+            raise not_found("Заявка не найдена")
+        return card
+
+
+@app.post(f"{API}/leads", response_model=schemas.LeadFull, status_code=201, tags=["Заявки"])
+def create_lead(who: CallerDep, body: schemas.LeadCreate) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        attendance_service.require_actor(cur, who.user_id)
+        return leads_service.create_lead(cur, who.tenant_id, who.user_id, body)
+
+
+@app.patch(f"{API}/leads/{{lead_id}}", response_model=schemas.LeadFull, tags=["Заявки"])
+def patch_lead(who: CallerDep, lead_id: str, body: schemas.LeadPatch) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        attendance_service.require_actor(cur, who.user_id)
+        return leads_service.update_lead(cur, who.tenant_id, who.user_id, lead_id, body)
+
+
+@app.post(
+    f"{API}/leads/{{lead_id}}/trial",
+    response_model=schemas.TrialBooked,
+    status_code=201,
+    tags=["Заявки"],
+)
+def book_trial(who: CallerDep, lead_id: str, body: schemas.TrialRequest) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        attendance_service.require_actor(cur, who.user_id)
+        return leads_service.book_trial(cur, who.tenant_id, who.user_id, lead_id, body)
+
+
+@app.post(
+    f"{API}/leads/{{lead_id}}/convert",
+    response_model=schemas.Converted,
+    status_code=201,
+    tags=["Заявки"],
+)
+def convert_lead(who: CallerDep, lead_id: str, body: schemas.ConvertRequest) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        attendance_service.require_actor(cur, who.user_id)
+        return leads_service.convert(cur, who.tenant_id, who.user_id, lead_id, body)
+
+
+@app.post(f"{API}/hooks/leads", response_model=schemas.LeadFull, tags=["Заявки"])
+def leads_webhook(
+    body: schemas.WebhookLead,
+    response: Response,
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    """Приём заявок от Telegram-бота, LeadHub и форм сайта.
+
+    Заголовки X-Tenant-Id и X-User-Id здесь намеренно не читаются: тенант
+    определяется ключом. Ответ 201 на созданную заявку и 200 на повторную
+    доставку того же external_id — ретрай обязан быть безопасным.
+    """
+    with untenanted_tx() as cur:
+        key = api_keys.authenticate(cur, x_api_key)
+        api_keys.require_scope(key, api_keys.WRITE_LEADS)
+        # Тенант становится известен только сейчас — и только теперь имеет
+        # смысл включать изоляцию строк.
+        set_tenant(cur, str(key["tenant_id"]))
+        api_keys.mark_used(cur, str(key["id"]))
+        card, created = leads_service.accept_webhook(cur, str(key["tenant_id"]), body)
+        response.status_code = 201 if created else 200
+        return card
 
 
 @app.get(f"{API}/health", tags=["Служебное"])

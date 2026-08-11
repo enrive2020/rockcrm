@@ -56,5 +56,30 @@ def tenant_tx(tenant_id: str) -> Iterator[psycopg.Cursor[dict[str, Any]]]:
     with pool.connection() as conn:
         with conn.transaction():
             with conn.cursor() as cur:
-                cur.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
+                set_tenant(cur, tenant_id)
+                yield cur
+
+
+def set_tenant(cur: psycopg.Cursor, tenant_id: str) -> None:
+    cur.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
+
+
+@contextmanager
+def untenanted_tx() -> Iterator[psycopg.Cursor[dict[str, Any]]]:
+    """Транзакция без выставленного тенанта. Ровно один сценарий: вебхук.
+
+    Обычный запрос знает тенанта из заголовка, а внешний источник приходит
+    с ключом — и тенант тут ответ, а не вопрос. Найти ключ можно только
+    до set_config: политика на current_tenant() отсекла бы строку раньше,
+    чем тенант станет известен (см. db/006_api_keys.sql).
+
+    Пока тенант не выставлен, current_tenant() возвращает NULL и политики
+    не пропускают ни одной строки: забывчивость и здесь даёт пустую выборку,
+    а не чужие данные. Выставить тенанта сразу после аутентификации обязан
+    вызывающий — через set_tenant().
+    """
+    pool = get_pool()
+    with pool.connection() as conn:
+        with conn.transaction():
+            with conn.cursor() as cur:
                 yield cur

@@ -515,3 +515,77 @@ def churn_risk(
     score = max(0, min(100, score))
     level = "high" if score >= RISK_HIGH else "medium" if score >= RISK_MEDIUM else "low"
     return {"level": level, "score": score, "reasons": reasons, "mitigations": mitigations}
+
+
+# ---------------------------------------------------------------------------
+# Воронка заявок
+#
+# Значения стадий и причин отказа взяты дословно из CHECK-ограничений
+# db/004_sales.sql. Порядок стадий здесь — это и порядок колонок на доске,
+# и порядок расчёта конверсии в отчёте: «прошёл дальше» означает «попал
+# в стадию, стоящую правее».
+# ---------------------------------------------------------------------------
+
+STAGE_ORDER: tuple[str, ...] = ("new", "contacting", "trial_booked", "trial_held", "won")
+# lost стоит отдельной колонкой: это не следующий шаг воронки, а выход из неё.
+LOST = "lost"
+STAGES: tuple[str, ...] = STAGE_ORDER + (LOST,)
+
+STAGE_TITLES: dict[str, str] = {
+    "new": "Новая",
+    "contacting": "Дозвон",
+    "trial_booked": "Пробный назначен",
+    "trial_held": "Пробный проведён",
+    "won": "Абонемент куплен",
+    "lost": "Отказ",
+}
+
+LOST_REASONS: dict[str, str] = {
+    "price": "Дорого",
+    "location": "Неудобно ехать",
+    "schedule": "Не подошло расписание",
+    "competitor": "Ушли к конкуренту",
+    "no_answer": "Не дозвонились",
+    "not_ready": "Пока не готовы",
+    "other": "Другое",
+}
+
+SOURCE_TITLES: dict[str, str] = {
+    "telegram_bot": "TG-бот",
+    "site_form": "Сайт",
+    "whatsapp": "WhatsApp",
+    "instagram": "Instagram",
+    "referral": "Сарафан",
+    "walk_in": "Пришли сами",
+    "phone": "Звонок",
+    "other": "Другое",
+}
+
+# Две неудачные попытки дозвона — тот момент, когда заявкой надо заняться
+# иначе: писать в WhatsApp, а не звонить в третий раз (prototype: «×2»).
+NO_ANSWER_ATTEMPTS = 2
+
+
+def stage_index(stage: str) -> int:
+    """Позиция стадии в воронке; -1 у lost — он никуда не ведёт."""
+    return STAGE_ORDER.index(stage) if stage in STAGE_ORDER else -1
+
+
+def humanize_duration(seconds: float) -> str:
+    """«5 минут», «2 часа», «3 дня» — сколько заявка ждёт ответа.
+
+    Округляем вниз до крупной единицы: администратору важно отличить «час»
+    от «трёх дней», а не 2 часа 47 минут от 2 часов 51 минуты. Точность
+    здесь создавала бы шум в колонке, которую читают взглядом.
+    """
+    seconds = max(int(seconds), 0)
+    minutes = seconds // 60
+    if minutes < 1:
+        return "только что"
+    if minutes < 60:
+        return f"{minutes} {plural(minutes, 'минуту', 'минуты', 'минут')}"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours} {plural(hours, 'час', 'часа', 'часов')}"
+    days = hours // 24
+    return f"{days} {days_word(days)}"
