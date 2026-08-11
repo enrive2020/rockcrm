@@ -68,7 +68,8 @@ CREATE TABLE tenant (
     "makeup_ttl_days": 30,
     "freeze_days_per_year": 14,
     "pay_teacher_on_no_show": true,
-    "carry_over_lessons": 0
+    "carry_over_lessons": 0,
+    "allow_overlapping_subscriptions": false
   }'::jsonb,
   plan          text NOT NULL DEFAULT 'trial',
   is_active     boolean NOT NULL DEFAULT true,

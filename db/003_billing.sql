@@ -99,7 +99,13 @@ CREATE TABLE subscription_entry (
 
   lessons_delta   smallint NOT NULL DEFAULT 0,
   makeups_delta   smallint NOT NULL DEFAULT 0,
-  CONSTRAINT entry_nonzero_ck CHECK (lessons_delta <> 0 OR makeups_delta <> 0),
+  -- Пустая запись бессмысленна и обычно означает ошибку в коде — кроме
+  -- заморозки: она баланс не двигает, но обязана остаться в истории.
+  -- Без исключения вид 'freeze' был бы объявлен и неприменим, а администратор,
+  -- отвечая на «куда делось занятие», не увидел бы двух недель каникул.
+  CONSTRAINT entry_nonzero_ck CHECK (
+    lessons_delta <> 0 OR makeups_delta <> 0 OR kind = 'freeze'
+  ),
 
   -- За что списали. Позволяет показать в журнале дату и преподавателя.
   attendance_id   uuid REFERENCES attendance(id) ON DELETE SET NULL,
