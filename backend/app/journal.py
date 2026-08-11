@@ -13,6 +13,8 @@ from typing import Any
 
 import psycopg
 
+from . import opdate
+
 
 def add_entry(
     cur: psycopg.Cursor,
@@ -27,32 +29,46 @@ def add_entry(
     reason: str,
     actor_id: str | None,
     reverses_id: int | None = None,
+    backdated: bool = False,
 ) -> int:
     """Строка в журнал абонемента. Остаток пересчитает триггер базы.
 
     Возвращает id записи: компенсирующая запись обязана сослаться на ту,
     которую гасит, иначе журнал перестаёт объяснять сам себя.
+
+    `backdated` — операция внесена позже события (ADR-001). Флаг живёт
+    в журнале, а не в аудите, потому что журнал — то, что администратор
+    открывает при споре с родителем: без пометки восстановить, когда именно
+    появилась запись, по одному `created_at` нельзя, а именно этот вопрос
+    и разбирают.
     """
+    columns = [
+        "tenant_id", "subscription_id", "kind", "lessons_delta", "makeups_delta",
+        "attendance_id", "lesson_id", "reverses_id", "reason", "created_by",
+    ]
+    values: list[object] = [
+        tenant_id,
+        subscription_id,
+        kind,
+        lessons_delta,
+        makeups_delta,
+        attendance_id,
+        lesson_id,
+        reverses_id,
+        reason,
+        actor_id,
+    ]
+    # Колонка приезжает миграцией 009; до неё запись идёт как раньше.
+    # Подробности и срок жизни этой ветки — в opdate.marks_backdating().
+    if opdate.marks_backdating(cur, "subscription_entry"):
+        columns.append("backdated")
+        values.append(backdated)
+
+    placeholders = ", ".join(["%s"] * len(values))
     cur.execute(
-        """
-        INSERT INTO subscription_entry
-            (tenant_id, subscription_id, kind, lessons_delta, makeups_delta,
-             attendance_id, lesson_id, reverses_id, reason, created_by)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING id
-        """,
-        (
-            tenant_id,
-            subscription_id,
-            kind,
-            lessons_delta,
-            makeups_delta,
-            attendance_id,
-            lesson_id,
-            reverses_id,
-            reason,
-            actor_id,
-        ),
+        f"INSERT INTO subscription_entry ({', '.join(columns)}) "
+        f"VALUES ({placeholders}) RETURNING id",
+        values,
     )
     return int(cur.fetchone()["id"])
 

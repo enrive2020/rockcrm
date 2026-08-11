@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 
 import psycopg
 
-from . import journal, repository as repo
+from . import journal, opdate, repository as repo
 from .errors import ApiError, not_found
 from .rules import (
     DEFAULT_RULES,
@@ -41,8 +41,10 @@ def _charged(price: Decimal, discount_pct: Decimal) -> int:
     return int(total.quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
-def _today(tz_name: str | None) -> dt.date:
-    return dt.datetime.now(ZoneInfo(tz_name or "Asia/Almaty")).date()
+# «Сегодня» больше не считается здесь: и оно, и дата операции приезжают
+# из opdate.resolve(). Два источника «сегодня» в продаже и в заморозке
+# однажды разошлись бы на сутки — на границе часового пояса это вопрос
+# времени, а не удачи.
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +82,13 @@ def sell_subscription(
         )
 
     tz_name = student["branch_timezone"]
-    starts_on = body.starts_on or _today(tz_name)
+    # Дата операции: по умолчанию сегодня в поясе филиала, но администратор
+    # может внести продажу задним числом в пределах окна школы (ADR-001).
+    when = opdate.resolve(cur, tenant_id, body.effective_date, tz_name)
+    # Первый день действия по умолчанию равен дате операции, а не «сегодня»:
+    # абонемент, проданный за прошлый понедельник, с понедельника и действует,
+    # иначе неделя занятий осталась бы без покрытия и списывать было бы не с чего.
+    starts_on = body.starts_on or when.on
     # valid_days — срок жизни в днях, включая первый: месячный абонемент,
     # проданный 1 августа, действует до 31-го, а не до 1 сентября.
     valid_until = starts_on + dt.timedelta(days=int(plan["valid_days"]) - 1)
@@ -139,10 +147,12 @@ def sell_subscription(
         makeups_delta=0,
         reason=f"Продажа абонемента «{plan['name']}»",
         actor_id=actor_id,
+        backdated=when.backdated,
     )
 
     carried, carry_note = _carry_over(
-        cur, tenant_id, actor_id, student_id, subscription_id, starts_on, rules, body.carry_over
+        cur, tenant_id, actor_id, student_id, subscription_id, starts_on, rules,
+        body.carry_over, when.backdated,
     )
 
     payment_id = None
@@ -199,6 +209,8 @@ def sell_subscription(
             "debt": debt,
             "valid_from": starts_on.isoformat(),
             "valid_until": valid_until.isoformat(),
+            "effective_date": when.on.isoformat(),
+            "backdated": when.backdated,
         },
     )
 
@@ -215,6 +227,8 @@ def sell_subscription(
         "carry_over_note": carry_note,
         "payment_id": payment_id,
         "debt": debt,
+        "effective_date": when.on.isoformat(),
+        "backdated": when.backdated,
     }
 
 
@@ -287,6 +301,7 @@ def _carry_over(
     starts_on: dt.date,
     rules: dict[str, Any],
     requested: bool,
+    backdated: bool = False,
 ) -> tuple[int, str | None]:
     """Перенос неиспользованного остатка на новый абонемент.
 
@@ -336,6 +351,7 @@ def _carry_over(
         makeups_delta=0,
         reason=f"Перенос остатка на абонемент с {starts_on:%d.%m.%Y}",
         actor_id=actor_id,
+        backdated=backdated,
     )
     journal.add_entry(
         cur,
@@ -346,6 +362,7 @@ def _carry_over(
         makeups_delta=0,
         reason="Перенос остатка с прошлого абонемента",
         actor_id=actor_id,
+        backdated=backdated,
     )
     note = (
         f"Перенесено {carried} {lessons_word(carried)} "
@@ -378,7 +395,9 @@ def create_hold(
 
     tz_name = sub["branch_timezone"] or "Asia/Almaty"
     tz = ZoneInfo(tz_name)
-    today = _today(tz_name)
+    # Дата операции: с неё и отсчитывается «прошлое» для заморозки (ADR-001).
+    when = opdate.resolve(cur, tenant_id, body.effective_date, tz_name)
+    today = when.on
 
     if body.to <= body.from_:
         raise ApiError(
@@ -388,13 +407,20 @@ def create_hold(
             "Последний день заморозки в интервал не входит.",
         )
     if body.from_ < today:
-        # Задним числом заморозить нельзя: занятия в прошлом уже отмечены,
-        # а сдвиг срока пересчитал бы то, что администратор уже пообещал.
+        # Заморозка не может начинаться раньше даты операции. Раньше здесь
+        # стояли системные часы, и внести каникулы за прошлую неделю было
+        # нельзя вовсе; теперь администратор говорит, каким числом вносит,
+        # а глубину этого «вчера» ограничивает окно школы backdating_days.
+        #
+        # Смысл запрета остался прежним: заморозка раньше даты операции
+        # пересчитала бы занятия, которые в этот интервал уже отмечены,
+        # и сдвинула бы срок, который родителю уже назвали.
         raise ApiError(
             422,
             "hold_in_past",
-            f"Заморозка не может начинаться в прошлом: сегодня {today:%d.%m.%Y}.",
-            {"today": today.isoformat()},
+            f"Заморозка не может начинаться раньше даты операции "
+            f"{today:%d.%m.%Y}.",
+            {"today": today.isoformat(), "effective_date": when.on.isoformat()},
         )
 
     days = (body.to - body.from_).days
@@ -492,6 +518,7 @@ def create_hold(
         makeups_delta=0,
         reason=freeze_reason(body.from_, body.to, days, body.reason),
         actor_id=actor_id,
+        backdated=when.backdated,
     )
 
     journal.audit(
@@ -512,6 +539,8 @@ def create_hold(
             "valid_until_after": valid_until_after.isoformat(),
             "lessons_cancelled": len(cancelled),
             "lesson_ids": cancelled,
+            "effective_date": when.on.isoformat(),
+            "backdated": when.backdated,
         },
     )
 
@@ -523,6 +552,8 @@ def create_hold(
         "lessons_cancelled": len(cancelled),
         "freeze_days_left": max(left - days, 0),
         "status": status,
+        "effective_date": when.on.isoformat(),
+        "backdated": when.backdated,
         "message": (
             f"Заморозка на {days} {days_word(days)}: "
             f"срок сдвинут на {valid_until_after:%d.%m.%Y}, "
@@ -531,18 +562,20 @@ def create_hold(
     }
 
 
-# Статус абонемента, выведенный из фактов: действующая ли сегодня заморозка,
-# остался ли остаток, не истёк ли срок. Единственное определение на систему —
-# им пользуются и заморозка, и её снятие, и ночная сверка.
+# Статус абонемента, выведенный из фактов: действующая ли заморозка, остался
+# ли остаток, не истёк ли срок. Единственное определение на систему — им
+# пользуются и заморозка, и её снятие, и ночная сверка.
 #
-# Ветки повторяют триггер subscription_recalc (db/003_billing.sql:143)
-# намеренно: все статусы, кроме `frozen`, обязаны получиться теми же, что
-# поставил бы он. Иначе первая же запись в журнал переписала бы статус
-# на свой, и два определения разошлись бы прямо на глазах.
+# Здесь единственное место, где абонемент становится `expired`. Триггер
+# subscription_recalc этого больше не делает (миграция 009, ADR-001 пункт 5):
+# он вычисляет статус из фактов, не зная «сегодня». Прежде простая вставка
+# строки в журнал объявляла соседний абонемент истёкшим по системным часам,
+# и абонемент, проданный задним числом, становился `expired` в ту же секунду —
+# следующая отметка не находила, с чего списывать.
 #
-# `frozen` проверяется по дню филиала (%(today)s), а `expired` — по
-# current_date: срок абонемента триггер и так считает по календарю сервера,
-# и расходиться с ним из-за часового пояса тут не за что.
+# Обе даты берутся из одного параметра %(today)s — дня филиала или даты
+# операции. Разные источники «сегодня» в двух соседних ветках однажды дали бы
+# абонемент, который одновременно и заморожен, и истёк.
 _STATUS_FROM_FACTS = """
     CASE
       -- Отменённый абонемент замораживать нечего и незачем.
@@ -552,7 +585,7 @@ _STATUS_FROM_FACTS = """
         WHERE h.subscription_id = s.id AND h.period @> %(today)s::date
       ) THEN 'frozen'
       WHEN s.lessons_balance <= 0 THEN 'exhausted'
-      WHEN s.valid_until < current_date THEN 'expired'
+      WHEN s.valid_until < %(today)s::date THEN 'expired'
       ELSE 'active'
     END
 """
@@ -805,6 +838,7 @@ def release_hold(
     actor_id: str,
     subscription_id: str,
     hold_id: str,
+    effective_date: dt.date | None = None,
 ) -> dict[str, Any]:
     """Снятие заморозки: срок возвращается назад, занятия — нет.
 
@@ -815,6 +849,8 @@ def release_hold(
     sub = repo.subscription_context(cur, subscription_id)
     if sub is None:
         raise not_found("Абонемент не найден")
+
+    when = opdate.resolve(cur, tenant_id, effective_date, sub["branch_timezone"])
 
     cur.execute(
         """
@@ -868,6 +904,7 @@ def release_hold(
         reason=unfreeze_reason(hold["from_day"], hold["to_day"], valid_until_after),
         actor_id=actor_id,
         reverses_id=frozen_entry_id,
+        backdated=when.backdated,
     )
 
     # Сама заморозка из subscription_hold удаляется: это не журнал, а текущее
@@ -884,7 +921,7 @@ def release_hold(
     #
     # Вызов идёт после journal.add_entry: триггер subscription_recalc бережёт
     # `frozen` и вернул бы его обратно, отработав следом.
-    status = _sync_freeze_status(cur, subscription_id, _today(sub["branch_timezone"]))
+    status = _sync_freeze_status(cur, subscription_id, when.on)
 
     rules = dict(DEFAULT_RULES)
     rules.update(sub["rules"] or {})
@@ -906,6 +943,8 @@ def release_hold(
             "valid_until_before": valid_until_before.isoformat(),
             "valid_until_after": valid_until_after.isoformat(),
             "lessons_cancelled": lessons_cancelled,
+            "effective_date": when.on.isoformat(),
+            "backdated": when.backdated,
         },
     )
 
@@ -927,5 +966,7 @@ def release_hold(
         "lessons_restored": 0,
         "freeze_days_left": max(limit - used, 0),
         "status": status,
+        "effective_date": when.on.isoformat(),
+        "backdated": when.backdated,
         "message": message,
     }

@@ -65,6 +65,39 @@ def has_partial_attendance_index() -> bool:
     return found is not None
 
 
+def has_backdating_columns() -> bool:
+    """Накатана ли миграция 009 — колонки `backdated` (ADR-001, пункт 6).
+
+    Та же логика, что и у проверки выше: спрашиваем базу, а не файлы в db/.
+    Приложение пишет пометку только при наличии колонки, поэтому без миграции
+    проверять нечего — и упасть на этом тест не должен: он проверял бы
+    отсутствующую схему, а не ошибку в коде.
+    """
+    with psycopg.connect(ADMIN_URL) as conn:
+        found = conn.execute(
+            """
+            SELECT count(*) FROM information_schema.columns
+            WHERE table_name IN ('attendance', 'subscription_entry')
+              AND column_name = 'backdated'
+            """
+        ).fetchone()
+    return int(found[0]) == 2
+
+
+def recalc_trigger_ignores_the_clock() -> bool:
+    """Перестал ли триггер `subscription_recalc` ставить `expired` (миграция 009).
+
+    Смотрим на определение самой функции: `current_date` в нём означает, что
+    статус зависит от системных часов, и вставка строки в журнал объявляет
+    соседний абонемент истёкшим (ADR-001, пункт 5).
+    """
+    with psycopg.connect(ADMIN_URL) as conn:
+        source = conn.execute(
+            "SELECT pg_get_functiondef('subscription_recalc()'::regprocedure)"
+        ).fetchone()[0]
+    return "current_date" not in source
+
+
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)

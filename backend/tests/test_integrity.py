@@ -203,6 +203,160 @@ def test_makeup_credits_match_balance(sql, tenant: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 1b. Непустота журнала
+#
+# Всё, что выше, — проверки СХОДИМОСТИ, и у них есть общая слепая зона:
+# ноль сходится с нулём. Пустой журнал проходит их все, потому что сумма
+# нуля движений равна нулевому остатку, и это не теоретическое замечание:
+# ровно так 2 500 отметок из 2 900 не оставили следа в журнале, а проверки
+# при этом были зелёными (issue #15, ADR-001).
+#
+# Поэтому здесь спрашивается не «сходится ли», а «есть ли вообще».
+# Проверки построены так, что пустота их гарантированно роняет: они сравнивают
+# журнал не с ним самим, а с фактами из соседних таблиц — с продажами
+# и с отметками посещаемости.
+# ---------------------------------------------------------------------------
+
+
+# Занятие по этим отметкам состоялось, и правила спорят только о прогулах:
+# «пришёл» и «опоздал» списывают занятие при любых настройках школы
+# (rules._subscription_deltas). Поэтому именно на них строится проверка —
+# ей не нужно знать правила конкретного абонемента.
+BURNING_MARKS = ("came", "late")
+
+# Абонемент считается «тем самым» для занятия, если совпало направление
+# и дата урока попала в срок действия. Пояс — филиала, а не сервера:
+# урок в 20:00 в Алматы для UTC приходится на предыдущие сутки, и абонемент,
+# начавшийся в этот день, отсеялся бы зря.
+_COVERING_SUBSCRIPTION = """
+  EXISTS (
+    SELECT 1
+      FROM subscription s
+      JOIN subscription_plan pl ON pl.id = s.plan_id
+     WHERE s.student_id = a.student_id
+       AND s.status <> 'cancelled'
+       AND l.discipline_id IS NOT DISTINCT FROM pl.discipline_id
+       AND (l.starts_at AT TIME ZONE coalesce(b.timezone, t.timezone))::date
+           BETWEEN s.valid_from AND s.valid_until
+  )
+"""
+
+
+@BOTH
+def test_every_subscription_ledger_starts_with_a_purchase(sql, tenant: str) -> None:
+    """Журнал абонемента не бывает пустым: он начинается с продажи.
+
+    Остаток — сумма журнала, а не хранимое число. Абонемент без записи
+    `purchase` или `transfer_in` означает остаток, взявшийся ниоткуда:
+    либо продажа не дописала журнал, либо кэш кто-то правил руками.
+    Проверка сходимости такой абонемент пропустит — ноль сойдётся с нулём.
+    """
+    empty = rows(
+        sql,
+        """
+        SELECT s.id, s.status, s.lessons_total, s.lessons_balance, s.valid_from
+          FROM subscription s
+         WHERE s.tenant_id = %(t)s
+           AND NOT EXISTS (
+             SELECT 1 FROM subscription_entry e
+              WHERE e.subscription_id = s.id
+                AND e.kind IN ('purchase', 'transfer_in')
+           )
+        """,
+        {"t": tenant},
+    )
+    assert empty == [], (
+        f"у {len(empty)} абонементов журнал не начинается с продажи: "
+        + ", ".join(f"{r['id']} ({r['status']}, выдано {r['lessons_total']})" for r in empty[:10])
+    )
+
+
+@BOTH
+def test_marks_on_a_live_subscription_left_a_charge(sql, tenant: str) -> None:
+    """Отметка «пришёл» при живом абонементе обязана оставить списание.
+
+    Это та самая проверка, которой не хватало. Отметка есть, абонемент,
+    покрывающий дату и направление, есть, а движения по журналу нет —
+    значит, занятие проведено бесплатно и никто об этом не знает: остаток
+    родителю назовут прежний, а занятие он уже отходил.
+
+    Считается не выборкой, а долей от всех покрытых отметок: при поломке,
+    из-за которой `active_subscription()` перестаёт отдавать абонемент,
+    молчаливыми становятся не одна-две отметки, а тысячи сразу.
+    """
+    totals = one(
+        sql,
+        f"""
+        SELECT count(*)::int AS covered,
+               count(*) FILTER (WHERE NOT EXISTS (
+                 SELECT 1 FROM subscription_entry e
+                  WHERE e.attendance_id = a.id AND e.kind = 'charge'
+               ))::int AS silent
+          FROM attendance a
+          JOIN lesson l ON l.id = a.lesson_id
+          JOIN tenant t ON t.id = a.tenant_id
+          LEFT JOIN branch b ON b.id = l.branch_id
+         WHERE a.tenant_id = %(t)s
+           AND a.revoked_at IS NULL
+           AND a.mark = ANY(%(marks)s)
+           AND {_COVERING_SUBSCRIPTION}
+        """,
+        {"t": tenant, "marks": list(BURNING_MARKS)},
+    )
+    covered, silent = int(totals["covered"]), int(totals["silent"])
+    # Без нижней границы проверка вырождается вместе с данными: ноль отметок
+    # даёт ноль молчаливых и зелёный результат на пустой базе.
+    assert covered > 0, "нет ни одной отметки при живом абонементе — проверять нечего"
+    assert silent == 0, (
+        f"{silent} из {covered} отметок при живом абонементе не оставили списания "
+        "в журнале: занятия проведены, а с абонемента не списано ничего"
+    )
+
+
+@BOTH
+def test_used_subscription_has_a_non_empty_ledger(sql, tenant: str) -> None:
+    """У абонемента с проведёнными занятиями журнал не пуст (ADR-001).
+
+    Предыдущая проверка смотрит со стороны отметки, эта — со стороны
+    абонемента, и это разные дыры. Отметок могло не быть вовсе, а абонемент
+    всё равно обязан объяснить, куда делись занятия: если в его срок и по его
+    направлению прошли уроки, в журнале есть списания.
+    """
+    silent = rows(
+        sql,
+        """
+        WITH used AS (
+          SELECT s.id, s.status, s.valid_from, s.valid_until, count(*) AS marks
+            FROM subscription s
+            JOIN subscription_plan pl ON pl.id = s.plan_id
+            JOIN tenant t ON t.id = s.tenant_id
+            JOIN attendance a ON a.student_id = s.student_id AND a.revoked_at IS NULL
+            JOIN lesson l ON l.id = a.lesson_id
+            LEFT JOIN branch b ON b.id = l.branch_id
+           WHERE s.tenant_id = %(t)s
+             AND s.status <> 'cancelled'
+             AND a.mark = ANY(%(marks)s)
+             AND l.discipline_id IS NOT DISTINCT FROM pl.discipline_id
+             AND (l.starts_at AT TIME ZONE coalesce(b.timezone, t.timezone))::date
+                 BETWEEN s.valid_from AND s.valid_until
+           GROUP BY s.id
+        )
+        SELECT u.id, u.status, u.marks
+          FROM used u
+         WHERE NOT EXISTS (
+           SELECT 1 FROM subscription_entry e
+            WHERE e.subscription_id = u.id AND e.kind = 'charge'
+         )
+        """,
+        {"t": tenant, "marks": list(BURNING_MARKS)},
+    )
+    assert silent == [], (
+        f"у {len(silent)} абонементов прошли занятия, а журнал пуст: "
+        + ", ".join(f"{r['id']} ({r['marks']} отметок)" for r in silent[:10])
+    )
+
+
+# ---------------------------------------------------------------------------
 # 2. Отметка и её последствия
 # ---------------------------------------------------------------------------
 

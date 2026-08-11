@@ -542,23 +542,41 @@ def churn(
     until: dt.date,
     grace_days: int,
     limit: int,
+    tz_name: str,
 ) -> dict[str, Any]:
+    """Отток по людям (issue #25).
+
+    Считать по абонементам нельзя: ученик с двумя направлениями давал два
+    «ухода», трёхнедельная пауза между абонементами объявлялась уходом,
+    а абонемент, кончающийся в конце месяца, попадал в непродлённые уже
+    в середине — все три ошибки складывались в 76% там, где школу покинули
+    16%. Определение живёт в repository._CHURN_SOURCE, там же разбор.
+    """
     # Верхняя граница в запросе исключительна, а в API включительна:
     # «отток за август» обязан считать абонемент, закончившийся 31 августа.
     until_excl = until + dt.timedelta(days=1)
-    totals = repo.churn_totals(cur, since, until_excl, grace_days)
-    ended = int(totals["ended"])
+    # Дата оценки — сегодня в поясе школы, а не конец периода. Отчёт за месяц
+    # открывают в середине этого месяца, и вердикт о днях, которые ещё
+    # не наступили, выносить не из чего.
+    asof = today_in(tz_name)
+
+    totals = repo.churn_totals(cur, since, until_excl, grace_days, asof)
+    facts = repo.churn_subscription_facts(cur, since, until_excl, grace_days)
+
+    people = int(totals["students"])
     churned = int(totals["churned"])
+    archived = int(totals["archived"])
 
     by_teacher = [
         {
             "teacher_id": str(row["teacher_id"]) if row["teacher_id"] else None,
             "name": row["name"] or "Без преподавателя",
+            "students": int(row["students"]),
             "ended": int(row["ended"]),
             "churned": int(row["churned"]),
-            "churn_pct": _pct(int(row["churned"]), int(row["ended"])),
+            "churn_pct": _pct(int(row["churned"]), int(row["students"])),
         }
-        for row in repo.churn_by_teacher(cur, since, until_excl, grace_days)
+        for row in repo.churn_by_teacher(cur, since, until_excl, grace_days, asof)
     ]
 
     students = [
@@ -570,28 +588,90 @@ def churn(
             "teacher": row["teacher"],
             "teacher_id": str(row["teacher_id"]) if row["teacher_id"] else None,
             "ended_on": row["ended_on"].isoformat(),
+            "archived_on": (
+                row["archived_on"].isoformat() if row["archived_on"] else None
+            ),
             "last_lesson_on": (
                 row["last_lesson_on"].isoformat() if row["last_lesson_on"] else None
             ),
         }
-        for row in repo.churned_students(cur, since, until_excl, grace_days, limit)
+        for row in repo.churned_students(
+            cur, since, until_excl, grace_days, asof, limit
+        )
     ]
 
     return {
         "period": _period_out(since, until),
         "grace_days": grace_days,
-        "ended": ended,
-        "renewed": int(totals["renewed"]),
+        "as_of": asof.isoformat(),
+        # Люди — то, ради чего отчёт существует. `students` остаётся списком
+        # ушедших, как в контракте v4, а база периода приезжает отдельным
+        # числом: переименовать список значило бы сломать экран ради имени.
+        "students_total": people,
+        "retained": int(totals["retained"]),
+        "frozen": int(totals["frozen"]),
+        "pending": int(totals["pending"]),
         "churned": churned,
-        "churn_pct": _pct(churned, ended),
+        "churn_pct": _pct(churned, people),
+        # Вторая, независимая оценка того же числа.
+        "archived": archived,
+        "archived_pct": _pct(archived, people),
+        # Документы: сколько абонементов закончилось и сколько продлено.
+        # Отдельно от людей, потому что это разные вопросы.
+        "ended": int(facts["ended"]),
+        "renewed": int(facts["renewed"]),
         "by_teacher": by_teacher,
         "students": students,
-        "note": (
-            f"Ушедшим считается ученик, у которого абонемент закончился "
-            f"в периоде и не продлён в течение {grace_days} "
-            f"{plural(grace_days, 'дня', 'дней', 'дней')}."
-        ),
+        "note": _churn_note(grace_days, people, churned, archived, totals),
     }
+
+
+# Насколько «отток по абонементам» и «отток по архиву» могут разойтись,
+# прежде чем на это надо указать пальцем. Пять человек — это уже разговор
+# с администратором о том, что кого-то забыли заархивировать.
+CHURN_DISCREPANCY = 5
+
+
+def _churn_note(
+    grace_days: int,
+    people: int,
+    churned: int,
+    archived: int,
+    totals: dict[str, Any],
+) -> str:
+    """Одна фраза, объясняющая, из чего сложилось число на экране.
+
+    Число оттока — то, по которому увольняют преподавателя и меняют цены.
+    Отдать его без определения значит отдать повод для решения без повода
+    его проверить.
+    """
+    note = (
+        f"Считается по людям, а не по абонементам: ушедшим считается ученик, "
+        f"у которого не осталось действующего абонемента ни по одному "
+        f"направлению и не появилось нового в течение {grace_days} "
+        f"{plural(grace_days, 'дня', 'дней', 'дней')}. "
+        f"Учились в периоде — {people}."
+    )
+    pending = int(totals["pending"])
+    if pending:
+        note += (
+            f" Ещё {pending} {plural(pending, 'ученик', 'ученика', 'учеников')} "
+            "в отсрочке: их абонемент кончился, но окно продления ещё не закрыто "
+            "— в отток они не попали."
+        )
+    frozen = int(totals["frozen"])
+    if frozen:
+        note += (
+            f" {frozen} {plural(frozen, 'ученик', 'ученика', 'учеников')} "
+            "на заморозке — это каникулы, а не уход."
+        )
+    if abs(churned - archived) >= CHURN_DISCREPANCY:
+        note += (
+            f" Внимание: по абонементам ушло {churned}, а в архив переведены "
+            f"{archived}. Расхождение значит, что архив и абонементы "
+            "рассказывают разные истории; верить одному числу нельзя."
+        )
+    return note
 
 
 # ---------------------------------------------------------------------------
@@ -668,11 +748,15 @@ def summary(
     before = _money(repo.revenue_total(cur, prev_start, prev_end, branch_id)["amount"])
 
     load = rooms(cur, since, until, branch_id, tz_name)
-    drop = churn(cur, since, until, DEFAULT_GRACE_DAYS, 0)
+    drop = churn(cur, since, until, DEFAULT_GRACE_DAYS, 0, tz_name)
     pay = sheet(cur, since, until, branch_id, tz_name)
     owed = repo.debt_totals(cur)
     attention = repo.attention_counts(cur, LOW_BALANCE_THRESHOLD)
 
+    # «Худший преподаватель» — тот, у кого ушло больше людей, а не у кого
+    # выше процент: 33% у преподавателя с тремя учениками — это один человек,
+    # и ставить такую карточку в шапку экрана значит звать владельца
+    # разбираться не туда. Список уже отсортирован по числу ушедших.
     worst_teacher = next((t for t in drop["by_teacher"] if t["churned"] > 0), None)
 
     return {
@@ -691,9 +775,14 @@ def summary(
             "busiest": load["rooms"][0] if load["rooms"] else None,
         },
         "churn": {
+            "students_total": drop["students_total"],
             "ended": drop["ended"],
             "churned": drop["churned"],
             "churn_pct": drop["churn_pct"],
+            # Второе число рядом с первым: карточка шапки — последнее место,
+            # где можно показать оценку без её проверки.
+            "archived": drop["archived"],
+            "pending": drop["pending"],
             "worst_teacher": worst_teacher,
         },
         "payroll": {
