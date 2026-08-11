@@ -13,14 +13,7 @@ import { dateGen, lessonsWord, money } from '../../lib/format';
 import { TODAY } from '../../lib/today';
 import { Dialog } from '../../components/Dialog';
 import type { ToastMessage } from '../../components/Toasts';
-
-/** Сдвиг даты в календаре, без часовых поясов: срок абонемента — про дни. */
-const addDays = (date: string, days: number): string => {
-  const [y, m, d] = date.split('-').map(Number);
-  const at = new Date(Date.UTC(y, m - 1, d));
-  at.setUTCDate(at.getUTCDate() + days);
-  return at.toISOString().slice(0, 10);
-};
+import { PlanPreviewRows, addDays, chargeOf } from './planPreview';
 
 /**
  * Продажа абонемента и продление — одна форма: продление есть продажа
@@ -80,10 +73,7 @@ export function SellDialog({
   const carryLimit = current?.rules.carry_over_lessons ?? 0;
   const carried = carryOver && current ? Math.min(current.lessons_balance, carryLimit) : 0;
 
-  const charged = plan ? Math.round(plan.price * (1 - discount / 100)) : 0;
-  // Последний день включительно: тариф на 31 день, начатый 1 сентября,
-  // действует по 1 октября — так же считает пример в контракте
-  const validUntil = plan ? addDays(startsOn, plan.valid_days - 1) : startsOn;
+  const charged = plan ? chargeOf(plan, discount) : 0;
   const overlaps = Boolean(current && startsOn >= current.valid_from && startsOn <= current.valid_until);
 
   const submit = async () => {
@@ -232,39 +222,14 @@ export function SellDialog({
             <div className={overlaps ? 'rule warn' : 'rule'}>
               <strong>{plan ? plan.name : 'Выберите тариф'}</strong>
               {plan && (
-                <ul>
-                  <li>
-                    <span>Занятий</span>
-                    <em>
-                      {plan.lessons_count}
-                      {carried > 0 ? ` + ${carried} перенос` : ''}
-                    </em>
-                  </li>
-                  <li>
-                    <span>Действует</span>
-                    <em>
-                      {dateGen(startsOn)} — {dateGen(validUntil)}
-                    </em>
-                  </li>
-                  <li>
-                    <span>Цена тарифа</span>
-                    <em>{money(plan.price)}</em>
-                  </li>
-                  {discount > 0 && (
-                    <li>
-                      <span>Скидка {discount}%</span>
-                      <em>−{money(plan.price - charged)}</em>
-                    </li>
-                  )}
-                  <li>
-                    <span>К оплате</span>
-                    <em>{money(charged)}</em>
-                  </li>
-                  <li>
-                    <span>Оплата</span>
-                    <em>{withPayment ? PAYMENT_METHOD_LABELS[method] : 'в долг'}</em>
-                  </li>
-                </ul>
+                <PlanPreviewRows
+                  plan={plan}
+                  startsOn={startsOn}
+                  discount={discount}
+                  withPayment={withPayment}
+                  method={method}
+                  carried={carried}
+                />
               )}
               {overlaps && current && (
                 <p className="warn-note">

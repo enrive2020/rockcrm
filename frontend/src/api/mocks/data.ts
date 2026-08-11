@@ -1,4 +1,4 @@
-import type { AttendanceMark, LessonKind, LessonNote } from '../types';
+import type { AttendanceMark, LeadSource, LeadStage, LessonKind, LessonNote, LostReason } from '../types';
 
 /**
  * Фикстуры мок-режима. Повторяют день из прототипа: 12 августа 2026,
@@ -11,6 +11,10 @@ import type { AttendanceMark, LessonKind, LessonNote } from '../types';
 /** Идентификаторы формы UUID, но детерминированные — так их видно в отладке. */
 const uid = (tag: number, n: number) =>
   `${String(tag).repeat(8)}-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+/** То же, но с буквенным тегом: цифры кончились на этапе 2. */
+const uidx = (tag: string, n: number) =>
+  `${tag.repeat(8)}-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 export const TZ_OFFSET = '+06:00'; // Asia/Almaty, часовой пояс обоих филиалов
 
@@ -59,14 +63,16 @@ export interface MockRoom {
   id: string;
   name: string;
   branch_id: string;
+  /** Характеристики кабинета из `room.features`: барабаны без установки не поставить. */
+  features: Record<string, boolean>;
 }
 
 export const ROOMS: MockRoom[] = [
-  { id: uid(3, 1), name: 'Барабанная A', branch_id: BRANCH_AF },
-  { id: uid(3, 2), name: 'Класс 1', branch_id: BRANCH_AF },
-  { id: uid(3, 3), name: 'Класс 2', branch_id: BRANCH_AF },
-  { id: uid(3, 4), name: 'Барабанная B', branch_id: BRANCH_AB },
-  { id: uid(3, 5), name: 'Класс 3', branch_id: BRANCH_AB },
+  { id: uid(3, 1), name: 'Барабанная A', branch_id: BRANCH_AF, features: { drum_kit: true, soundproof: true } },
+  { id: uid(3, 2), name: 'Класс 1', branch_id: BRANCH_AF, features: { piano: true } },
+  { id: uid(3, 3), name: 'Класс 2', branch_id: BRANCH_AF, features: {} },
+  { id: uid(3, 4), name: 'Барабанная B', branch_id: BRANCH_AB, features: { drum_kit: true, soundproof: true } },
+  { id: uid(3, 5), name: 'Класс 3', branch_id: BRANCH_AB, features: { piano: true } },
 ];
 
 const R = {
@@ -341,6 +347,8 @@ export interface MockLesson {
   note: LessonNote | null;
   /** Отметки, проставленные «раньше» — стартовое состояние дня. */
   initial_marks?: Record<string, AttendanceMark>;
+  /** Пробный урок ссылается на заявку, а не на ученика (схема, 004_sales). */
+  lead_id?: string;
 }
 
 let lesSeq = 0;
@@ -562,3 +570,289 @@ NOTES[S('Марк Ли')] = [
     tags: ['Muse — Hysteria', '100 bpm'],
   },
 ];
+
+/* ==========================================================================
+   Этап 3: направления, пользователи и воронка заявок
+   ========================================================================== */
+
+export interface MockDiscipline {
+  id: string;
+  name: string;
+  /** Барабаны с 5 лет, скрипка с 7 — из `discipline.min_age`. */
+  min_age: number | null;
+  /** Требования к кабинету, сверяются с `room.features`. */
+  room_reqs: Record<string, boolean>;
+}
+
+export const DISCIPLINES: MockDiscipline[] = [
+  { id: uidx('b', 1), name: 'Барабаны', min_age: 5, room_reqs: { drum_kit: true } },
+  { id: uidx('b', 2), name: 'Гитара', min_age: 6, room_reqs: {} },
+  { id: uidx('b', 3), name: 'Бас', min_age: 10, room_reqs: {} },
+  { id: uidx('b', 4), name: 'Вокал', min_age: 6, room_reqs: {} },
+  { id: uidx('b', 5), name: 'Фортепиано', min_age: 5, room_reqs: { piano: true } },
+  { id: uidx('b', 6), name: 'Скрипка', min_age: 7, room_reqs: {} },
+  { id: uidx('b', 7), name: 'Укулеле', min_age: 6, room_reqs: {} },
+  { id: uidx('b', 8), name: 'Перкуссия', min_age: 7, room_reqs: {} },
+];
+
+export const findDiscipline = (id: string | null): MockDiscipline | undefined =>
+  id ? DISCIPLINES.find((d) => d.id === id) : undefined;
+
+export const disciplineByName = (name: string | null): MockDiscipline | undefined =>
+  name ? DISCIPLINES.find((d) => d.name.toLowerCase() === name.trim().toLowerCase()) : undefined;
+
+const D = {
+  drums: DISCIPLINES[0].id,
+  guitar: DISCIPLINES[1].id,
+  bass: DISCIPLINES[2].id,
+  vocal: DISCIPLINES[3].id,
+  piano: DISCIPLINES[4].id,
+  violin: DISCIPLINES[5].id,
+};
+
+export interface MockUser {
+  id: string;
+  name: string;
+}
+
+/** Администраторы школы — на них назначаются заявки. */
+export const USERS: MockUser[] = [
+  { id: uidx('c', 1), name: 'Айгерим Дюсенова' },
+  { id: uidx('c', 2), name: 'Асель Нурланова' },
+];
+
+/** Текущий пользователь: от его имени пишется история стадий. */
+export const CURRENT_USER = USERS[0];
+
+export const findUser = (id: string | null): MockUser | undefined =>
+  id ? USERS.find((u) => u.id === id) : undefined;
+
+export interface MockStageChange {
+  at: string;
+  from: LeadStage | null;
+  to: LeadStage;
+  by: string | null;
+}
+
+export interface MockLead {
+  id: string;
+  name: string;
+  phone: string;
+  student_name: string | null;
+  student_age: number | null;
+  discipline_id: string | null;
+  branch_id: string | null;
+  stage: LeadStage;
+  lost_reason: LostReason | null;
+  source: LeadSource;
+  utm: Record<string, string>;
+  promo_code: string | null;
+  external_id: string | null;
+  assigned_to: string | null;
+  /** ISO со смещением филиала: «перезвонить в 18:00». */
+  next_action_at: string | null;
+  contact_attempts: number;
+  created_at: string;
+  comment: string | null;
+  /** Ссылка на занятие-пробный в расписании. */
+  trial_lesson_id: string | null;
+  history: MockStageChange[];
+  student_id: string | null;
+  person_id: string | null;
+}
+
+/** Момент времени в дне мок-режима: день + местное время. */
+const at = (date: string, hhmm: string) => `${date}T${hhmm}:00${TZ_OFFSET}`;
+
+let leadSeq = 0;
+
+interface LeadInput extends Omit<MockLead, 'id' | 'history' | 'utm' | 'promo_code' | 'external_id' | 'student_id' | 'person_id'> {
+  utm?: Record<string, string>;
+  promo_code?: string | null;
+  external_id?: string | null;
+  student_id?: string | null;
+  person_id?: string | null;
+  /** Даты переходов по стадиям, по одной на шаг от `new` до текущей. */
+  stage_dates: string[];
+}
+
+/**
+ * История стадий строится из дат переходов, а не пишется руками: отчёт
+ * по воронке считается именно из неё, и любая нестыковка между стадией
+ * и историей сразу исказила бы конверсию.
+ */
+const lead = (input: LeadInput): MockLead => {
+  const path: LeadStage[] = ['new', 'contacting', 'trial_booked', 'trial_held', 'won'];
+  const target = input.stage;
+  const steps: LeadStage[] =
+    target === 'lost'
+      ? ['new', 'lost']
+      : path.slice(0, path.indexOf(target) + 1);
+
+  const history: MockStageChange[] = steps.map((stage, index) => ({
+    at: input.stage_dates[index] ?? input.stage_dates[input.stage_dates.length - 1],
+    from: index === 0 ? null : steps[index - 1],
+    to: stage,
+    by: index === 0 ? null : input.assigned_to ?? CURRENT_USER.id,
+  }));
+
+  const { stage_dates: _stageDates, ...rest } = input;
+  return {
+    id: uidx('a', ++leadSeq),
+    utm: {},
+    promo_code: null,
+    external_id: null,
+    student_id: null,
+    person_id: null,
+    ...rest,
+    history,
+  };
+};
+
+const TRIAL_ALISA = LESSONS.find((l) => l.title === 'Алиса Ким')!.id;
+const TRIAL_ILYAS = LESSONS.find((l) => l.title === 'Ильяс Абен')!.id;
+const A = USERS[0].id;
+const B = USERS[1].id;
+
+/**
+ * Воронка повторяет доску из прототипа: заявки на всех стадиях, разные
+ * источники, отказы с причинами и один пробный в занятом кабинете.
+ */
+export const LEADS: MockLead[] = [
+  // --- новые ---
+  lead({
+    name: 'Гульмира Абишева', phone: '+77015550009', student_name: 'Мадина', student_age: 10,
+    discipline_id: D.vocal, branch_id: BRANCH_AF, stage: 'new', lost_reason: null, source: 'site_form',
+    assigned_to: A, next_action_at: at('2026-08-11', '17:00'), contact_attempts: 2,
+    created_at: at('2026-08-10', '09:12'), comment: 'Просила перезвонить после обеда',
+    trial_lesson_id: null, stage_dates: [at('2026-08-10', '09:12')],
+  }),
+  lead({
+    name: 'Ержан Оспанов', phone: '+77015550006', student_name: 'Ержан', student_age: 31,
+    discipline_id: D.guitar, branch_id: BRANCH_AF, stage: 'new', lost_reason: null, source: 'instagram',
+    utm: { utm_source: 'instagram', utm_campaign: 'august' },
+    assigned_to: null, next_action_at: null, contact_attempts: 0,
+    created_at: at('2026-08-12', '08:40'), comment: 'Взрослый, хочет вечером после 19',
+    trial_lesson_id: null, stage_dates: [at('2026-08-12', '08:40')],
+  }),
+  // Возраст ниже минимального: барабаны с 5 лет. Не ошибка — предупреждение
+  lead({
+    name: 'Асем Досым', phone: '+77015550021', student_name: 'Аяна', student_age: 4,
+    discipline_id: D.drums, branch_id: BRANCH_AF, stage: 'new', lost_reason: null, source: 'telegram_bot',
+    external_id: 'tg-90211', assigned_to: null, next_action_at: null, contact_attempts: 0,
+    created_at: at('2026-08-12', '10:05'), comment: 'Очень просит на барабаны как старший брат',
+    trial_lesson_id: null, stage_dates: [at('2026-08-12', '10:05')],
+  }),
+
+  // --- дозвон ---
+  lead({
+    name: 'Айнур Тлеу', phone: '+77015550022', student_name: 'Санжар', student_age: 13,
+    discipline_id: D.drums, branch_id: BRANCH_AF, stage: 'contacting', lost_reason: null, source: 'whatsapp',
+    assigned_to: A, next_action_at: at('2026-08-13', '11:00'), contact_attempts: 1,
+    created_at: at('2026-08-09', '19:30'), comment: 'Ждёт ответа мамы',
+    trial_lesson_id: null, stage_dates: [at('2026-08-09', '19:30'), at('2026-08-10', '12:15')],
+  }),
+  lead({
+    name: 'Ольга Ким', phone: '+77015550010', student_name: 'Ольга', student_age: 34,
+    discipline_id: D.piano, branch_id: BRANCH_AF, stage: 'contacting', lost_reason: null, source: 'referral',
+    assigned_to: B, next_action_at: at('2026-08-12', '18:00'), contact_attempts: 1,
+    created_at: at('2026-08-11', '13:05'), comment: 'Перезвонить в 18:00',
+    trial_lesson_id: null, stage_dates: [at('2026-08-11', '13:05'), at('2026-08-11', '15:40')],
+  }),
+
+  // --- пробный назначен ---
+  lead({
+    name: 'Сауле Ким', phone: '+77015551234', student_name: 'Алиса', student_age: 7,
+    discipline_id: D.drums, branch_id: BRANCH_AF, stage: 'trial_booked', lost_reason: null, source: 'telegram_bot',
+    external_id: 'tg-88104', assigned_to: A, next_action_at: null, contact_attempts: 1,
+    created_at: at('2026-08-11', '14:20'), comment: null,
+    trial_lesson_id: TRIAL_ALISA,
+    stage_dates: [at('2026-08-11', '14:20'), at('2026-08-11', '16:05'), at('2026-08-11', '16:40')],
+  }),
+  lead({
+    name: 'Абен Ильясов', phone: '+77015550023', student_name: 'Ильяс', student_age: 8,
+    discipline_id: D.drums, branch_id: BRANCH_AB, stage: 'trial_booked', lost_reason: null, source: 'instagram',
+    assigned_to: B, next_action_at: null, contact_attempts: 1,
+    created_at: at('2026-08-10', '11:00'), comment: 'Пробный оплачен, 2 000 ₸',
+    trial_lesson_id: TRIAL_ILYAS,
+    stage_dates: [at('2026-08-10', '11:00'), at('2026-08-10', '14:00'), at('2026-08-11', '10:20')],
+  }),
+
+  // --- пробный проведён ---
+  lead({
+    name: 'Ералы Айдос', phone: '+77015550024', student_name: 'Айдос', student_age: 15,
+    discipline_id: D.guitar, branch_id: BRANCH_AF, stage: 'trial_held', lost_reason: null, source: 'site_form',
+    assigned_to: A, next_action_at: at('2026-08-12', '12:00'), contact_attempts: 2,
+    created_at: at('2026-08-07', '10:10'), comment: 'Думают два дня',
+    trial_lesson_id: null,
+    stage_dates: [at('2026-08-07', '10:10'), at('2026-08-07', '12:00'), at('2026-08-08', '09:00'), at('2026-08-10', '15:00')],
+  }),
+  // Телефон совпадает с плательщиком семьи Бек: конверсия обязана переиспользовать
+  // семью, а не завести вторую, — иначе пропадёт скидка за второго ребёнка
+  lead({
+    name: 'Айгуль Бек', phone: '+77015550008', student_name: 'Алихан', student_age: 9,
+    discipline_id: D.drums, branch_id: BRANCH_AF, stage: 'trial_held', lost_reason: null, source: 'referral',
+    assigned_to: B, next_action_at: null, contact_attempts: 1,
+    created_at: at('2026-08-06', '17:45'), comment: 'Второй ребёнок, сестра уже занимается вокалом',
+    trial_lesson_id: null,
+    stage_dates: [at('2026-08-06', '17:45'), at('2026-08-06', '19:00'), at('2026-08-07', '11:00'), at('2026-08-09', '16:00')],
+  }),
+
+  // --- абонемент куплен ---
+  lead({
+    name: 'Наталья Ли', phone: '+77015550007', student_name: 'Марк', student_age: 12,
+    discipline_id: D.drums, branch_id: BRANCH_AF, stage: 'won', lost_reason: null, source: 'instagram',
+    assigned_to: A, next_action_at: null, contact_attempts: 1,
+    created_at: at('2026-07-28', '12:00'), comment: null,
+    trial_lesson_id: null, student_id: findStudentIdByName('Марк Ли'),
+    stage_dates: [at('2026-07-28', '12:00'), at('2026-07-28', '14:30'), at('2026-07-29', '10:00'), at('2026-07-31', '17:00'), at('2026-08-01', '11:20')],
+  }),
+  lead({
+    name: 'Ирина Ким', phone: '+77015550005', student_name: 'Даниал', student_age: 13,
+    discipline_id: D.bass, branch_id: BRANCH_AF, stage: 'won', lost_reason: null, source: 'telegram_bot',
+    external_id: 'tg-87330', assigned_to: A, next_action_at: null, contact_attempts: 2,
+    created_at: at('2026-07-25', '09:30'), comment: null,
+    trial_lesson_id: null, student_id: findStudentIdByName('Даниал Ким'),
+    stage_dates: [at('2026-07-25', '09:30'), at('2026-07-25', '18:00'), at('2026-07-27', '12:00'), at('2026-07-29', '13:00'), at('2026-08-01', '10:00')],
+  }),
+  lead({
+    name: 'Динара Ер', phone: '+77015550012', student_name: 'Камила', student_age: 16,
+    discipline_id: D.vocal, branch_id: BRANCH_AB, stage: 'won', lost_reason: null, source: 'referral',
+    promo_code: 'RS25', assigned_to: B, next_action_at: null, contact_attempts: 1,
+    created_at: at('2026-07-20', '15:00'), comment: 'Абонемент 6 месяцев',
+    trial_lesson_id: null, student_id: findStudentIdByName('Камила Ер'),
+    stage_dates: [at('2026-07-20', '15:00'), at('2026-07-20', '16:10'), at('2026-07-22', '11:00'), at('2026-07-24', '18:00'), at('2026-07-26', '12:30')],
+  }),
+
+  // --- отказы: без причины воронка не показывает, что чинить ---
+  lead({
+    name: 'Арман Сеит', phone: '+77015550025', student_name: 'Арман', student_age: 11,
+    discipline_id: D.guitar, branch_id: BRANCH_AF, stage: 'lost', lost_reason: 'price', source: 'site_form',
+    assigned_to: A, next_action_at: null, contact_attempts: 2,
+    created_at: at('2026-07-30', '10:00'), comment: 'Дорого, вернутся осенью',
+    trial_lesson_id: null, stage_dates: [at('2026-07-30', '10:00'), at('2026-08-02', '12:00')],
+  }),
+  lead({
+    name: 'Жанна Ким', phone: '+77015550026', student_name: 'Жанна', student_age: 27,
+    discipline_id: D.violin, branch_id: BRANCH_AF, stage: 'lost', lost_reason: 'schedule', source: 'whatsapp',
+    assigned_to: B, next_action_at: null, contact_attempts: 1,
+    created_at: at('2026-08-01', '14:00'), comment: 'Работает до 21',
+    trial_lesson_id: null, stage_dates: [at('2026-08-01', '14:00'), at('2026-08-04', '09:30')],
+  }),
+  lead({
+    name: 'Нурлан Бек', phone: '+77015550027', student_name: 'Нурлан', student_age: 9,
+    discipline_id: D.drums, branch_id: BRANCH_AB, stage: 'lost', lost_reason: 'no_answer', source: 'telegram_bot',
+    assigned_to: A, next_action_at: null, contact_attempts: 4,
+    created_at: at('2026-07-27', '11:15'), comment: 'Четыре попытки дозвона',
+    trial_lesson_id: null, stage_dates: [at('2026-07-27', '11:15'), at('2026-08-03', '10:00')],
+  }),
+];
+
+/** Ученик, в которого превратилась выигранная заявка: карточка на него ссылается. */
+function findStudentIdByName(name: string): string | null {
+  return STUDENTS.find((s) => s.name === name)?.id ?? null;
+}
+
+export const findLead = (id: string): MockLead | undefined => LEADS.find((l) => l.id === id);
+
+export const nextLeadId = (): string => uidx('a', ++leadSeq);
