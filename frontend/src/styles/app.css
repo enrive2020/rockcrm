@@ -177,16 +177,26 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   transition: transform .12s ease, box-shadow .12s ease;
 }
 .les:hover { transform: translateY(-1px); box-shadow: var(--shadow); border-color: var(--ink-3); }
-.les[aria-pressed="true"] { border-color: var(--accent-bright); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-bright) 32%, transparent); }
+.les.sel { border-color: var(--accent-bright); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-bright) 32%, transparent); }
+/* Кликов в блоке два: весь блок — отметка, имя сверху — карточка ученика.
+   Область отметки лежит слоем под содержимым, иначе имя было бы недоступно */
+.les-hit { position: absolute; inset: 0; z-index: 0; border-radius: 3px; }
+.les b, .les small, .les .les-name, .les .flag { position: relative; z-index: 1; }
+.les-name {
+  display: block; max-width: 100%; padding: 0; text-align: left;
+  font-size: 12.5px; font-weight: 600; line-height: 1.35;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.les-name:hover { text-decoration: underline; text-decoration-color: var(--accent-bright); text-underline-offset: 2px; }
 .les b { display: block; font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; }
 .les small { display: block; font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--f-mono); }
 /* фон кодирует отметку, левая полоса — преподавателя; полоса не должна теряться */
 .les.done { background: var(--ok-wash); border-color: color-mix(in srgb, var(--ok) 30%, transparent); border-left-color: var(--ch); }
-.les.done b { color: var(--ok); }
+.les.done b, .les.done .les-name { color: var(--ok); }
 .les.missed { background: var(--bad-wash); border-color: color-mix(in srgb, var(--bad) 32%, transparent); border-left-color: var(--ch); }
-.les.missed b { color: var(--bad); }
+.les.missed b, .les.missed .les-name { color: var(--bad); }
 .les.off { background: var(--panel-3); border-color: var(--line); border-left-color: var(--ch); }
-.les.off b { color: var(--ink-3); text-decoration: line-through; }
+.les.off b, .les.off .les-name { color: var(--ink-3); text-decoration: line-through; }
 .les.trial { background: var(--accent-wash); border-color: color-mix(in srgb, var(--accent-bright) 40%, transparent); border-left-color: var(--ch); }
 .les.clash {
   border-color: var(--bad);
@@ -268,6 +278,143 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .btn.pri:hover:not(:disabled) { background: var(--accent-bright); border-color: var(--accent-bright); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 
+/* ==========================================================================
+   Экран «Ученики» и карточка ученика (этап 2).
+   Классы и разметка намеренно совпадают с прототипом (.card, .stat, .note,
+   .tag, .who-cell), чтобы правку из прототипа можно было перенести напрямую.
+   ========================================================================== */
+
+.pad { padding: 4px 22px 40px; }
+.grid { display: grid; gap: 14px; }
+.g2 { grid-template-columns: 1fr 1fr; }
+.g-side { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
+.col-stack { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; box-shadow: var(--shadow); }
+.card > .lbl { display: block; margin-bottom: 10px; }
+.stat { font-family: var(--f-display); font-size: 29px; font-weight: 600; letter-spacing: .01em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.trend { font-size: 12.5px; color: var(--ink-3); margin: 4px 0 0; }
+.hint { margin: 12px 0 0; font-size: 12px; color: var(--ink-3); }
+.bar { height: 5px; border-radius: 3px; background: var(--panel-3); overflow: hidden; margin-top: 10px; }
+.bar i { display: block; height: 100%; background: var(--accent-bright); border-radius: 3px; }
+.good { color: var(--ok); }
+.bad-num { color: var(--bad); }
+.dim { color: var(--ink-3); }
+
+/* Ссылка-кнопка: имя ученика, по которому открывается карточка */
+.link { padding: 0; color: var(--ink-2); text-align: left; border-bottom: 1px dashed var(--line); }
+.link:hover { color: var(--accent); border-bottom-color: var(--accent-bright); }
+.link.strong { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+
+/* ---------- поиск ---------- */
+.search-wrap { display: flex; align-items: center; gap: 12px; padding: 0 22px 14px; }
+.search {
+  flex: 1; max-width: 560px; height: 40px; padding: 0 14px;
+  border: 1px solid var(--line); border-radius: 5px;
+  background: var(--panel); color: var(--ink); font: inherit; font-size: 14.5px;
+}
+.search::placeholder { color: var(--ink-3); }
+.search:focus { border-color: var(--accent-bright); outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-bright) 26%, transparent); }
+
+.res {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 11px 14px; border-bottom: 1px solid var(--line-soft); text-align: left;
+}
+.res:last-child { border-bottom: none; }
+.res:hover { background: var(--panel-2); }
+.res-main { min-width: 0; flex: 1.4; }
+.res-payer { min-width: 0; flex: 1; }
+.res-sub { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.res b { display: block; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.res-payer b { font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
+.res small { display: block; font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- шапка карточки ---------- */
+.stu-head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+.chip {
+  width: 26px; height: 26px; flex: none; border-radius: 3px; display: grid; place-items: center;
+  font-family: var(--f-display); font-size: 11px; font-weight: 600; color: #fff; background: var(--ch);
+}
+.chip.big { width: 44px; height: 44px; font-size: 16px; border-radius: 5px; }
+.back { flex: none; padding: 6px 12px; font-size: 13px; }
+
+.stu-abon { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.stu-abon .of { color: var(--ink-3); font-size: 14px; }
+.stu-abon-foot { display: flex; justify-content: space-between; gap: 12px; color: var(--ink-3); font-size: 12px; flex-wrap: wrap; }
+.meter.big i { height: 26px; }
+.actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.actions .btn { flex: none; }
+
+.holds { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.holds > .lbl { display: block; margin-bottom: 8px; }
+.hold { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+.hold:last-child { border-bottom: none; }
+.hold b { font-size: 13px; }
+.hold small { display: block; font-size: 11.5px; color: var(--ink-3); }
+.btn.slim { flex: none; margin-left: auto; padding: 5px 11px; font-size: 12.5px; }
+.btn.wide { display: block; width: 100%; margin-top: 12px; text-align: center; text-decoration: none; }
+
+/* ---------- таблицы ---------- */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left; font-family: var(--f-display); font-size: 10.5px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-3); font-weight: 600;
+  padding: 0 10px 8px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+td.r, th.r { text-align: right; }
+tbody tr:hover { background: var(--panel-2); }
+.who-cell { display: flex; align-items: center; gap: 9px; }
+.who-cell.payer { margin-bottom: 12px; }
+.who-cell b { font-size: 13.5px; }
+.phone { font-size: 12px; color: var(--ink-3); }
+
+/* ---------- заметки и репертуар ---------- */
+.note { padding: 11px 0; border-bottom: 1px solid var(--line-soft); }
+.note:last-child { border-bottom: none; }
+.note-h { display: flex; gap: 8px; align-items: baseline; margin-bottom: 3px; }
+.note-h time { font-size: 11.5px; color: var(--ink-3); }
+.note-h b { font-size: 13px; font-weight: 600; }
+.note p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.note p.hw { margin-top: 4px; color: var(--ink-3); font-size: 12.5px; }
+.tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.tag { font-size: 11.5px; padding: 2px 7px; border-radius: 3px; border: 1px solid var(--line); color: var(--ink-2); background: var(--panel-2); }
+
+/* ---------- модальные окна: продажа и заморозка ---------- */
+.ovl {
+  position: fixed; inset: 0; z-index: 30; padding: 24px;
+  background: color-mix(in srgb, #0B0D10 52%, transparent);
+  display: flex; align-items: flex-start; justify-content: center; overflow: auto;
+}
+.dlg {
+  width: min(560px, 100%); margin: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 24px 60px -24px rgba(0, 0, 0, .6);
+  display: flex; flex-direction: column; max-height: calc(100vh - 48px);
+  animation: rise .16s ease;
+}
+.dlg-b { flex: 1; overflow: auto; padding: 16px; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+.field > span { font-size: 12px; color: var(--ink-3); }
+.inp {
+  height: 34px; padding: 0 9px; width: 100%;
+  border: 1px solid var(--line); border-radius: 5px;
+  background: var(--panel); color: var(--ink); font: inherit; font-size: 13px;
+}
+.inp:focus { border-color: var(--accent-bright); outline: none; }
+select.inp { padding-right: 4px; }
+.checks { display: flex; flex-direction: column; gap: 9px; }
+.check { display: flex; gap: 9px; align-items: flex-start; font-size: 12.5px; color: var(--ink-2); }
+.check input { margin: 2px 0 0; accent-color: var(--accent); }
+.check.off { color: var(--ink-3); }
+.warn-note { margin: 8px 0 0; font-size: 12.5px; }
+.rule.warn .warn-note { color: var(--bad); }
+
 /* ---------- состояния ---------- */
 .state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 56px 22px; text-align: center; }
 .state h3 { margin: 0; font-family: var(--f-display); font-size: 17px; font-weight: 600; }
@@ -320,4 +467,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   .theme-btn { margin: 0; }
   .insp { width: 100%; max-width: 396px; }
   .toasts { right: 16px; }
+  .g2, .g-side { grid-template-columns: 1fr; }
+  /* Телефон плательщика в узком окне уезжает под имя ученика, а не режется */
+  .res { flex-wrap: wrap; }
+  .res-payer { flex-basis: 100%; }
 }

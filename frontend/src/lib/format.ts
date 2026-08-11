@@ -59,6 +59,27 @@ export const longDate = (date: string): string => {
   return `${WEEKDAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${MONTHS_GEN[d.getUTCMonth()]}`;
 };
 
+/** "2026-08-12" → «12 августа» — без дня недели, для сроков и дат оплаты. */
+export const dateGen = (date: string): string => {
+  const d = parseDate(date);
+  return `${d.getUTCDate()} ${MONTHS_GEN[d.getUTCMonth()]}`;
+};
+
+/** "2026-08-07" → «7 авг» — для плотных таблиц и заметок. */
+export const dayMonth = (date: string): string => {
+  const d = parseDate(date);
+  return `${d.getUTCDate()} ${MONTHS_SHORT[d.getUTCMonth()]}`;
+};
+
+/** Разница в календарных днях. Заморозка — полуинтервал, как daterange в базе. */
+export const daysBetween = (from: string, to: string): number => {
+  const a = parseDate(from).getTime();
+  const b = parseDate(to).getTime();
+  return Math.round((b - a) / 86400000);
+};
+
+export const daysWord = (n: number): string => `${n} ${plural(n, 'день', 'дня', 'дней')}`;
+
 /** "2026-08-12" → «Ср 12 авг» */
 export const shortDate = (date: string): string => {
   const d = parseDate(date);

@@ -11,10 +11,12 @@ export function Timeline({
   schedule,
   selectedId,
   onSelect,
+  onOpenStudent,
 }: {
   schedule: ScheduleResponse;
   selectedId: string | null;
   onSelect: (lesson: ScheduleLesson) => void;
+  onOpenStudent: (studentId: string) => void;
 }) {
   const openMin = clockMinutes(schedule.branch.opens_at);
   const closeMin = clockMinutes(schedule.branch.closes_at);
@@ -63,6 +65,7 @@ export function Timeline({
                     openMin={openMin}
                     selected={lesson.id === selectedId}
                     onSelect={onSelect}
+                    onOpenStudent={onOpenStudent}
                   />
                 ))}
               </div>
@@ -74,18 +77,27 @@ export function Timeline({
   );
 }
 
+/**
+ * Блок занятия. Внутри две цели клика, поэтому это не одна кнопка:
+ * клик по блоку открывает отметку — самое частое действие на ресепшене,
+ * клик по имени ведёт в карточку ученика (требование контракта этапа 2).
+ * Кнопка внутри кнопки недопустима, поэтому область отметки — отдельная
+ * кнопка на весь блок, а имя лежит поверх неё.
+ */
 function LessonBlock({
   lesson,
   color,
   openMin,
   selected,
   onSelect,
+  onOpenStudent,
 }: {
   lesson: ScheduleLesson;
   color: string;
   openMin: number;
   selected: boolean;
   onSelect: (lesson: ScheduleLesson) => void;
+  onOpenStudent: (studentId: string) => void;
 }) {
   const start = (wallMinutes(lesson.starts_at) - openMin) / 60;
   const duration = lesson.duration_min / 60;
@@ -93,6 +105,7 @@ function LessonBlock({
 
   const classes = ['les', toneClass(lesson)];
   if (conflict) classes.push('clash');
+  if (selected) classes.push('sel');
 
   const style = {
     '--s': Math.max(0, start),
@@ -100,23 +113,34 @@ function LessonBlock({
     '--ch': color,
   } as CSSProperties;
 
+  const title = `${lesson.kind === 'trial' ? 'Пробный · ' : ''}${lesson.title}`;
+
   return (
-    <button
+    <div
       className={classes.filter(Boolean).join(' ')}
       style={style}
-      aria-pressed={selected}
-      onClick={() => onSelect(lesson)}
       title={conflict ? lesson.conflicts.map((c) => c.message).join('\n') : undefined}
     >
+      <button
+        className="les-hit"
+        aria-pressed={selected}
+        onClick={() => onSelect(lesson)}
+        aria-label={`Отметить посещаемость: ${title}`}
+        title="Открыть отметку посещаемости"
+      />
       {conflict && <span className="flag">{lesson.conflicts[0].kind === 'room' ? 'Кабинет' : 'Педагог'}</span>}
-      <b>
-        {lesson.kind === 'trial' ? 'Пробный · ' : ''}
-        {lesson.title}
-      </b>
+      {/* У группы student_id нет — открывать нечего, имя остаётся текстом */}
+      {lesson.student_id ? (
+        <button className="les-name" onClick={() => onOpenStudent(lesson.student_id as string)} title="Открыть карточку ученика">
+          {title}
+        </button>
+      ) : (
+        <b>{title}</b>
+      )}
       <small>
         {wallTime(lesson.starts_at)}–{wallTime(lesson.ends_at)} · {lesson.room.name}
       </small>
-    </button>
+    </div>
   );
 }
 

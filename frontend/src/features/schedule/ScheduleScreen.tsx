@@ -10,12 +10,14 @@ export function ScheduleScreen({
   onDateChange,
   selectedId,
   onSelect,
+  onOpenStudent,
 }: {
   state: AsyncState<ScheduleResponse>;
   date: string;
   onDateChange: (date: string) => void;
   selectedId: string | null;
   onSelect: (lesson: ScheduleLesson) => void;
+  onOpenStudent: (studentId: string) => void;
 }) {
   const schedule = state.data;
   const summary = schedule?.summary;
@@ -70,7 +72,7 @@ export function ScheduleScreen({
           <i style={{ background: 'var(--accent-wash)', border: '1px solid var(--accent-bright)' }} />
           Пробный урок
         </span>
-        <span>Полоса слева — преподаватель · клик по занятию открывает отметку</span>
+        <span>Полоса слева — преподаватель · клик по занятию открывает отметку, клик по имени — карточку ученика</span>
       </div>
 
       {state.loading && <ScheduleSkeleton />}
@@ -79,7 +81,7 @@ export function ScheduleScreen({
       )}
       {!state.loading && !state.error && schedule && schedule.tracks.length === 0 && <EmptyDay date={longDate(date)} />}
       {!state.loading && !state.error && schedule && schedule.tracks.length > 0 && (
-        <Timeline schedule={schedule} selectedId={selectedId} onSelect={onSelect} />
+        <Timeline schedule={schedule} selectedId={selectedId} onSelect={onSelect} onOpenStudent={onOpenStudent} />
       )}
     </section>
   );

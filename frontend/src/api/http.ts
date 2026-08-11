@@ -2,8 +2,16 @@ import type {
   AttendanceRequest,
   AttendanceResponse,
   Branch,
+  HoldRequest,
+  HoldReleaseResponse,
+  HoldResponse,
   LessonCard,
+  Plan,
   ScheduleResponse,
+  SellSubscriptionRequest,
+  SellSubscriptionResponse,
+  StudentCard,
+  StudentSearchItem,
   ApiErrorBody,
 } from './types';
 
@@ -85,6 +93,39 @@ export const httpApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
+  /* ---------- этап 2 ---------- */
+
+  /** Поиск идёт и по имени ученика, и по имени и телефону плательщика. */
+  students: (query: string, branchId?: string | null) => {
+    const params = new URLSearchParams({ query, limit: '20' });
+    if (branchId) params.set('branch_id', branchId);
+    return request<StudentSearchItem[]>(`/students?${params.toString()}`);
+  },
+  student: (studentId: string) => request<StudentCard>(`/students/${encodeURIComponent(studentId)}`),
+  plans: (disciplineId?: string | null, format?: string | null) => {
+    const params = new URLSearchParams();
+    if (disciplineId) params.set('discipline_id', disciplineId);
+    if (format) params.set('format', format);
+    const query = params.toString();
+    return request<Plan[]>(`/plans${query ? `?${query}` : ''}`);
+  },
+  /** Продажа и продление — одна операция: продление есть продажа следующего абонемента. */
+  sellSubscription: (studentId: string, payload: SellSubscriptionRequest) =>
+    request<SellSubscriptionResponse>(`/students/${encodeURIComponent(studentId)}/subscriptions`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  createHold: (subscriptionId: string, payload: HoldRequest) =>
+    request<HoldResponse>(`/subscriptions/${encodeURIComponent(subscriptionId)}/holds`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  releaseHold: (subscriptionId: string, holdId: string) =>
+    request<HoldReleaseResponse>(
+      `/subscriptions/${encodeURIComponent(subscriptionId)}/holds/${encodeURIComponent(holdId)}`,
+      { method: 'DELETE' },
+    ),
 };
 
 export type Api = typeof httpApi;

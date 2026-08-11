@@ -16,6 +16,51 @@ export function ScheduleSkeleton() {
   );
 }
 
+/** Скелет карточки ученика: те же две колонки, что у настоящей — экран не прыгает. */
+export function CardSkeleton() {
+  return (
+    <div className="pad" aria-busy="true" aria-label="Карточка загружается">
+      <div className="skeleton" style={{ width: 280, height: 34, marginBottom: 18 }} />
+      <div className="grid g-side">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="skeleton" style={{ height: 190 }} />
+          <div className="skeleton" style={{ height: 220 }} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="skeleton" style={{ height: 180 }} />
+          <div className="skeleton" style={{ height: 160 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Скелет списка результатов поиска. */
+export function ListSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div aria-busy="true" aria-label="Идёт поиск">
+      {Array.from({ length: rows }, (_, i) => (
+        <div className="sk-row" key={i}>
+          <div className="skeleton" style={{ width: 28, height: 28 }} />
+          <div className="skeleton" style={{ width: `${30 + ((i * 11) % 25)}%`, height: 16 }} />
+          <div className="skeleton" style={{ width: 90, height: 16, marginLeft: 'auto' }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Нейтральное состояние: пустой поиск, отсутствие заметок, подсказка перед вводом. */
+export function EmptyState({ label, title, children }: { label: string; title: string; children?: React.ReactNode }) {
+  return (
+    <div className="state">
+      <span className="lbl">{label}</span>
+      <h3>{title}</h3>
+      {children && <p>{children}</p>}
+    </div>
+  );
+}
+
 /** Пустой день — не ошибка, поэтому тон нейтральный и подсказка конкретная. */
 export function EmptyDay({ date }: { date: string }) {
   return (

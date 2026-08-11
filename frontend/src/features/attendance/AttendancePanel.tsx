@@ -28,10 +28,12 @@ export function AttendancePanel({
   lessonId,
   onClose,
   onApplied,
+  onOpenStudent,
 }: {
   lessonId: string | null;
   onClose: () => void;
   onApplied: (results: AppliedResult[]) => void;
+  onOpenStudent: (studentId: string) => void;
 }) {
   const card = useAsync<LessonCard>(() => api.lesson(lessonId as string), [lessonId], lessonId !== null);
   const [chosen, setChosen] = useState<Record<string, AttendanceMark>>({});
@@ -160,6 +162,7 @@ export function AttendancePanel({
                   chosen={chosen[participant.student_id] ?? null}
                   onPick={(mark) => pick(participant.student_id, mark)}
                   showKeys={pending.length === 1}
+                  onOpenStudent={onOpenStudent}
                 />
               ))}
             </div>
@@ -205,11 +208,13 @@ function ParticipantBlock({
   chosen,
   onPick,
   showKeys,
+  onOpenStudent,
 }: {
   participant: LessonParticipant;
   chosen: AttendanceMark | null;
   onPick: (mark: AttendanceMark) => void;
   showKeys: boolean;
+  onOpenStudent: (studentId: string) => void;
 }) {
   const subscription = participant.subscription;
   const effect = chosen ? participant.mark_effects[chosen] : null;
@@ -218,7 +223,11 @@ function ParticipantBlock({
   return (
     <div className="participant">
       <header>
-        <b>{participant.name}</b>
+        {/* Из панели тоже нужен переход в карточку: перед отметкой часто
+            спрашивают, сколько осталось и когда платили */}
+        <button className="link strong" onClick={() => onOpenStudent(participant.student_id)} title="Открыть карточку ученика">
+          {participant.name}
+        </button>
         <span className="spacer" />
         {subscription ? (
           <span className="pill mute num">
