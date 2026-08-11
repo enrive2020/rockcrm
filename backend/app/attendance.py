@@ -13,7 +13,7 @@ from typing import Any
 
 import psycopg
 
-from . import repository as repo
+from . import journal, repository as repo
 from .errors import ApiError, not_found
 from .rules import MARKS, MarkEffect, compute_effect, low_balance_alert
 
@@ -441,55 +441,7 @@ def revoke_mark(
 # ---------------------------------------------------------------------------
 
 
-def _add_entry(
-    cur: psycopg.Cursor,
-    tenant_id: str,
-    subscription_id: str,
-    *,
-    kind: str,
-    lessons_delta: int,
-    makeups_delta: int,
-    attendance_id: str | None,
-    lesson_id: str | None,
-    reason: str,
-    actor_id: str | None,
-    reverses_id: int | None = None,
-) -> None:
-    cur.execute(
-        """
-        INSERT INTO subscription_entry
-            (tenant_id, subscription_id, kind, lessons_delta, makeups_delta,
-             attendance_id, lesson_id, reverses_id, reason, created_by)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """,
-        (
-            tenant_id,
-            subscription_id,
-            kind,
-            lessons_delta,
-            makeups_delta,
-            attendance_id,
-            lesson_id,
-            reverses_id,
-            reason,
-            actor_id,
-        ),
-    )
-
-
-def _audit(
-    cur: psycopg.Cursor,
-    tenant_id: str,
-    actor_id: str | None,
-    action: str,
-    entity: str,
-    entity_id: str,
-    payload: dict[str, Any],
-) -> None:
-    cur.execute(
-        """
-        INSERT INTO audit_log (tenant_id, actor_id, action, entity, entity_id, payload)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        """,
-        (tenant_id, actor_id, action, entity, entity_id, json.dumps(payload, ensure_ascii=False)),
-    )
+# Запись в журналы живёт в journal.py: у неё теперь два потребителя —
+# отметка посещаемости и продажа абонемента.
+_add_entry = journal.add_entry
+_audit = journal.audit

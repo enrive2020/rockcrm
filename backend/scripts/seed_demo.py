@@ -79,6 +79,10 @@ TEACHERS = [
 # «уже списано» задаёт остаток и вместе с ним — состояние экрана:
 # у Ольги Ким остаток 2 (алерт о продлении), у Дмитрия Со ноль (списывать
 # нечего, отметка «пришёл» обязана дать 422), у Амира Жаната абонемента нет.
+#
+# Новых учеников добавлять ТОЛЬКО в конец: student_id() и subscription_id()
+# собираются из позиции в этом списке, и вставка в середину переименовала бы
+# половину демо-данных, на которые ссылаются README, тесты и фронтенд.
 STUDENTS = [
     ("ahmetov", "Тимур", "Ахметов", "guitar", 8, 2),
     ("sagyndyk", "Амина", "Сагындык", "drums", 8, 3),
@@ -98,7 +102,53 @@ STUDENTS = [
     ("er", "Камила", "Ер", "vocal", 8, 4),
     ("li_r", "Рустам", "Ли", "guitar", 8, 1),
     ("aman", "Данияр", "Аман", "guitar", 8, 5),
+    # Брат Амины. Ради него в демо есть семья со скидкой за второго ребёнка —
+    # без второго ребёнка эту скидку негде показать.
+    ("sagyndyk_t", "Тимур", "Сагындык", "guitar", 8, 5),
 ]
+
+# Даты рождения. Возраст виден в карточке и в поиске, поэтому «всем по 12»
+# из прежней версии не годится: прототип показывает Амину 9 лет и Тимура 12.
+BIRTH_DEFAULT = "2014-05-12"
+BIRTHDAYS = {
+    "sagyndyk": "2016-11-03",     # 9 лет на демо-дне
+    "sagyndyk_t": "2014-03-15",   # 12 лет
+    "kim_d": "2013-07-21",
+    "zhanat": "2017-01-30",
+    "so": "2008-09-09",
+}
+
+# Основной преподаватель по направлению. Карточка ученика обязана показать,
+# к кому он ходит, а не пустую строку.
+MAIN_TEACHER = {
+    "drums": "sharapov",
+    "guitar": "fedko",
+    "vocal": "isenova",
+}
+
+# Семья Сагындык — герой экрана «Ученик»: плательщик, двое детей,
+# скидка за второго ребёнка.
+FAMILY_SAGYNDYK = _id("06a")
+PAYER_SAGYNDYK = _id("1fa")
+FAMILY_MEMBERS = ["sagyndyk", "sagyndyk_t"]
+FAMILY_DISCOUNT = 10
+
+# Тарифы для формы продажи. Названия по прототипу: администратор выбирает
+# из списка глазами, и «8 занятий, 55 минут» без направления ему не помогает.
+# (ключ, название, направление, формат, минут, занятий, дней, цена)
+PLANS = [
+    ("drums8",  "Барабаны, 2 раза в неделю, 55 мин", "drums",  "individual", 55, 8, 31, 54000),
+    ("drums4",  "Барабаны, 1 раз в неделю, 55 мин",  "drums",  "individual", 55, 4, 31, 29000),
+    ("drums85", "Барабаны, 2 раза в неделю, 85 мин", "drums",  "individual", 85, 8, 31, 78000),
+    ("guitar8", "Гитара, 2 раза в неделю, 55 мин",   "guitar", "individual", 55, 8, 31, 54000),
+    ("guitar4", "Гитара, 1 раз в неделю, 55 мин",    "guitar", "individual", 55, 4, 31, 29000),
+    ("vocal8",  "Вокал, 2 раза в неделю, 55 мин",    "vocal",  "individual", 55, 8, 31, 52000),
+    ("ens8",    "Ансамбль, группа, 55 мин",          "guitar", "group",      55, 8, 31, 36000),
+    ("trial1",  "Пробное занятие, 45 мин",           "drums",  "trial",      45, 1, 14,     0),
+]
+
+# Каким тарифом продан абонемент ученика — по его направлению.
+PLAN_BY_DISCIPLINE = {"drums": "drums8", "guitar": "guitar8", "vocal": "vocal8"}
 
 GROUP_ENSEMBLE = _id("070")
 ENSEMBLE_MEMBERS = ["seit", "kim_zh", "bek_n", "murat"]
@@ -140,6 +190,51 @@ OVERBOOKED = {"les05"}  # осознанный овербукинг: иначе 
 
 DAY = "2026-08-12"
 
+# Прошедшие занятия Амины Сагындык — те самые пять строк «Движения
+# по абонементу» из прототипа. Журнал должен объяснять каждое занятие
+# датой, преподавателем и причиной, а одна свёрнутая запись «списано 3»
+# не объясняет ничего.
+# (суффикс id, дата, время, отметка, статус занятия)
+AMINA_PAST = [
+    ("4a0", "2026-08-02", "11:00", "cancelled_early", "cancelled"),  # → отработка
+    ("4a1", "2026-08-04", "11:00", "came", "held"),
+    ("4a2", "2026-08-05", "11:00", "no_show", "held"),
+    ("4a3", "2026-08-07", "11:00", "came", "held"),
+    # Июльское занятие: нужно только как якорь для третьей заметки.
+    # Отметки и движения по нему нет — оно относится к июльскому абонементу,
+    # которого в демо нет.
+    ("4a4", "2026-07-31", "11:00", None, "held"),
+]
+
+# Будущие занятия Амины. Нужны, чтобы заморозке было что отменять: без них
+# «занятия внутри интервала отменяются» осталось бы непроверенным обещанием.
+AMINA_UPCOMING = [("4b0", "2026-08-14"), ("4b1", "2026-08-19"), ("4b2", "2026-08-21")]
+
+# Заметки к урокам с репертуаром — то, ради чего родитель заходит в кабинет.
+# Тексты и теги взяты из прототипа.
+AMINA_NOTES = [
+    (
+        "4a3",
+        "Разобрали сбивку на 16-х. Правая рука зажимается на скорости выше "
+        "90 bpm — держим метроном на 80.",
+        "Метроном 80 bpm, восьмые и шестнадцатые по 10 минут в день.",
+        ["Nirvana — Smells Like Teen Spirit", "Рудимент: Single Paradiddle", "80 bpm"],
+    ),
+    (
+        "4a1",
+        "Впервые сыграла припев целиком под минус. Готовим к отчётному "
+        "концерту 27 сентября.",
+        "Играть припев под минус, 3 прохода подряд без остановки.",
+        ["Отчётный концерт", "Игра под минус"],
+    ),
+    (
+        "4a4",
+        "Постановка правой ноги на кике. Дома — 10 минут в день на восьмые.",
+        "Восьмые правой ногой, 10 минут в день.",
+        ["Техника: bass drum", "ДЗ: 10 мин/день"],
+    ),
+]
+
 
 def teacher_id(key: str) -> str:
     return _id("0e" + str(1 + [t[0] for t in TEACHERS].index(key)))
@@ -158,6 +253,10 @@ def subscription_id(key: str) -> str:
     return _id(f"3{[s[0] for s in STUDENTS].index(key):02d}")
 
 
+def plan_id(key: str) -> str:
+    return _id(f"5{[p[0] for p in PLANS].index(key):02d}")
+
+
 def lesson_id(key: str) -> str:
     return _id(f"4{[l[0] for l in LESSONS].index(key):02d}")
 
@@ -170,6 +269,103 @@ def lesson_discipline(target: tuple[str, str]) -> str:
     if kind == "lead":
         return DISC["drums"]      # обе заявки пришли на барабаны
     return DISC["guitar"]         # ансамбль
+
+
+def _seed_amina_history(cur: psycopg.Cursor) -> None:
+    """История Амины Сагындык: занятия, отметки, журнал, отработка, заметки.
+
+    Итог обязан совпасть с прототипом и с этапом 1: остаток 5 из 8, одна
+    отработка. Считается он не здесь, а триггером базы по журналу — здесь
+    только события, которые реально произошли.
+    """
+    sid = student_id("sagyndyk")
+    sub = subscription_id("sagyndyk")
+    teacher = teacher_id("sharapov")
+
+    for suffix, day, start, mark, status in AMINA_PAST:
+        lid = _id(suffix)
+        cur.execute(
+            """INSERT INTO lesson (id, tenant_id, branch_id, teacher_id, room_id,
+                                   discipline_id, student_id, kind, starts_at, ends_at, status)
+               VALUES (%(id)s, %(t)s, %(b)s, %(tc)s, %(rm)s, %(disc)s, %(st)s, 'regular',
+                       %(start)s::timestamp AT TIME ZONE %(tz)s,
+                       (%(start)s::timestamp AT TIME ZONE %(tz)s) + make_interval(mins => 55),
+                       %(status)s)""",
+            {
+                "id": lid, "t": TENANT, "b": BRANCH_AF, "tc": teacher,
+                "rm": ROOMS["drum_a"], "disc": DISC["drums"], "st": sid,
+                "start": f"{day} {start}", "tz": TZ, "status": status,
+            },
+        )
+        if mark is None:
+            continue
+
+        cur.execute(
+            """INSERT INTO attendance (tenant_id, lesson_id, student_id, mark, marked_by, marked_at)
+               VALUES (%s, %s, %s, %s, %s, %s::timestamp AT TIME ZONE %s) RETURNING id""",
+            (TENANT, lid, sid, mark, ADMIN_USER, f"{day} 12:00", TZ),
+        )
+        att_id = cur.fetchone()[0]
+
+        # Отмена заранее даёт отработку, всё остальное списывает занятие —
+        # ровно то, что посчитал бы rules.compute_effect на правилах школы.
+        if mark == "cancelled_early":
+            cur.execute(
+                """INSERT INTO subscription_entry
+                     (tenant_id, subscription_id, kind, makeups_delta, attendance_id,
+                      lesson_id, reason, created_by, created_at)
+                   VALUES (%s, %s, 'makeup_grant', 1, %s, %s, %s, %s,
+                           %s::timestamp AT TIME ZONE %s)""",
+                (TENANT, sub, att_id, lid, "Отмена за 2 дня до занятия", ADMIN_USER,
+                 f"{day} 12:00", TZ),
+            )
+            cur.execute(
+                """INSERT INTO makeup_credit
+                     (tenant_id, subscription_id, student_id, granted_for, expires_on)
+                   VALUES (%s, %s, %s, %s, %s::date + 30)""",
+                (TENANT, sub, sid, lid, day),
+            )
+            continue
+
+        cur.execute(
+            """INSERT INTO subscription_entry
+                 (tenant_id, subscription_id, kind, lessons_delta, attendance_id, lesson_id,
+                  reason, created_by, created_at)
+               VALUES (%s, %s, 'charge', -1, %s, %s, %s, %s,
+                       %s::timestamp AT TIME ZONE %s)""",
+            (TENANT, sub, att_id, lid, f"Отметка «{mark}»", ADMIN_USER, f"{day} 12:00", TZ),
+        )
+        # Прогул оплачивается преподавателю: pay_teacher_on_no_show = true.
+        cur.execute(
+            """INSERT INTO payroll_entry
+                 (tenant_id, staff_id, lesson_id, attendance_id, kind, amount, calc)
+               VALUES (%s, %s, %s, %s, 'lesson', 4500,
+                       '{"kind":"fixed","share":1.0,"seeded":true}')""",
+            (TENANT, teacher, lid, att_id),
+        )
+
+    for suffix, day in AMINA_UPCOMING:
+        cur.execute(
+            """INSERT INTO lesson (id, tenant_id, branch_id, teacher_id, room_id,
+                                   discipline_id, student_id, kind, starts_at, ends_at, status)
+               VALUES (%(id)s, %(t)s, %(b)s, %(tc)s, %(rm)s, %(disc)s, %(st)s, 'regular',
+                       %(start)s::timestamp AT TIME ZONE %(tz)s,
+                       (%(start)s::timestamp AT TIME ZONE %(tz)s) + make_interval(mins => 55),
+                       'planned')""",
+            {
+                "id": _id(suffix), "t": TENANT, "b": BRANCH_AF, "tc": teacher,
+                "rm": ROOMS["drum_a"], "disc": DISC["drums"], "st": sid,
+                "start": f"{day} 11:00", "tz": TZ,
+            },
+        )
+
+    for suffix, body, homework, tags in AMINA_NOTES:
+        cur.execute(
+            """INSERT INTO lesson_note (tenant_id, lesson_id, student_id, author_id,
+                                        body, homework, tags)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+            (TENANT, _id(suffix), sid, teacher, body, homework, tags),
+        )
 
 
 def seed(conn: psycopg.Connection) -> None:
@@ -272,48 +468,84 @@ def seed(conn: psycopg.Connection) -> None:
         (ADMIN_USER, TENANT, admin_person),
     )
 
-    # --- тариф и ученики -------------------------------------------------
-    plan_id = _id("05a")
+    # --- тарифы ------------------------------------------------------------
+    for key, name, disc, fmt, minutes, lessons, days, price in PLANS:
+        cur.execute(
+            """INSERT INTO subscription_plan
+                 (id, tenant_id, name, discipline_id, format, duration_min,
+                  lessons_count, valid_days, price)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (plan_id(key), TENANT, name, DISC[disc], fmt, minutes, lessons, days, price),
+        )
+
+    # --- семья Сагындык ----------------------------------------------------
+    # Телефон плательщика взят из прототипа. Диапазон +7701555000X уже занят
+    # преподавателями, а person_phone_uniq не пропустил бы дубль.
     cur.execute(
-        """INSERT INTO subscription_plan
-             (id, tenant_id, name, format, duration_min, lessons_count, valid_days, price)
-           VALUES (%s, %s, '8 занятий, 55 минут', 'individual', 55, 8, 31, 54000)""",
-        (plan_id, TENANT),
+        """INSERT INTO person (id, tenant_id, first_name, last_name, phone, pd_consent_at)
+           VALUES (%s, %s, 'Гульнара', 'Сагындык', '+77015552418', now())""",
+        (PAYER_SAGYNDYK, TENANT),
+    )
+    cur.execute(
+        """INSERT INTO family (id, tenant_id, name, payer_id, discount_pct)
+           VALUES (%s, %s, 'Сагындык', %s, %s)""",
+        (FAMILY_SAGYNDYK, TENANT, PAYER_SAGYNDYK, FAMILY_DISCOUNT),
+    )
+    cur.execute(
+        "INSERT INTO family_member (family_id, person_id, relation) VALUES (%s, %s, 'payer')",
+        (FAMILY_SAGYNDYK, PAYER_SAGYNDYK),
     )
 
+    # --- ученики -----------------------------------------------------------
     for idx, (key, first, last, disc, bought, used) in enumerate(STUDENTS, start=1):
         pid, sid = person_id(key), student_id(key)
+        family = FAMILY_SAGYNDYK if key in FAMILY_MEMBERS else None
         cur.execute(
             """INSERT INTO person (id, tenant_id, first_name, last_name, phone, birth_date, pd_consent_at)
-               VALUES (%s, %s, %s, %s, %s, '2014-05-12', now())""",
-            (pid, TENANT, first, last, f"+7702555{idx:04d}"),
+               VALUES (%s, %s, %s, %s, %s, %s, now())""",
+            (pid, TENANT, first, last, f"+7702555{idx:04d}", BIRTHDAYS.get(key, BIRTH_DEFAULT)),
         )
+        if family is not None:
+            cur.execute(
+                """INSERT INTO family_member (family_id, person_id, relation)
+                   VALUES (%s, %s, 'student')""",
+                (family, pid),
+            )
         cur.execute(
-            """INSERT INTO student (id, tenant_id, person_id, branch_id, discipline_id, started_on)
-               VALUES (%s, %s, %s, %s, %s, '2026-02-04')""",
-            (sid, TENANT, pid, BRANCH_AF, DISC[disc]),
+            """INSERT INTO student (id, tenant_id, person_id, family_id, branch_id,
+                                    discipline_id, main_teacher_id, started_on)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, '2026-02-04')""",
+            (sid, TENANT, pid, family, BRANCH_AF, DISC[disc], teacher_id(MAIN_TEACHER[disc])),
         )
         if bought == 0:
             continue
+        plan_key = PLAN_BY_DISCIPLINE[disc]
+        price = dict((p[0], p[7]) for p in PLANS)[plan_key]
         sub = subscription_id(key)
         # rules копируются из настроек школы на момент продажи — дальше
         # абонемент живёт по ним, что бы школа ни поменяла у себя (spec §4.2).
         cur.execute(
             """INSERT INTO subscription
-                 (id, tenant_id, student_id, plan_id, lessons_total, price, rules,
-                  valid_from, valid_until, sold_by)
-               SELECT %s, %s, %s, %s, %s, 54000, default_rules,
+                 (id, tenant_id, student_id, family_id, plan_id, lessons_total, price,
+                  discount_pct, rules, valid_from, valid_until, sold_by)
+               SELECT %s, %s, %s, %s, %s, %s, %s, %s, default_rules,
                       '2026-08-01', '2026-08-31', %s
                FROM tenant WHERE id = %s""",
-            (sub, TENANT, sid, plan_id, bought, ADMIN_USER, TENANT),
+            (sub, TENANT, sid, family, plan_id(plan_key), bought, price,
+             FAMILY_DISCOUNT if family else 0, ADMIN_USER, TENANT),
         )
+        # created_at задаётся явно: в журнале это дата операции, и «продажа
+        # сегодня» вместо «продажа 1 августа» ломала бы весь экран движений.
         cur.execute(
             """INSERT INTO subscription_entry
-                 (tenant_id, subscription_id, kind, lessons_delta, reason, created_by)
-               VALUES (%s, %s, 'purchase', %s, 'Продажа абонемента', %s)""",
-            (TENANT, sub, bought, ADMIN_USER),
+                 (tenant_id, subscription_id, kind, lessons_delta, reason, created_by, created_at)
+               VALUES (%s, %s, 'purchase', %s, 'Продажа абонемента', %s,
+                       '2026-08-01 10:00'::timestamp AT TIME ZONE %s)""",
+            (TENANT, sub, bought, ADMIN_USER, TZ),
         )
-        if used:
+        # У Амины движения расписаны поштучно настоящими занятиями — её
+        # журнал и есть тот экран, ради которого делался этап.
+        if used and key != "sagyndyk":
             cur.execute(
                 """INSERT INTO subscription_entry
                      (tenant_id, subscription_id, kind, lessons_delta, reason, created_by)
@@ -321,13 +553,17 @@ def seed(conn: psycopg.Connection) -> None:
                 (TENANT, sub, -used, ADMIN_USER),
             )
 
-    # Амина Сагындык — герой прототипа: у неё есть и отработка.
-    cur.execute(
-        """INSERT INTO subscription_entry
-             (tenant_id, subscription_id, kind, makeups_delta, reason, created_by)
-           VALUES (%s, %s, 'makeup_grant', 1, 'Отмена за 2 дня, 2 августа', %s)""",
-        (TENANT, subscription_id("sagyndyk"), ADMIN_USER),
-    )
+    # --- платежи семьи Сагындык -------------------------------------------
+    # 54 000 ₸ со скидкой 10% = 48 600 ₸ на ребёнка, двое детей → 97 200 ₸
+    # за август. Ровно эта сумма стоит в карточке прототипа.
+    for key in FAMILY_MEMBERS:
+        cur.execute(
+            """INSERT INTO payment (tenant_id, family_id, subscription_id, amount, method,
+                                    accepted_by, paid_at, note)
+               VALUES (%s, %s, %s, 48600, 'kaspi', %s,
+                       '2026-08-01 10:05'::timestamp AT TIME ZONE %s, 'Оплата абонемента')""",
+            (TENANT, FAMILY_SAGYNDYK, subscription_id(key), ADMIN_USER, TZ),
+        )
 
     # --- группа ----------------------------------------------------------
     cur.execute(
@@ -422,6 +658,8 @@ def seed(conn: psycopg.Connection) -> None:
         (TENANT, lesson_id("les01"), student_id("ahmetov"), teacher_id("fedko")),
     )
 
+    _seed_amina_history(cur)
+
     # --- соседняя школа: нужна ровно затем, чтобы её данные не было видно ---
     other_person = _id("1fe")
     other_admin_person = _id("1fd")
@@ -473,6 +711,9 @@ def main() -> None:
     print(f"  X-Tenant-Id: {TENANT}")
     print(f"  X-User-Id:   {ADMIN_USER}")
     print(f"  branch_id:   {BRANCH_AF}  (Аль-Фараби 53В)")
+    print(f"  student_id:  {student_id('sagyndyk')}  (Амина Сагындык)")
+    print(f"  subscription:{subscription_id('sagyndyk')}  (её августовский абонемент)")
+    print(f"  plan_id:     {plan_id('drums8')}  (Барабаны, 2 раза в неделю, 55 мин)")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,9 @@
-"""HTTP-слой RockCRM. Этап 1: расписание и отметка посещаемости."""
+"""HTTP-слой RockCRM.
+
+Этап 1: расписание и отметка посещаемости.
+Этап 2: поиск и карточка ученика, тарифы, продажа и продление абонемента,
+заморозка и её снятие.
+"""
 from __future__ import annotations
 
 import datetime as dt
@@ -14,7 +19,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import attendance as attendance_service
-from . import config, repository as repo, schemas
+from . import billing, config, repository as repo, schemas
+from . import students as students_service
 from .db import close_pool, get_pool, tenant_tx
 from .errors import ApiError, not_found, translate_db_error
 from .rules import compute_all_effects
@@ -29,8 +35,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RockCRM API",
-    version="1.0.0",
-    description="Расписание и отметка посещаемости. Контракт этапа 1.",
+    version="2.0.0",
+    description=(
+        "Расписание, отметка посещаемости и жизненный цикл абонемента. "
+        "Контракты этапов 1 и 2."
+    ),
     lifespan=lifespan,
 )
 
@@ -286,6 +295,96 @@ def revoke_attendance(who: CallerDep, attendance_id: str) -> dict[str, Any]:
     with tenant_tx(who.tenant_id) as cur:
         attendance_service.require_actor(cur, who.user_id)
         return attendance_service.revoke_mark(cur, who.tenant_id, who.user_id, attendance_id)
+
+
+# ---------------------------------------------------------------------------
+# Ученики, тарифы, абонементы — этап 2
+# ---------------------------------------------------------------------------
+
+
+@app.get(f"{API}/students", response_model=list[schemas.StudentInList], tags=["Ученики"])
+def find_students(
+    who: CallerDep,
+    query: Annotated[str, Query(description="Имя ученика, имя или телефон плательщика")] = "",
+    branch_id: Annotated[str | None, Query(description="UUID филиала")] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> list[dict[str, Any]]:
+    with tenant_tx(who.tenant_id) as cur:
+        return students_service.search(cur, query, branch_id, limit)
+
+
+@app.get(
+    f"{API}/students/{{student_id}}", response_model=schemas.StudentCard, tags=["Ученики"]
+)
+def student_card(who: CallerDep, student_id: str) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        card = students_service.card(cur, student_id)
+        if card is None:
+            raise not_found("Ученик не найден")
+        return card
+
+
+@app.get(f"{API}/plans", response_model=list[schemas.Plan], tags=["Справочники"])
+def plans(
+    who: CallerDep,
+    discipline_id: Annotated[str | None, Query(description="UUID направления")] = None,
+    format: Annotated[str | None, Query(description="individual | pair | group | trial")] = None,
+) -> list[dict[str, Any]]:
+    with tenant_tx(who.tenant_id) as cur:
+        return [
+            {
+                "id": str(row["id"]),
+                "name": row["name"],
+                "discipline": row["discipline"],
+                "format": row["format"],
+                "duration_min": int(row["duration_min"]),
+                "lessons_count": int(row["lessons_count"]),
+                "valid_days": int(row["valid_days"]),
+                "price": int(row["price"]),
+            }
+            for row in repo.list_plans(cur, discipline_id, format)
+        ]
+
+
+@app.post(
+    f"{API}/students/{{student_id}}/subscriptions",
+    response_model=schemas.SoldSubscription,
+    status_code=201,
+    tags=["Абонементы"],
+)
+def sell_subscription(
+    who: CallerDep, student_id: str, body: schemas.SellRequest
+) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        attendance_service.require_actor(cur, who.user_id)
+        return billing.sell_subscription(cur, who.tenant_id, who.user_id, student_id, body)
+
+
+@app.post(
+    f"{API}/subscriptions/{{subscription_id}}/holds",
+    response_model=schemas.HoldCreated,
+    status_code=201,
+    tags=["Абонементы"],
+)
+def freeze_subscription(
+    who: CallerDep, subscription_id: str, body: schemas.HoldRequest
+) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        attendance_service.require_actor(cur, who.user_id)
+        return billing.create_hold(cur, who.tenant_id, who.user_id, subscription_id, body)
+
+
+@app.delete(
+    f"{API}/subscriptions/{{subscription_id}}/holds/{{hold_id}}",
+    response_model=schemas.HoldReleased,
+    tags=["Абонементы"],
+)
+def unfreeze_subscription(
+    who: CallerDep, subscription_id: str, hold_id: str
+) -> dict[str, Any]:
+    with tenant_tx(who.tenant_id) as cur:
+        attendance_service.require_actor(cur, who.user_id)
+        return billing.release_hold(cur, who.tenant_id, who.user_id, subscription_id, hold_id)
 
 
 @app.get(f"{API}/health", tags=["Служебное"])

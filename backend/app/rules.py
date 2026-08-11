@@ -321,3 +321,139 @@ def low_balance_alert(lessons_after: int) -> dict[str, str] | None:
             "пора предложить продление"
         )
     return {"kind": "subscription_low", "message": message}
+
+
+# ---------------------------------------------------------------------------
+# Журнал абонемента: формулировки для экрана «Движение по абонементу».
+#
+# Это тот экран, которым администратор отвечает родителю на «куда делось
+# занятие». Код вида записи («charge») ответом не является: строка обязана
+# читаться вслух по телефону без перевода.
+# ---------------------------------------------------------------------------
+
+LEDGER_TITLES: dict[str, str] = {
+    "purchase": "Оплата абонемента",
+    "charge": "Занятие проведено",
+    "refund": "Занятие возвращено — отметка отменена",
+    "makeup_grant": "Начислена отработка",
+    "makeup_use": "Отработка использована",
+    "makeup_expire": "Отработка сгорела по сроку",
+    "freeze": "Занятие в период заморозки",
+    "adjust": "Корректировка администратора",
+    "transfer_in": "Перенос остатка с прошлого абонемента",
+    "transfer_out": "Перенос остатка на новый абонемент",
+    "expire": "Остаток сгорел по окончании срока",
+}
+
+# Списание объясняется отметкой, а не видом записи: «−1» без причины —
+# ровно тот случай, из-за которого родитель и звонит.
+_CHARGE_TITLES: dict[str, str] = {
+    "came": "Занятие проведено",
+    "late": "Занятие проведено, ученик опоздал",
+    "no_show": "Прогул без предупреждения",
+    "cancelled_late": "Поздняя отмена — занятие списано",
+    "cancelled_early": "Отмена заранее — занятие списано",
+    "cancelled_teacher": "Отменил преподаватель — занятие списано",
+}
+
+_GRANT_TITLES: dict[str, str] = {
+    "cancelled_early": "Отмена заранее → отработка",
+    "cancelled_teacher": "Отменил преподаватель → отработка",
+}
+
+
+def ledger_title(kind: str, mark: str | None = None) -> str:
+    """Человеческая формулировка строки журнала."""
+    if kind == "charge" and mark:
+        return _CHARGE_TITLES.get(mark, LEDGER_TITLES["charge"])
+    if kind == "makeup_grant" and mark:
+        return _GRANT_TITLES.get(mark, LEDGER_TITLES["makeup_grant"])
+    # Неизвестный вид лучше показать как есть, чем спрятать за «прочее»:
+    # пустая строка в журнале страшнее непереведённого кода.
+    return LEDGER_TITLES.get(kind, kind)
+
+
+# ---------------------------------------------------------------------------
+# Риск оттока
+#
+# Эвристика, а не модель. Главное требование контракта — каждая причина
+# в reasons должна быть проверяемым фактом («1 прогул за 30 дней»),
+# а не оценкой («ученик демотивирован»): администратор звонит родителю
+# и обязан опираться на то, что можно назвать вслух.
+# ---------------------------------------------------------------------------
+
+# Вес прогула самый большой осознанно: пропуск без предупреждения — первый
+# наблюдаемый признак ухода, он появляется раньше, чем кончается абонемент.
+_NO_SHOW_WEIGHT = 30
+_NO_SHOW_CAP = 60
+_LOW_BALANCE_WEIGHT = 25
+_NO_SUBSCRIPTION_WEIGHT = 45
+_EXPIRING_SOON_WEIGHT = 12
+_SILENT_2W_WEIGHT = 15
+_SILENT_4W_WEIGHT = 30
+_LOYALTY_DISCOUNT = 8
+
+RISK_MEDIUM = 20
+RISK_HIGH = 55
+
+RISK_LEVELS = {"low": "Низкий", "medium": "Средний", "high": "Высокий"}
+
+
+def churn_risk(
+    *,
+    no_shows_30d: int,
+    has_subscription: bool,
+    lessons_balance: int,
+    days_until_expiry: int | None,
+    days_since_last_lesson: int | None,
+    months_with_school: int,
+    subscriptions_bought: int,
+) -> dict[str, Any]:
+    score = 0
+    reasons: list[str] = []
+
+    if no_shows_30d > 0:
+        score += min(no_shows_30d * _NO_SHOW_WEIGHT, _NO_SHOW_CAP)
+        word = plural(no_shows_30d, "прогул", "прогула", "прогулов")
+        reasons.append(f"{no_shows_30d} {word} за 30 дней")
+
+    if not has_subscription:
+        score += _NO_SUBSCRIPTION_WEIGHT
+        reasons.append("действующего абонемента нет")
+    else:
+        if lessons_balance <= LOW_BALANCE_THRESHOLD:
+            score += _LOW_BALANCE_WEIGHT
+            if lessons_balance <= 0:
+                reasons.append("занятия на абонементе закончились")
+            else:
+                reasons.append(
+                    f"абонемент кончается через {lessons_balance} "
+                    f"{lessons_word(lessons_balance)}"
+                )
+        if days_until_expiry is not None and days_until_expiry <= 7:
+            score += _EXPIRING_SOON_WEIGHT
+            if days_until_expiry < 0:
+                reasons.append("срок абонемента истёк")
+            else:
+                word = plural(days_until_expiry, "день", "дня", "дней")
+                reasons.append(f"срок абонемента истекает через {days_until_expiry} {word}")
+
+    if days_since_last_lesson is not None and days_since_last_lesson >= 14:
+        score += _SILENT_4W_WEIGHT if days_since_last_lesson >= 28 else _SILENT_2W_WEIGHT
+        word = plural(days_since_last_lesson, "день", "дня", "дней")
+        reasons.append(f"не было занятий {days_since_last_lesson} {word}")
+
+    # Стаж и число купленных абонементов снижают риск — и тоже остаются
+    # проверяемыми фактами, поэтому попадают в reasons наравне с остальными.
+    if months_with_school >= 6:
+        score -= _LOYALTY_DISCOUNT
+        word = plural(months_with_school, "месяц", "месяца", "месяцев")
+        reasons.append(f"занимается {months_with_school} {word}")
+    if subscriptions_bought >= 3:
+        score -= _LOYALTY_DISCOUNT
+        word = plural(subscriptions_bought, "абонемент", "абонемента", "абонементов")
+        reasons.append(f"куплено {subscriptions_bought} {word} подряд")
+
+    score = max(0, min(100, score))
+    level = "high" if score >= RISK_HIGH else "medium" if score >= RISK_MEDIUM else "low"
+    return {"level": level, "score": score, "reasons": reasons}

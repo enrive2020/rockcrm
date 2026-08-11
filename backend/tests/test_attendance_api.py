@@ -79,18 +79,28 @@ def test_apply_writes_all_four_records_in_one_transaction(client, sql):
     assert status["status"] == "held"
 
 
+def charges(sql, student_key: str) -> int:
+    row = sql.execute(
+        "SELECT count(*) AS n FROM subscription_entry WHERE subscription_id = %s AND kind = 'charge'",
+        (subscription(student_key),),
+    ).fetchone()
+    return int(row["n"])
+
+
 def test_second_mark_of_same_student_is_rejected(client, sql):
+    # Считаем списания до и после, а не сравниваем с числом из демо-данных:
+    # тест обязан проверять «второго списания не появилось», а не количество
+    # строк, которое меняется при каждом пополнении демо-данных.
+    before = charges(sql, STUDENT)
     assert mark(client, LESSON, STUDENT, "came").status_code == 201
+    assert charges(sql, STUDENT) == before + 1
+
     again = mark(client, LESSON, STUDENT, "no_show")
     assert again.status_code == 409
     assert again.json()["error"]["code"] == "already_marked"
 
     # Отказ обязан быть полным: второго списания в журнале быть не должно.
-    total = sql.execute(
-        "SELECT count(*) AS n FROM subscription_entry WHERE subscription_id = %s AND kind = 'charge'",
-        (subscription(STUDENT),),
-    ).fetchone()
-    assert total["n"] == 2   # одна запись «занятия до 12 августа» и одна новая
+    assert charges(sql, STUDENT) == before + 1
 
 
 def test_zero_balance_gives_422_and_changes_nothing(client, sql):
