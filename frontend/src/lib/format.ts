@@ -104,6 +104,51 @@ export const todayIso = (): string => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
 
+const MONTHS_NOM = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+];
+
+/**
+ * Границы календарного месяца, в который попадает дата. Период отчётов —
+ * пара `from`/`to` включительно с обеих сторон, поэтому `to` — последний
+ * день месяца, а не первое число следующего.
+ */
+export const monthBounds = (date: string): { from: string; to: string } => {
+  const [y, m] = date.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const mm = String(m).padStart(2, '0');
+  return { from: `${y}-${mm}-01`, to: `${y}-${mm}-${String(last).padStart(2, '0')}` };
+};
+
+/** Сдвиг на календарные месяцы: «прошлый месяц» в переключателе периода. */
+export const shiftMonth = (date: string, months: number): string => {
+  const [y, m, d] = date.split('-').map(Number);
+  const at = new Date(Date.UTC(y, m - 1 + months, 1));
+  const last = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 0)).getUTCDate();
+  return `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
+};
+
+/** "2026-08" или "2026-08-12" → «Август 2026». */
+export const monthTitle = (date: string): string => {
+  const [y, m] = date.split('-').map(Number);
+  return `${MONTHS_NOM[m - 1]} ${y}`;
+};
+
+/**
+ * Период человеческой строкой. Целый месяц называем месяцем — «1 августа —
+ * 31 августа» читается медленнее, чем «Август 2026», а это подпись экрана.
+ */
+export const periodTitle = (from: string, to: string): string => {
+  const bounds = monthBounds(from);
+  if (bounds.from === from && bounds.to === to) return monthTitle(from);
+  return `${dateGen(from)} — ${dateGen(to)}`;
+};
+
+/** Минуты → «124 ч»: загрузка кабинетов измеряется часами, а не минутами. */
+export const hoursFromMinutes = (minutes: number): string =>
+  `${Math.round(minutes / 60).toLocaleString('ru-RU').replace(/[  ,]/g, ' ')} ч`;
+
 /** Инициалы для плашки: «Дмитрий Шарапов» → «ДШ». */
 export const initials = (name: string): string =>
   name

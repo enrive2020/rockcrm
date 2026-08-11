@@ -168,13 +168,14 @@ export const FAMILIES: MockFamily[] = [
   { id: uid(7, 1), name: 'Сагындык', payer: { name: 'Гульнара Сагындык', phone: '+77015550003' }, discount_pct: 10, paid_this_month: 97200, debt: 0 },
   { id: uid(7, 2), name: 'Ахметов', payer: { name: 'Асель Ахметова', phone: '+77015550004' }, discount_pct: 0, paid_this_month: 52000, debt: 0 },
   { id: uid(7, 3), name: 'Ким', payer: { name: 'Ирина Ким', phone: '+77015550005' }, discount_pct: 0, paid_this_month: 52000, debt: 0 },
-  { id: uid(7, 4), name: 'Оспанов', payer: { name: 'Ержан Оспанов', phone: '+77015550006' }, discount_pct: 0, paid_this_month: 28000, debt: 0 },
+  // Оплатил половину и обещал донести остаток — самый частый вид долга
+  { id: uid(7, 4), name: 'Оспанов', payer: { name: 'Ержан Оспанов', phone: '+77015550006' }, discount_pct: 0, paid_this_month: 14000, debt: 14000 },
   { id: uid(7, 5), name: 'Ли', payer: { name: 'Наталья Ли', phone: '+77015550007' }, discount_pct: 10, paid_this_month: 117000, debt: 0 },
   { id: uid(7, 6), name: 'Бек', payer: { name: 'Айгуль Бек', phone: '+77015550008' }, discount_pct: 0, paid_this_month: 56000, debt: 0 },
   // Долг: абонемент оформлен, деньги обещали донести — карточка обязана это показывать
   { id: uid(7, 7), name: 'Абишева', payer: { name: 'Гульмира Абишева', phone: '+77015550009' }, discount_pct: 0, paid_this_month: 0, debt: 27000 },
   { id: uid(7, 8), name: 'Ким (Ольга)', payer: { name: 'Ольга Ким', phone: '+77015550010' }, discount_pct: 0, paid_this_month: 52000, debt: 0 },
-  { id: uid(7, 9), name: 'Жанат', payer: { name: 'Сауле Жанат', phone: '+77015550011' }, discount_pct: 0, paid_this_month: 54000, debt: 0 },
+  { id: uid(7, 9), name: 'Жанат', payer: { name: 'Сауле Жанат', phone: '+77015550011' }, discount_pct: 0, paid_this_month: 40500, debt: 13500 },
   { id: uid(7, 10), name: 'Ер', payer: { name: 'Динара Ер', phone: '+77015550012' }, discount_pct: 0, paid_this_month: 56000, debt: 0 },
 ];
 
@@ -856,3 +857,289 @@ function findStudentIdByName(name: string): string | null {
 export const findLead = (id: string): MockLead | undefined => LEADS.find((l) => l.id === id);
 
 export const nextLeadId = (): string => uidx('a', ++leadSeq);
+
+/* ==========================================================================
+   Этап 4: начисления, закрытые периоды и платежи
+
+   Начисление — строка «преподавателю за занятие», штамп периода на ней
+   означает «деньги посчитаны и отданы». Открытого периода не существует:
+   пока месяц не закрыт, ведомость собирается из непроштампованных строк
+   (contract-v4, «Ведомость»), поэтому фикстура хранит именно штамп,
+   а не флаг «закрыто».
+   ========================================================================== */
+
+export interface MockPayrollPeriod {
+  id: string;
+  from: string;
+  to: string;
+  closed_at: string;
+  closed_by: string;
+}
+
+export interface MockAccrual {
+  id: number;
+  /** Дата занятия в поясе филиала — по ней начисление попадает в период. */
+  date: string;
+  start: string;
+  teacher_id: string;
+  branch_id: string;
+  student_name: string;
+  discipline: string;
+  duration_min: number;
+  mark: AttendanceMark | null;
+  /** Ставка на момент занятия — снимок расчёта, а не сегодняшняя настройка. */
+  rate: number;
+  amount: number;
+  /** Занятие, премия, корректировка (снятое начисление) или удержание. */
+  kind: 'lesson' | 'bonus' | 'correction' | 'deduction';
+  /** Штамп закрытого периода. null — строка ещё не выплачена. */
+  period_id: string | null;
+}
+
+/** Закрытые месяцы. Июль закрыт первого августа — обычный ход вещей. */
+export const PAYROLL_PERIODS: MockPayrollPeriod[] = [
+  { id: uidx('p', 1), from: '2026-06-01', to: '2026-06-30', closed_at: `2026-07-01T10:00:00${TZ_OFFSET}`, closed_by: 'Асель Нурланова' },
+  { id: uidx('p', 2), from: '2026-07-01', to: '2026-07-31', closed_at: `2026-08-01T10:00:00${TZ_OFFSET}`, closed_by: 'Асель Нурланова' },
+];
+
+let periodSeq = PAYROLL_PERIODS.length;
+export const nextPeriodId = (): string => uidx('p', ++periodSeq);
+
+/**
+ * Псевдослучайность с зерном: набор начислений обязан быть одинаковым
+ * при каждой перезагрузке, иначе «проверил вчера» ничего не значит.
+ */
+function seeded(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+const ACCRUAL_MARKS: { mark: AttendanceMark; share: number }[] = [
+  { mark: 'came', share: 0.78 },
+  { mark: 'late', share: 0.06 },
+  { mark: 'no_show', share: 0.09 },
+  { mark: 'cancelled_early', share: 0.04 },
+  { mark: 'cancelled_teacher', share: 0.03 },
+];
+
+/** Ставка зависит от длительности: 85 минут дороже 55. Отсюда `rate_varies`. */
+const rateFor = (teacherRate: number, durationMin: number): number =>
+  durationMin >= 85 ? Math.round(teacherRate * 1.5) : teacherRate;
+
+/**
+ * Сколько платят преподавателю при этой отметке. Правила школы: прогул
+ * оплачивается полностью (`pay_teacher_on_no_show`), отмена заранее — нет,
+ * отмена преподавателем — нет.
+ */
+const payShare = (mark: AttendanceMark): number =>
+  mark === 'came' || mark === 'late' || mark === 'no_show' ? 1 : mark === 'cancelled_late' ? 1 : 0;
+
+let accrualSeq = 30000;
+
+/**
+ * Начисления за три месяца: июнь и июль закрыты, август идёт.
+ * Ученики берутся из фикстур этапа 2 — ведомость и карточка ученика
+ * обязаны говорить об одних и тех же людях.
+ */
+function seedAccruals(): MockAccrual[] {
+  const rows: MockAccrual[] = [];
+  const random = seeded(20260812);
+  const withSub = STUDENTS.filter((s) => s.subscription !== null);
+
+  const months: { first: string; last: string; period: string | null }[] = [
+    { first: '2026-06-01', last: '2026-06-30', period: PAYROLL_PERIODS[0].id },
+    { first: '2026-07-01', last: '2026-07-31', period: PAYROLL_PERIODS[1].id },
+    // Август идёт: строки без штампа, до сегодняшнего дня включительно
+    { first: '2026-08-01', last: MOCK_TODAY, period: null },
+  ];
+
+  for (const month of months) {
+    const days = daysBetween(month.first, month.last) + 1;
+    for (let day = 0; day < days; day++) {
+      const date = addDays(month.first, day);
+      const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+      if (weekday === 0) continue; // воскресенье школа не работает
+      for (const teacher of TEACHERS) {
+        // Три-пять занятий в день у каждого преподавателя
+        const count = 3 + Math.floor(random() * 3);
+        let previousStart = '';
+        for (let i = 0; i < count; i++) {
+          const student = withSub[Math.floor(random() * withSub.length)];
+          const duration = random() < 0.18 ? 85 : 55;
+          const rate = rateFor(teacher.rate, duration);
+          const roll = random();
+          let acc = 0;
+          let mark: AttendanceMark = 'came';
+          for (const option of ACCRUAL_MARKS) {
+            acc += option.share;
+            if (roll <= acc) {
+              mark = option.mark;
+              break;
+            }
+          }
+          // Иногда второй ученик встаёт в тот же час — это групповое занятие:
+          // занятие одно, а начислений два. Ради этой разницы в ведомости
+          // и стоят две отдельные колонки.
+          const group = i > 0 && random() < 0.16;
+          const start = group ? previousStart : `${String(10 + ((i * 2 + day) % 10)).padStart(2, '0')}:00`;
+          previousStart = start;
+          rows.push({
+            id: ++accrualSeq,
+            date,
+            start,
+            teacher_id: teacher.id,
+            branch_id: student.branch_id,
+            student_name: student.name,
+            discipline: student.discipline,
+            duration_min: duration,
+            mark,
+            rate,
+            amount: Math.round(rate * payShare(mark)),
+            kind: 'lesson',
+            period_id: month.period,
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Три правки за июль, сделанные после закрытия месяца: отметки поставили
+   * задним числом, штампа они не получили и приедут в августовскую ведомость
+   * строками `carried_over`. Ради них экран и показывает эту колонку
+   * отдельно — бухгалтер не должен искать расхождение.
+   */
+  const late: { teacher: string; date: string; student: string; discipline: string; mark: AttendanceMark }[] = [
+    { teacher: TEACHERS[0].id, date: '2026-07-28', student: 'Амина Сагындык', discipline: 'Барабаны', mark: 'came' },
+    { teacher: TEACHERS[0].id, date: '2026-07-30', student: 'Марк Ли', discipline: 'Барабаны', mark: 'no_show' },
+    { teacher: TEACHERS[3].id, date: '2026-07-29', student: 'Санжар Тлеу', discipline: 'Гитара', mark: 'came' },
+  ];
+  for (const row of late) {
+    const teacher = findTeacher(row.teacher);
+    rows.push({
+      id: ++accrualSeq,
+      date: row.date,
+      start: '18:00',
+      teacher_id: teacher.id,
+      branch_id: BRANCH_AF,
+      student_name: row.student,
+      discipline: row.discipline,
+      duration_min: 55,
+      mark: row.mark,
+      rate: teacher.rate,
+      amount: Math.round(teacher.rate * payShare(row.mark)),
+      kind: 'lesson',
+      period_id: null,
+    });
+  }
+
+  /**
+   * Корректировки августа: ошибочные отметки отменили, начисление сняли.
+   * Записи журнала не удаляются — сервер добавляет компенсирующие,
+   * поэтому в ведомости они видны отдельной колонкой, а не вычитанием
+   * из «начислено».
+   */
+  const fixes: { teacher: string; date: string; student: string; amount: number }[] = [
+    { teacher: TEACHERS[0].id, date: '2026-08-05', student: 'Амир Жанат', amount: -4500 },
+    { teacher: TEACHERS[1].id, date: '2026-08-07', student: 'Сабина Нурлан', amount: -4200 },
+    { teacher: TEACHERS[4].id, date: '2026-08-11', student: 'Айсулу Бек', amount: -4000 },
+  ];
+  for (const fix of fixes) {
+    rows.push({
+      id: ++accrualSeq,
+      date: fix.date,
+      start: '00:00',
+      teacher_id: fix.teacher,
+      branch_id: BRANCH_AF,
+      student_name: fix.student,
+      discipline: '',
+      duration_min: 0,
+      mark: null,
+      rate: Math.abs(fix.amount),
+      amount: fix.amount,
+      kind: 'correction',
+      period_id: null,
+    });
+  }
+
+  return rows.sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
+}
+
+export const ACCRUALS: MockAccrual[] = seedAccruals();
+
+export const nextAccrualId = (): number => ++accrualSeq;
+
+/* ---------- платежи (выручка) ---------- */
+
+export interface MockPayment {
+  id: number;
+  date: string;
+  branch_id: string;
+  /** null — платёж не привязан к абонементу: направление неизвестно. */
+  discipline: string | null;
+  method: 'kaspi' | 'card' | 'cash' | 'transfer' | 'other';
+  amount: number;
+}
+
+const METHOD_MIX: MockPayment['method'][] = ['kaspi', 'kaspi', 'kaspi', 'kaspi', 'card', 'cash', 'transfer'];
+
+/**
+ * Платежи за три месяца. Выручка считается по поступившим деньгам, а не
+ * по проданным абонементам: продажа в долг — обычное дело, и выручка,
+ * показывающая невыплаченное, отвечает не на тот вопрос.
+ */
+function seedPayments(): MockPayment[] {
+  const rows: MockPayment[] = [];
+  const random = seeded(4200);
+  let id = 0;
+  const months: [string, string][] = [
+    ['2026-06-01', '2026-06-30'],
+    ['2026-07-01', '2026-07-31'],
+    ['2026-08-01', MOCK_TODAY],
+  ];
+  for (const [first, last] of months) {
+    const days = daysBetween(first, last) + 1;
+    for (let day = 0; day < days; day++) {
+      const date = addDays(first, day);
+      const count = Math.floor(random() * 3);
+      for (let i = 0; i < count; i++) {
+        const plan = PLANS[Math.floor(random() * PLANS.length)];
+        rows.push({
+          id: ++id,
+          date,
+          branch_id: random() < 0.62 ? BRANCH_AF : BRANCH_AB,
+          discipline: plan.discipline,
+          method: METHOD_MIX[Math.floor(random() * METHOD_MIX.length)],
+          amount: plan.price,
+        });
+      }
+    }
+  }
+  // Платёж без абонемента: разовое занятие оплатили на ресепшене. Он обязан
+  // попасть в строку «Не распределено», иначе сумма разрезов не сойдётся
+  // с итогом, а несходящийся финансовый отчёт хуже отсутствующего.
+  rows.push({ id: ++id, date: '2026-08-06', branch_id: BRANCH_AF, discipline: null, method: 'cash', amount: 9000 });
+  rows.push({ id: ++id, date: '2026-07-16', branch_id: BRANCH_AB, discipline: null, method: 'kaspi', amount: 12000 });
+  return rows.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export const PAYMENTS: MockPayment[] = seedPayments();
+
+/* ---------- загрузка кабинетов ---------- */
+
+/**
+ * Среднее число занятых минут в кабинете за рабочий день. Настоящий бэкенд
+ * считает это из расписания; в моках полугода расписания нет, поэтому
+ * фикстура задаёт темп кабинета, а отчёт умножает его на дни периода —
+ * иначе загрузка за месяц равнялась бы загрузке за один день.
+ */
+export const ROOM_DAILY_BUSY_MIN: Record<string, number> = {
+  [ROOMS[0].id]: 495, // Барабанная A — самая занятая, в неё и упирается школа
+  [ROOMS[1].id]: 330,
+  [ROOMS[2].id]: 275,
+  [ROOMS[3].id]: 385,
+  [ROOMS[4].id]: 220,
+};

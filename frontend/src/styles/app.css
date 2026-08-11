@@ -512,6 +512,73 @@ select.inp { padding-right: 4px; }
 .funnel-bar b { position: absolute; left: 8px; font-size: 12px; font-weight: 600; color: var(--ink); }
 .funnel-conv { text-align: right; font-size: 12.5px; color: var(--ink-3); }
 
+/* ==========================================================================
+   Экран «Деньги и ЗП» (этап 4). Классы продолжают набор прототипа
+   (.card, .stat, .kv, .bar), новых цветов нет — только токены.
+   ========================================================================== */
+
+/* Четыре числа шапки: выручка, кабинеты, ведомость и место под отток */
+.g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* Панель периода и филиала: она относится ко всему экрану, поэтому стоит
+   отдельной строкой под заголовком, а не внутри карточки отчёта */
+.money-ctl {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 0 22px 14px; font-size: 12.5px;
+}
+.money-ctl .inp.slim { font-family: var(--f-mono); }
+
+/* Заголовок карточки с действием справа: «Ведомость … [Закрыть период]» */
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.card-head > .lbl { margin: 0; }
+.card-head .btn.slim { margin-left: 0; }
+
+/* Итог ведомости отделён от строк линией: сумма к выплате — не ещё одна строка */
+tfoot td { border-top: 1px solid var(--line); padding: 10px; font-weight: 600; }
+tfoot tr:hover { background: none; }
+.num.strong { font-weight: 600; }
+/* Латунным помечено то, что требует внимания, но ошибкой не является:
+   правки за прошлые месяцы и кончающиеся абонементы */
+.acc-num { color: var(--accent); }
+
+/* Строка ведомости раскрывается в расшифровку по занятиям */
+.link-row { padding: 0; text-align: left; font-size: 13px; }
+.link-row:hover { color: var(--accent); }
+.link-row .caret { font-size: 10px; color: var(--ink-3); width: 10px; flex: none; }
+tr.row-open td { background: var(--panel-2); }
+tr.row-detail td { padding: 0; background: var(--panel-2); border-bottom: 1px solid var(--line); }
+tr.row-detail:hover td { background: var(--panel-2); }
+.detail { padding: 12px 12px 14px; }
+table.inner { font-size: 12.5px; }
+table.inner th { padding-bottom: 6px; }
+table.inner td { padding: 6px 10px; border-bottom: 1px solid var(--line-soft); }
+/* Начисление за уже закрытый месяц: видно строкой, а не только суммой в шапке */
+tr.carried td { background: var(--accent-wash); }
+.carried-tag { margin-left: 6px; font-size: 10.5px; padding: 1px 5px; color: var(--accent); border-color: color-mix(in srgb, var(--accent-bright) 45%, transparent); }
+/* Флажок «ставок несколько»: одно число ставки было бы враньём */
+.varies { margin-left: 3px; color: var(--ink-3); font-size: 11px; }
+
+/* Горизонтальные полосы отчётов: месяцы выручки и загрузка кабинетов */
+.bars { display: flex; flex-direction: column; gap: 7px; }
+.bar-row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr) auto; align-items: center; gap: 10px; }
+.bar-name { font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { height: 16px; background: var(--panel-3); border-radius: 3px; overflow: hidden; }
+.bar-track i { display: block; height: 100%; background: var(--accent-bright); border-radius: 3px; min-width: 2px; }
+.bar-val { font-size: 12.5px; white-space: nowrap; }
+
+/* Заглушка вместо неверного числа: карточка на месте, но приглушена —
+   пустое место читалось бы как «отчёта нет», а не «числу нельзя верить» */
+.card.stub { border-style: dashed; background: var(--panel-2); }
+
+@media (max-width: 1500px) {
+  .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 1100px) {
+  .g3, .g4 { grid-template-columns: 1fr; }
+  .money-ctl { padding: 0 16px 12px; }
+}
+
 /* ---------- уведомления ---------- */
 .toasts {
   position: fixed; right: 416px; bottom: 20px; z-index: 40;

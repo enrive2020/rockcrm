@@ -1,5 +1,6 @@
 import { ApiError } from '../http';
 import type {
+  AppliedMarkEffect,
   AttendanceMark,
   AttendanceRequest,
   AttendanceResponse,
@@ -7,10 +8,13 @@ import type {
   BoardColumn,
   BoardLead,
   Branch,
+  BranchLoad,
   ChurnRisk,
   ConvertRequest,
   ConvertResponse,
   CreateLeadRequest,
+  DebtsReport,
+  Debtor,
   DirectoryRoom,
   DirectoryTeacher,
   Discipline,
@@ -31,8 +35,21 @@ import type {
   LostReason,
   MarkEffect,
   MarkEffects,
+  MoneySummary,
   PatchLeadRequest,
+  PaymentMethod,
+  PayrollDetail,
+  PayrollEntry,
+  PayrollPeriodRow,
+  PayrollRow,
+  PayrollSheet,
+  PayrollTotals,
+  PeriodClosed,
   Plan,
+  RevenueReport,
+  RevenueSlice,
+  RoomLoad,
+  RoomsReport,
   ScheduleLesson,
   ScheduleResponse,
   ScheduleTrack,
@@ -46,6 +63,7 @@ import type {
 } from '../types';
 import { MARK_ORDER, PAYMENT_METHOD_LABELS, SOURCES, STAGE_LABELS, STAGE_ORDER } from '../types';
 import {
+  ACCRUALS,
   BRANCHES,
   BRANCH_AF,
   CURRENT_USER,
@@ -58,13 +76,17 @@ import {
   MAKEUPS,
   MOCK_TODAY,
   NOTES,
+  PAYMENTS,
+  PAYROLL_PERIODS,
   PLANS,
   ROOMS,
+  ROOM_DAILY_BUSY_MIN,
   STUDENTS,
   TEACHERS,
   TZ_OFFSET,
   addDays,
   daysBetween,
+  disciplineByName,
   findDiscipline,
   findFamily,
   findLead,
@@ -73,14 +95,19 @@ import {
   findStudent,
   findTeacher,
   findUser,
+  nextAccrualId,
   nextEntryId,
   nextLeadId,
+  nextPeriodId,
+  type MockAccrual,
   type MockHold,
   type MockLead,
   type MockLesson,
+  type MockPayment,
   type MockRules,
   type MockStudent,
   type MockSubscription,
+  type MockTeacher,
 } from './data';
 
 /**
@@ -100,6 +127,14 @@ const attendanceIds = new Map<string, string>();
 const attendanceOwners = new Map<string, { lessonId: string; studentId: string }>();
 /** Уже отменённые отметки: повторный DELETE обязан отвечать 409, а не гасить второй раз. */
 const revokedAttendance = new Set<string>();
+/**
+ * Факт применённой отметки: что она списала и начислила на самом деле.
+ * Это журнал, а не предпросмотр: `mark_effects` отвечает на «что будет»,
+ * а карточке занятия нужен ответ на «что уже случилось» (issue #22).
+ * Пересчитывать правила заново нельзя — правила абонемента могли смениться
+ * после отметки, а начисленное этим не отменяется.
+ */
+const appliedFacts = new Map<string, { mark: AttendanceMark; lessons_delta: number; makeups_delta: number; teacher_amount: number }>();
 let attendanceSeq = 0;
 
 const newAttendanceId = (lessonId: string, studentId: string): string => {
@@ -319,11 +354,13 @@ function toParticipant(lesson: MockLesson, studentId: string): LessonParticipant
   const student = findStudent(studentId);
   const teacher = findTeacher(lesson.teacher_id);
   const s = student.subscription;
+  const mark = markOf(lesson.id, studentId);
+  const attendanceId = mark ? attendanceIds.get(`${lesson.id}:${studentId}`) ?? null : null;
   return {
     student_id: student.id,
     name: student.name,
-    attendance: markOf(lesson.id, studentId),
-    attendance_id: markOf(lesson.id, studentId) ? attendanceIds.get(`${lesson.id}:${studentId}`) ?? null : null,
+    attendance: mark,
+    attendance_id: attendanceId,
     subscription: s
       ? {
           id: s.id,
@@ -335,8 +372,58 @@ function toParticipant(lesson: MockLesson, studentId: string): LessonParticipant
         }
       : null,
     mark_effects: allEffects(s, teacher.rate),
+    applied_effect: attendanceId && mark ? appliedEffect(attendanceId, s, teacher.rate, mark) : null,
   };
 }
+
+/**
+ * Что отметка уже сделала. Остаток «после» — настоящий текущий остаток
+ * абонемента, а не «баланс плюс дельта»: если после отметки было ещё
+ * движение (продление, отработка), карточка занятия и карточка ученика
+ * обязаны показывать одно число.
+ */
+function appliedEffect(
+  attendanceId: string,
+  subscription: MockSubscription | null,
+  teacherRate: number,
+  mark: AttendanceMark,
+): AppliedMarkEffect | null {
+  /**
+   * У отметок из фикстур журнала нет: они «случились» до запуска вкладки.
+   * Дельты от остатка не зависят, поэтому расчёт по правилам даёт ровно те
+   * числа, которые отметка и применила, — даже сейчас, когда остаток
+   * в фикстуре уже уменьшен на это занятие.
+   */
+  const fact = appliedFacts.get(attendanceId) ?? factFromRules(mark, subscription, teacherRate);
+  if (!fact) return null;
+  const lessonsAfter = subscription ? subscription.lessons_balance : null;
+  const pay = fact.teacher_amount > 0 ? `Преподавателю ${money(fact.teacher_amount)}.` : 'Преподавателю не начислялось.';
+  const lessons =
+    fact.lessons_delta === 0
+      ? 'Занятие с абонемента не списывалось.'
+      : `Списано ${lessonsWord(-fact.lessons_delta)}${lessonsAfter === null ? '' : `, остаток ${lessonsAfter}`}.`;
+  const makeups = fact.makeups_delta > 0 ? ` Добавлена отработка (${fact.makeups_delta}).` : '';
+  return {
+    mark: fact.mark,
+    attendance_id: attendanceId,
+    lessons_delta: fact.lessons_delta,
+    makeups_delta: fact.makeups_delta,
+    lessons_after: lessonsAfter,
+    makeups_after: subscription ? subscription.makeups_balance : null,
+    teacher_amount: fact.teacher_amount,
+    summary: `${lessons}${makeups} ${pay}`,
+  };
+}
+
+const factFromRules = (mark: AttendanceMark, subscription: MockSubscription | null, rate: number) => {
+  const effect = computeEffect(mark, subscription, rate);
+  return {
+    mark,
+    lessons_delta: effect.lessons_delta,
+    makeups_delta: effect.makeups_delta,
+    teacher_amount: effect.teacher_amount,
+  };
+};
 
 /* ==========================================================================
    Этап 2: поиск, карточка, продажа абонемента, заморозка
@@ -878,6 +965,32 @@ export const mockApi = {
     marks.set(lessonId, perLesson);
 
     const attendanceId = newAttendanceId(lessonId, student.id);
+    // Записываем факт, а не ссылку на правила: карточка занятия после
+    // перезагрузки обязана показать то, что было применено.
+    appliedFacts.set(attendanceId, {
+      mark: payload.mark,
+      lessons_delta: effect.lessons_delta,
+      makeups_delta: effect.makeups_delta,
+      teacher_amount: effect.teacher_amount,
+    });
+
+    // Отметка сразу попадает в ведомость: зарплата начисляется от каждого
+    // проведённого занятия, и экран денег обязан отражать смену тут же.
+    ACCRUALS.push({
+      id: nextAccrualId(),
+      date: lesson.date,
+      start: lesson.start,
+      teacher_id: teacher.id,
+      branch_id: lesson.branch_id,
+      student_name: student.name,
+      discipline: student.discipline,
+      duration_min: lesson.duration_min,
+      mark: payload.mark,
+      rate: teacher.rate,
+      amount: effect.teacher_amount,
+      kind: 'lesson',
+      period_id: null,
+    });
 
     const alerts =
       subscription && effect.lessons_delta < 0 && effect.lessons_after <= 2
@@ -942,7 +1055,28 @@ export const mockApi = {
     perLesson?.delete(owner.studentId);
     if (perLesson && perLesson.size === 0) marks.delete(owner.lessonId);
     attendanceIds.delete(`${owner.lessonId}:${owner.studentId}`);
+    appliedFacts.delete(attendanceId);
     revokedAttendance.add(attendanceId);
+
+    // Снятое начисление приезжает в ведомость отдельной строкой-корректировкой:
+    // журнал не правится задним числом, он дописывается.
+    if (effect.teacher_amount > 0) {
+      ACCRUALS.push({
+        id: nextAccrualId(),
+        date: lesson.date,
+        start: '00:00',
+        teacher_id: teacher.id,
+        branch_id: lesson.branch_id,
+        student_name: student.name,
+        discipline: student.discipline,
+        duration_min: 0,
+        mark: null,
+        rate: effect.teacher_amount,
+        amount: -effect.teacher_amount,
+        kind: 'correction',
+        period_id: null,
+      });
+    }
 
     return delay({
       attendance_id: attendanceId,
@@ -1478,7 +1612,441 @@ export const mockApi = {
       avg_days_to_won: Math.round(avgDaysToWon(LEADS.filter((l) => l.stage === 'won')) * 10) / 10,
     });
   },
+
+  /* ==========================================================================
+     Этап 4: ведомость, закрытие периода и отчёты
+     ========================================================================== */
+
+  payroll: async (from: string, to: string, branchId?: string | null): Promise<PayrollSheet> => {
+    const closed = closedPeriodFor(from, to);
+    const rows = sheetRows(from, to, branchId);
+    const teachers = TEACHERS.map((teacher) => payrollRow(teacher, rows.filter((r) => r.teacher_id === teacher.id), from))
+      .filter((row) => row.entries > 0)
+      .sort((a, b) => b.total - a.total);
+
+    return delay({
+      period: { from, to },
+      closed: closed !== null,
+      period_id: closed?.id ?? null,
+      closed_at: closed?.closed_at ?? null,
+      closed_by: closed?.closed_by ?? null,
+      branch_id: branchId ?? null,
+      teachers,
+      totals: payrollTotals(teachers),
+      note: sheetNote(closed !== null, teachers),
+    });
+  },
+
+  payrollTeacher: async (
+    staffId: string,
+    from: string,
+    to: string,
+    branchId?: string | null,
+  ): Promise<PayrollDetail> => {
+    const teacher = TEACHERS.find((t) => t.id === staffId);
+    if (!teacher) {
+      throw new ApiError(404, 'teacher_not_found', 'Преподаватель не найден.');
+    }
+    const closed = closedPeriodFor(from, to);
+    const rows = sheetRows(from, to, branchId).filter((r) => r.teacher_id === staffId);
+
+    return delay({
+      teacher: { id: teacher.id, name: teacher.name, color: teacher.color },
+      period: { from, to },
+      closed: closed !== null,
+      period_id: closed?.id ?? null,
+      closed_at: closed?.closed_at ?? null,
+      closed_by: closed?.closed_by ?? null,
+      totals: payrollRow(teacher, rows, from),
+      // Порядок хронологический, как у живого бэкенда: расшифровку читают
+      // сверху вниз вместе с журналом занятий
+      entries: rows
+        .slice()
+        .sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start))
+        .map((row) => toPayrollEntry(row, from)),
+    });
+  },
+
+  payrollPeriods: async (limit = 12): Promise<PayrollPeriodRow[]> =>
+    delay(
+      PAYROLL_PERIODS.slice()
+        .sort((a, b) => b.from.localeCompare(a.from))
+        .slice(0, limit)
+        .map((period) => {
+          const rows = ACCRUALS.filter((a) => a.period_id === period.id);
+          return {
+            id: period.id,
+            period: { from: period.from, to: period.to },
+            closed: true,
+            closed_at: period.closed_at,
+            closed_by: period.closed_by,
+            teachers: new Set(rows.map((r) => r.teacher_id)).size,
+            entries: rows.length,
+            total: rows.reduce((sum, r) => sum + r.amount, 0),
+          };
+        }),
+    ),
+
+  /**
+   * Закрытие периода. Обратной операции нет: строка заводится сразу закрытой,
+   * а ошибка чинится корректировкой в следующем периоде. Поэтому здесь
+   * три отказа до записи, а не откат после неё.
+   */
+  closePayrollPeriod: async (from: string, to: string): Promise<PeriodClosed> => {
+    if (from > to) {
+      throw new ApiError(400, 'bad_period', 'Начало периода позже его конца.');
+    }
+    if (to >= MOCK_TODAY) {
+      throw new ApiError(
+        422,
+        'period_not_over',
+        'Период ещё не закончился. Занятия, которые в нём пройдут, целиком уехали бы корректировкой в следующий месяц.',
+      );
+    }
+    const overlap = PAYROLL_PERIODS.find((p) => p.from <= to && from <= p.to);
+    if (overlap) {
+      throw new ApiError(
+        409,
+        'period_overlap',
+        `Период пересекается с уже закрытым ${overlap.from} — ${overlap.to}. Переоткрыть его нельзя.`,
+      );
+    }
+
+    const stamped = ACCRUALS.filter((a) => a.period_id === null && a.date <= to);
+    const period = {
+      id: nextPeriodId(),
+      from,
+      to,
+      closed_at: nowIso(),
+      closed_by: CURRENT_USER.name,
+    };
+    for (const row of stamped) row.period_id = period.id;
+    PAYROLL_PERIODS.push(period);
+
+    const total = stamped.reduce((sum, r) => sum + r.amount, 0);
+    const teachers = new Set(stamped.map((r) => r.teacher_id)).size;
+    return delay({
+      id: period.id,
+      period: { from, to },
+      closed: true,
+      closed_at: period.closed_at,
+      entries: stamped.length,
+      teachers,
+      total,
+      message: `Период закрыт: ${stamped.length} ${plural(stamped.length, 'начисление', 'начисления', 'начислений')} на ${money(total)} по ${teachers} ${plural(teachers, 'преподавателю', 'преподавателям', 'преподавателям')}. Новые отметки за эти дни уйдут в следующий период корректировкой.`,
+    });
+  },
+
+  revenueReport: async (from: string, to: string, branchId?: string | null): Promise<RevenueReport> => {
+    const rows = PAYMENTS.filter((p) => p.date >= from && p.date <= to && (!branchId || p.branch_id === branchId));
+    const total = rows.reduce((sum, p) => sum + p.amount, 0);
+
+    const byBranch = groupSlices(rows, total, (p) => {
+      const branch = BRANCHES.find((b) => b.id === p.branch_id);
+      return { id: p.branch_id, name: branch?.name ?? 'Неизвестный филиал' };
+    });
+    // Платёж без абонемента попадает в «Не распределено»: иначе сумма разрезов
+    // не сошлась бы с итогом, а несходящийся финансовый отчёт хуже отсутствующего.
+    const byDiscipline = groupSlices(rows, total, (p) => ({
+      id: p.discipline ? disciplineByName(p.discipline)?.id ?? null : null,
+      name: p.discipline ?? 'Не распределено',
+    }));
+
+    const months = new Map<string, { amount: number; payments: number }>();
+    for (const payment of rows) {
+      const key = payment.date.slice(0, 7);
+      const cell = months.get(key) ?? { amount: 0, payments: 0 };
+      cell.amount += payment.amount;
+      cell.payments += 1;
+      months.set(key, cell);
+    }
+
+    const methods = groupSlices(rows, total, (p) => ({ id: p.method, name: p.method }));
+
+    return delay({
+      period: { from, to },
+      branch_id: branchId ?? null,
+      total,
+      payments: rows.length,
+      by_branch: byBranch,
+      by_discipline: byDiscipline,
+      by_month: [...months.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([month, cell]) => ({ month, ...cell })),
+      by_method: methods.map((slice) => ({
+        method: slice.id as PaymentMethod,
+        amount: slice.amount,
+        payments: slice.payments,
+        share_pct: slice.share_pct,
+      })),
+    });
+  },
+
+  roomsReport: async (from: string, to: string, branchId?: string | null): Promise<RoomsReport> => {
+    const branches = BRANCHES.filter((b) => !branchId || b.id === branchId);
+    const openDays = workingDays(from, to);
+
+    const rooms: RoomLoad[] = ROOMS.filter((room) => branches.some((b) => b.id === room.branch_id)).map((room) => {
+      const branch = BRANCHES.find((b) => b.id === room.branch_id)!;
+      const perDay = branch.opens_at && branch.closes_at ? toMinutes(branch.closes_at) - toMinutes(branch.opens_at) : 660;
+      const busy = (ROOM_DAILY_BUSY_MIN[room.id] ?? 0) * openDays;
+      const capacity = perDay * openDays;
+      return {
+        room_id: room.id,
+        room: room.name,
+        branch_id: branch.id,
+        branch: branch.name,
+        lessons: Math.round(busy / 55),
+        busy_minutes: busy,
+        capacity_minutes: capacity,
+        utilization_pct: capacity > 0 ? Math.round((busy / capacity) * 100) : 0,
+      };
+    });
+
+    const branchLoads: BranchLoad[] = branches.map((branch) => {
+      const own = rooms.filter((r) => r.branch_id === branch.id);
+      const busy = own.reduce((sum, r) => sum + r.busy_minutes, 0);
+      const capacity = own.reduce((sum, r) => sum + r.capacity_minutes, 0);
+      return {
+        branch_id: branch.id,
+        branch: branch.name,
+        rooms: own.length,
+        open_days: openDays,
+        open_minutes_per_day: toMinutes(branch.closes_at) - toMinutes(branch.opens_at),
+        busy_minutes: busy,
+        capacity_minutes: capacity,
+        utilization_pct: capacity > 0 ? Math.round((busy / capacity) * 100) : 0,
+      };
+    });
+
+    const busy = rooms.reduce((sum, r) => sum + r.busy_minutes, 0);
+    const capacity = rooms.reduce((sum, r) => sum + r.capacity_minutes, 0);
+
+    return delay({
+      period: { from, to },
+      branch_id: branchId ?? null,
+      utilization_pct: capacity > 0 ? Math.round((busy / capacity) * 100) : 0,
+      busy_minutes: busy,
+      capacity_minutes: capacity,
+      capacity_note:
+        'Ёмкость = часы работы филиала × дни с занятиями × кабинеты. Календаря рабочих дней в схеме нет, поэтому рабочим считается день, в который в филиале было хотя бы одно занятие.',
+      branches: branchLoads.sort((a, b) => b.utilization_pct - a.utilization_pct),
+      // Сортировка по загрузке: отчёт отвечает на вопрос «где кончилось место»
+      rooms: rooms.sort((a, b) => b.utilization_pct - a.utilization_pct),
+    });
+  },
+
+  debtsReport: async (limit = 50): Promise<DebtsReport> => {
+    const items: Debtor[] = FAMILIES.filter((f) => f.debt > 0)
+      .map((family) => {
+        const members = STUDENTS.filter((s) => s.family_id === family.id);
+        const purchases = members.flatMap((s) => (LEDGER[s.id] ?? []).filter((e) => e.kind === 'purchase'));
+        const dates = purchases.map((e) => e.date).sort();
+        return {
+          family_id: family.id,
+          payer: family.payer?.name ?? null,
+          phone: family.payer?.phone ?? null,
+          students: members.map((s) => s.name),
+          charged: family.paid_this_month + family.debt,
+          paid: family.paid_this_month,
+          debt: family.debt,
+          since_on: dates[0] ?? null,
+          last_paid_on: family.paid_this_month > 0 ? dates[dates.length - 1] ?? null : null,
+        };
+      })
+      .sort((a, b) => b.debt - a.debt)
+      .slice(0, limit);
+
+    return delay({
+      families: items.length,
+      total: items.reduce((sum, item) => sum + item.debt, 0),
+      items,
+      note: 'Долг = начислено по абонементам семьи минус поступившие платежи. Периода нет: это состояние на сейчас, а не за отрезок.',
+    });
+  },
+
+  moneySummary: async (from: string, to: string, branchId?: string | null): Promise<MoneySummary> => {
+    const inPeriod = (p: { date: string; branch_id: string }) =>
+      p.date >= from && p.date <= to && (!branchId || p.branch_id === branchId);
+    const amount = PAYMENTS.filter(inPeriod).reduce((sum, p) => sum + p.amount, 0);
+
+    // Прошлый период той же длины, вплотную перед выбранным
+    const length = daysBetween(from, to) + 1;
+    const prevTo = addDays(from, -1);
+    const prevFrom = addDays(prevTo, -(length - 1));
+    const previous = PAYMENTS.filter(
+      (p) => p.date >= prevFrom && p.date <= prevTo && (!branchId || p.branch_id === branchId),
+    ).reduce((sum, p) => sum + p.amount, 0);
+
+    const rooms = await mockApi.roomsReport(from, to, branchId);
+    const sheet = sheetRows(from, to, branchId);
+    const debtors = FAMILIES.filter((f) => f.debt > 0);
+    const subscriptions = STUDENTS.map((s) => s.subscription).filter((s): s is MockSubscription => s !== null);
+
+    return delay({
+      period: { from, to },
+      branch_id: branchId ?? null,
+      revenue: {
+        amount,
+        previous,
+        previous_period: { from: prevFrom, to: prevTo },
+        // null, когда прошлого периода нет: «+100%» от нуля читается как рост,
+        // хотя означает лишь появление первых данных
+        change_pct: previous > 0 ? Math.round(((amount - previous) / previous) * 100) : null,
+      },
+      rooms: { utilization_pct: rooms.utilization_pct, busiest: rooms.rooms[0] ?? null },
+      churn: { ended: 12, churned: 4, churn_pct: 33, worst_teacher: null },
+      payroll: {
+        total: sheet.reduce((sum, r) => sum + r.amount, 0),
+        lessons: new Set(sheet.filter((r) => r.kind === 'lesson').map((r) => `${r.teacher_id}|${r.date}|${r.start}`)).size,
+        closed: closedPeriodFor(from, to) !== null,
+      },
+      attention: {
+        debt_families: debtors.length,
+        debt_amount: debtors.reduce((sum, f) => sum + f.debt, 0),
+        subscriptions_running_low: subscriptions.filter((s) => s.lessons_balance <= 2).length,
+        makeups_open: subscriptions.reduce((sum, s) => sum + s.makeups_balance, 0),
+        frozen_now: subscriptions.filter((s) => s.holds.some((h) => h.from <= MOCK_TODAY && MOCK_TODAY < h.to)).length,
+      },
+    });
+  },
 };
+
+/* ---------- ведомость: сборка строк ---------- */
+
+const closedPeriodFor = (from: string, to: string) =>
+  PAYROLL_PERIODS.find((p) => p.from === from && p.to === to) ?? null;
+
+/**
+ * Строки ведомости за период.
+ *
+ * Закрытый месяц — это штамп: берём ровно то, что было выплачено, и новые
+ * отметки за те же дни туда уже не попадут. Открытый — все непроштампованные
+ * начисления с датой до конца периода, включая правки за прошлые месяцы:
+ * именно так они и приезжают в ведомость `carried_over`.
+ */
+function sheetRows(from: string, to: string, branchId?: string | null): MockAccrual[] {
+  const closed = closedPeriodFor(from, to);
+  const branchOk = (row: MockAccrual) => !branchId || row.branch_id === branchId;
+  if (closed) return ACCRUALS.filter((row) => row.period_id === closed.id && branchOk(row));
+  return ACCRUALS.filter((row) => row.period_id === null && row.date <= to && branchOk(row));
+}
+
+function payrollRow(teacher: MockTeacher, rows: MockAccrual[], from: string): PayrollRow {
+  const lessons = rows.filter((row) => row.kind === 'lesson');
+  const sumOf = (kind: MockAccrual['kind']) =>
+    rows.filter((row) => row.kind === kind).reduce((sum, row) => sum + row.amount, 0);
+
+  // Ставка — самая частая сумма начисления. Показывать её одним числом,
+  // когда их несколько, значит вводить в заблуждение, поэтому рядом флаг.
+  const counts = new Map<number, number>();
+  for (const row of lessons) {
+    if (row.amount > 0) counts.set(row.amount, (counts.get(row.amount) ?? 0) + 1);
+  }
+  const rate = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] ?? 0;
+
+  const accrued = sumOf('lesson');
+  const corrections = sumOf('correction') + sumOf('deduction');
+  const bonuses = sumOf('bonus');
+  const carried = rows.filter((row) => row.date < from);
+
+  return {
+    teacher: { id: teacher.id, name: teacher.name, color: teacher.color },
+    // Занятие одно, а начислений столько, сколько участников: у группы
+    // из четырёх человек это 1 и 4, и путать их нельзя.
+    lessons: new Set(lessons.map((row) => `${row.date}|${row.start}`)).size,
+    entries: rows.length,
+    rate,
+    rate_varies: counts.size > 1,
+    no_shows: rows.filter((row) => row.mark === 'no_show').length,
+    accrued,
+    corrections,
+    bonuses,
+    total: accrued + corrections + bonuses,
+    carried_over: carried.reduce((sum, row) => sum + row.amount, 0),
+    carried_over_entries: carried.length,
+  };
+}
+
+function payrollTotals(rows: PayrollRow[]): PayrollTotals {
+  const sum = (pick: (row: PayrollRow) => number) => rows.reduce((acc, row) => acc + pick(row), 0);
+  return {
+    teachers: rows.length,
+    lessons: sum((r) => r.lessons),
+    entries: sum((r) => r.entries),
+    no_shows: sum((r) => r.no_shows),
+    accrued: sum((r) => r.accrued),
+    corrections: sum((r) => r.corrections),
+    bonuses: sum((r) => r.bonuses),
+    total: sum((r) => r.total),
+    carried_over: sum((r) => r.carried_over),
+    carried_over_entries: sum((r) => r.carried_over_entries),
+  };
+}
+
+/** Формулировка сервера: она и объясняет бухгалтеру, что перед ним. */
+function sheetNote(closed: boolean, rows: PayrollRow[]): string {
+  const totals = payrollTotals(rows);
+  if (closed) {
+    return `Период закрыт: ${totals.entries} ${plural(totals.entries, 'начисление', 'начисления', 'начислений')} на ${money(totals.total)}. Новые отметки за эти дни уйдут в следующий период корректировкой.`;
+  }
+  if (totals.carried_over_entries > 0) {
+    return `Период открыт: суммы ещё изменятся, пока идут отметки. В итог вошли ${totals.carried_over_entries} ${plural(totals.carried_over_entries, 'начисление', 'начисления', 'начислений')} за уже закрытые месяцы на ${money(totals.carried_over)} — они показаны отдельной колонкой.`;
+  }
+  return 'Период открыт: суммы ещё изменятся, пока идут отметки.';
+}
+
+function toPayrollEntry(row: MockAccrual, from: string): PayrollEntry {
+  return {
+    id: row.id,
+    date: row.date,
+    starts_at: row.kind === 'lesson' ? iso(row.date, toMinutes(row.start)) : null,
+    kind: row.kind,
+    lesson_id: null,
+    student: row.student_name,
+    discipline: row.discipline || null,
+    branch: BRANCHES.find((b) => b.id === row.branch_id)?.name ?? null,
+    duration_min: row.duration_min || null,
+    mark: row.mark,
+    amount: row.amount,
+    // Снимок расчёта: ставка на момент занятия и доля от неё. Пересчитывать
+    // его от сегодняшней ставки нельзя — она к этому времени поменяется.
+    calc:
+      row.kind === 'lesson'
+        ? { kind: 'fixed', mark: row.mark, rate: row.rate, share: row.rate > 0 ? row.amount / row.rate : 0, amount: row.amount }
+        : { kind: 'correction', rate: row.rate, share: 1, amount: row.amount },
+    carried_over: row.date < from,
+  };
+}
+
+/** Разрез выручки: доли считаются от итога, поэтому сумма разрезов сходится. */
+function groupSlices(
+  rows: MockPayment[],
+  total: number,
+  key: (payment: MockPayment) => { id: string | null; name: string },
+): RevenueSlice[] {
+  const cells = new Map<string, RevenueSlice>();
+  for (const payment of rows) {
+    const { id, name } = key(payment);
+    const cell = cells.get(name) ?? { id, name, amount: 0, payments: 0, share_pct: 0 };
+    cell.amount += payment.amount;
+    cell.payments += 1;
+    cells.set(name, cell);
+  }
+  return [...cells.values()]
+    .map((cell) => ({ ...cell, share_pct: total > 0 ? Math.round((cell.amount / total) * 100) : 0 }))
+    .sort((a, b) => b.amount - a.amount);
+}
+
+/** Рабочие дни периода: воскресенье школа не работает, будущее не считается. */
+function workingDays(from: string, to: string): number {
+  const last = to < MOCK_TODAY ? to : MOCK_TODAY;
+  let days = 0;
+  for (let date = from; date <= last; date = addDays(date, 1)) {
+    if (new Date(`${date}T00:00:00Z`).getUTCDay() !== 0) days += 1;
+  }
+  return days;
+}
 
 /** Средний срок от заявки до покупки — в днях, по истории стадий. */
 function avgDaysToWon(leads: MockLead[]): number {

@@ -9,7 +9,6 @@ import {
   type AttendanceRevokeResponse,
   type LessonCard,
   type LessonParticipant,
-  type MarkEffect,
 } from '../../api';
 import { lessonsWord, money, signedMoney, wallTime } from '../../lib/format';
 import { useAsync } from '../../lib/useAsync';
@@ -287,16 +286,18 @@ function ParticipantBlock({
 }) {
   const subscription = participant.subscription;
   const effect = chosen ? participant.mark_effects[chosen] : null;
-  const preview = participant.attendance ? participant.mark_effects[participant.attendance] : null;
   /**
-   * У уже отмеченного участника `lessons_after` из `mark_effects` врёт: сервер
-   * считает предпросмотр от текущего остатка, а списание по этой отметке
-   * уже прошло — получается «спишется ещё раз». Фактический остаток после
-   * отметки и есть остаток абонемента сейчас, его и показываем. Дельты
-   * при этом серверные: их пересчитывать нельзя.
+   * Что отметка уже сделала, берём из `applied_effect` — это факт из журнала.
+   * Раньше здесь стоял обход: сервер отдавал только `mark_effects`, то есть
+   * предпросмотр, посчитанный от УЖЕ уменьшенного остатка, и `lessons_after`
+   * врал на одно занятие («спишется ещё раз»); интерфейс подменял его
+   * остатком абонемента. Бэкенд закрыл это полем (issue #22), и подмены
+   * больше нет — числа целиком серверные.
+   *
+   * `?? null` оставлен для старого бэкенда без этого поля: тогда блок
+   * «Отмечено» покажет только саму отметку, но ничего не соврёт.
    */
-  const applied =
-    preview && subscription ? { ...preview, lessons_after: subscription.lessons_balance } : preview;
+  const applied = participant.applied_effect ?? null;
   // Кнопка отмены появляется только когда есть чем вызвать DELETE: без
   // `attendance_id` (старый бэкенд) отмены просто нет, а не есть неработающая.
   const revocable = participant.attendance !== null && participant.attendance_id !== null;
@@ -351,6 +352,8 @@ function ParticipantBlock({
         <div className="rule applied">
           <strong>Отмечено: {MARK_LABELS[participant.attendance]}</strong>
           {applied && <EffectRows effect={applied} />}
+          {/* Формулировка сервера — она описывает случившееся, а не правило */}
+          {applied && <p style={{ margin: '8px 0 0' }}>{applied.summary}</p>}
         </div>
       ) : (
         <>
@@ -412,9 +415,22 @@ function ParticipantBlock({
 }
 
 /**
+ * Минимум, который нужен строкам последствий. Подходит и предпросмотру
+ * (`MarkEffect`), и факту применённой отметки (`AppliedMarkEffect`):
+ * у второго `lessons_after` допускает null — у ученика без абонемента
+ * остатка нет вовсе, и ноль там был бы враньём.
+ */
+type EffectLike = {
+  lessons_delta: number;
+  makeups_delta: number;
+  teacher_amount: number;
+  lessons_after: number | null;
+};
+
+/**
  * Что вернётся при отмене. Эндпоинта предпросмотра отмены контракт не даёт,
  * поэтому здесь не расчёт правил, а разворот знака: дельты уже посчитаны
- * сервером в `mark_effects`, клиент лишь показывает их обратной стороной.
+ * сервером, клиент лишь показывает их обратной стороной.
  * Точные числа приходят в ответе DELETE и повторяются уведомлением —
  * тот же приём, что у продажи и заморозки во втором этапе.
  */
@@ -422,7 +438,7 @@ function RevertRows({
   effect,
   subscriptionBalance,
 }: {
-  effect: MarkEffect;
+  effect: EffectLike;
   subscriptionBalance: number | null;
 }) {
   const lessonsBack = -effect.lessons_delta;
@@ -454,13 +470,17 @@ function RevertRows({
   );
 }
 
-function EffectRows({ effect }: { effect: MarkEffect }) {
+function EffectRows({ effect }: { effect: EffectLike }) {
   return (
     <ul>
       <li>
         <span>Абонемент</span>
         <em>
-          {effect.lessons_delta === 0 ? 'без списания' : `${effect.lessons_delta} → ${lessonsWord(effect.lessons_after)}`}
+          {effect.lessons_delta === 0
+            ? 'без списания'
+            : effect.lessons_after === null
+              ? `${effect.lessons_delta}`
+              : `${effect.lessons_delta} → ${lessonsWord(effect.lessons_after)}`}
         </em>
       </li>
       {effect.makeups_delta !== 0 && (
