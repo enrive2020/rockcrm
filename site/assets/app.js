@@ -3,11 +3,13 @@ const fmt=n=>Math.round(n).toLocaleString('ru-RU').replace(/,/g,' ')+' ₽';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 // CONFIG: заполнить перед запуском. tg — ник в Telegram без @, endpoint — URL приёма заявок (Formspree / вебхук бота), email — ящик для запасного mailto.
 const CONFIG={tg:'',endpoint:'',email:'hello@podacha.ai'};
-if(CONFIG.tg)$$('[data-tg]').forEach(a=>a.href='https://t.me/'+CONFIG.tg);
+if(CONFIG.tg)$$('[data-tg]').forEach(a=>a.href='https://t.me/'+CONFIG.tg);else $$('[data-tg]').forEach(a=>{a.removeAttribute('target');a.href=(/\/(services|segments)\//.test(location.pathname)?'../':'')+'index.html#lead-sec'});
 // burger
 const b=$('.burger'),nav=$('.nav');const closeNav=()=>{if(!nav)return;nav.classList.remove('open');if(b)b.setAttribute('aria-expanded','false')};
 if(b)b.onclick=e=>{e.stopPropagation();nav.classList.toggle('open');b.setAttribute('aria-expanded',nav.classList.contains('open'))};
 $$('.nav a').forEach(a=>a.onclick=closeNav);
+$$('.nav details').forEach(d=>d.addEventListener('toggle',()=>{if(d.open)$$('.nav details').forEach(o=>{if(o!==d)o.open=false})}));
+document.addEventListener('click',e=>{$$('.nav details[open]').forEach(d=>{if(!d.contains(e.target))d.open=false})});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeNav()});
 document.addEventListener('click',e=>{if(nav&&nav.classList.contains('open')&&!nav.contains(e.target))closeNav()});
 
@@ -41,9 +43,10 @@ const S=[
 const CATS={guests:'Гости',marketing:'Маркетинг',ops:'Операционка',staff:'Персонал',qr:'QR-меню'};
 const once=s=>s[6]===0?'бесплатно':(s[8]||'')+fmt(s[6]);
 const mon=s=>s[7]===null?'—':s[7]===0?'входит':(s[8]&&s[1].startsWith('Видео')?'от ':'')+fmt(s[7])+'/мес';
+const svcUrl=s=>{const n=s[1];if(s[0]==='qr')return'services/qr-menu.html';if(/администратор/.test(n))return'services/ai-admin.html';if(s[0]==='marketing'||/отзыв/i.test(n))return'services/marketing.html';if(/аудит|152/i.test(n))return'services/audit.html';if(s[0]==='staff')return'services/staff.html';return'services/operations.html'};
 const est=t=>t.replace(/\*$/,' <span class="est">оценка, проверяем на пилоте</span>');
 const grid=$('#svc-grid');
-if(grid){grid.innerHTML=S.map(s=>`<article class="card svc" data-cat="${s[0]}"><span class="eyebrow">${CATS[s[0]]}</span><h3>${s[1]}</h3><p><b>Боль:</b> ${s[2]}</p><p>${s[3]}</p><p class="res">${est(s[4])}</p><div class="meta"><span>${once(s)}${s[7]?' + '+mon(s):''}</span><span class="muted">${s[5]}</span></div></article>`).join('');
+if(grid){grid.innerHTML=S.map(s=>`<article class="card svc" data-cat="${s[0]}"><span class="eyebrow">${CATS[s[0]]}</span><h3>${s[1]}</h3><p><b>Боль:</b> ${s[2]}</p><p>${s[3]}</p><p class="res">${est(s[4])}</p><div class="meta"><span>${once(s)}${s[7]?' + '+mon(s):''}</span><span class="muted">${s[5]}</span></div><a class="more" href="${svcUrl(s)}">Подробнее →</a></article>`).join('');
 $$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.setAttribute('aria-pressed',x===t));const c=t.dataset.cat;$$('.svc').forEach(el=>el.hidden=c!=='all'&&el.dataset.cat!==c)});}
 const tb=$('#price-body');
 if(tb){const render=q=>{q=(q||'').toLowerCase();let h='';Object.keys(CATS).forEach(c=>{const rows=S.filter(s=>s[0]===c&&(!q||(s[1]+s[3]).toLowerCase().includes(q)));if(!rows.length)return;h+=`<tr class="grp"><td colspan="5">${CATS[c]}</td></tr>`+rows.map(s=>`<tr><td><b>${s[1]}</b><div class="note">${s[3]}</div></td><td class="n">${once(s)}</td><td class="n">${mon(s)}</td><td class="n">${s[5]}</td><td>${est(s[4])}</td></tr>`).join('')});tb.innerHTML=h||'<tr><td colspan="5">Ничего не найдено</td></tr>'};render();const si=$('#price-search');if(si)si.oninput=e=>render(e.target.value);}
@@ -72,7 +75,7 @@ if(on('calls')){const over=Math.max(0,calls*1.5-300)*12;mo+=over}
 const S2=mo+setup/12;
 $('#o-E').textContent=fmt(E);$('#o-S').textContent=fmt(S2);
 $('#o-extra').textContent=names.length?' · + модули вне пакета: '+names.join(', '):'';
-$('#o-roi').textContent=E>0?((E-S2)/S2).toFixed(1).replace('.',',')+'x':'—';
+$('#o-roi').textContent=E>0?((E-S2)/S2).toFixed(1).replace('.',',').replace('-','−')+'x':'—';
 const net=E-mo;$('#o-pb').textContent=setup===0&&net>0?'сразу':net>0?(setup/net<1?'< 1 мес':(setup/net).toFixed(1).replace('.',',')+' мес'):'не окупается';};
 roi.addEventListener('input',calc);roi.addEventListener('change',calc);
 const ps=$('#per');if(ps)ps.addEventListener('change',()=>{if(curPer()!==ps.value)setPeriod(ps.value)});
@@ -83,7 +86,8 @@ const f=$('#lead');
 if(f)f.onsubmit=async e=>{e.preventDefault();const ok=$('.ok');const d=new FormData(f);const body=[...d.entries()].map(([k,v])=>k+': '+v).join('\n');
 const btn=f.querySelector('button[type=submit]');btn.disabled=true;
 const mailto=()=>{location.href='mailto:'+CONFIG.email+'?subject='+encodeURIComponent('Заявка с сайта: '+(d.get('Заведение')||''))+'&body='+encodeURIComponent(body)};
-try{if(!CONFIG.endpoint)throw new Error('no endpoint');
+if(!CONFIG.endpoint){ok.textContent='Открываем почтовый клиент с готовой заявкой. Если он не открылся — напишите на '+CONFIG.email+'.';ok.style.display='block';mailto();btn.disabled=false;return}
+try{
  const res=await fetch(CONFIG.endpoint,{method:'POST',headers:{'Accept':'application/json'},body:d});if(!res.ok)throw new Error(res.status);
  ok.textContent='Спасибо! Заявка получена, ответим в течение рабочего дня.';ok.style.display='block';f.reset();}
 catch(err){ok.textContent='Не удалось отправить заявку напрямую. Открываем ваш почтовый клиент — если он не открылся, напишите на '+CONFIG.email+(CONFIG.tg?' или в Telegram @'+CONFIG.tg:'')+'.';ok.style.display='block';mailto();}

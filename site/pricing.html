@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Цены Подача.AI — полный прайс на QR-меню и ИИ для ресторанов</title>
+<meta name="description" content="Полный прайс Подача.AI: пакеты Старт, Рост, Про, Сеть, все услуги с ценами внедрения и абонентки, пилот 30 дней за 9 900 ₽, скидка до 20% при оплате за год и калькулятор своего пакета.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/a11y.css">
+<style>
+.pr-hero{padding:48px 0 24px}
+.pr-hero h1{margin:.3em 0}
+.pr-sum{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.pr-pkgs .card{display:flex;flex-direction:column;gap:6px;position:relative}
+.pr-pkgs .card.hit{border:2px solid var(--accent)}
+.pr-pkgs .tagx{position:absolute;top:-12px;left:16px;background:var(--accent);color:var(--on-accent);font-size:.75rem;font-weight:700;padding:3px 10px;border-radius:999px}
+.pr-pkgs .pp{font-family:Manrope,Inter,sans-serif;font-size:1.7rem;font-weight:800;margin:4px 0 0}
+.pr-pkgs .pp small{font-size:.9rem;font-weight:600;color:var(--muted)}
+.pr-pkgs ul{padding-left:18px;margin:8px 0;flex:1}
+.pr-pkgs li{margin:4px 0}
+.pr-pkgs .save{color:var(--accent-2);font-weight:600;font-size:.9rem}
+.pr-per{display:inline-flex;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px;margin:12px 0 24px}
+.pr-per button{border:0;background:none;padding:8px 16px;border-radius:999px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer}
+.pr-per button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.pr-tools{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:16px}
+.pr-tools .tabs{margin:0}
+.pr-tbl td.n,.pr-tbl th.n{white-space:nowrap;text-align:right}
+.pr-tbl th,.pr-tbl td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.pr-tbl tr.grp td{background:var(--surface-2);font-weight:700}
+.pr-tbl .note{color:var(--muted);font-size:.85rem;margin-top:2px}
+.pr-cnt{color:var(--muted);font-size:.9rem;margin-top:8px}
+.pr-cmp th,.pr-cmp td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:center}
+.pr-cmp th:first-child,.pr-cmp td:first-child{text-align:left}
+.pr-cmp .y{color:var(--accent-2);font-weight:700}
+.pr-cmp .x{color:var(--muted)}
+.calc{display:grid;gap:24px;grid-template-columns:1fr}
+@media(min-width:900px){.calc{grid-template-columns:1.5fr 1fr;align-items:start}.calc-res{position:sticky;top:84px}}
+.calc fieldset{border:1px solid var(--line);border-radius:var(--r);padding:12px 16px;margin:0 0 12px;background:var(--surface)}
+.calc legend{font-weight:700;padding:0 6px}
+.calc label.it{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed var(--line);cursor:pointer}
+.calc label.it:last-child{border-bottom:0}
+.calc label.it input{margin-top:4px;width:18px;height:18px;accent-color:var(--accent);flex:none}
+.calc label.it span.nm{flex:1}
+.calc label.it span.pz{white-space:nowrap;font-size:.85rem;color:var(--muted);text-align:right}
+.calc-res .big2{font-family:Manrope,Inter,sans-serif;font-size:1.9rem;font-weight:800;line-height:1.1}
+.calc-res .row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}
+.calc-res .hint{background:var(--ok-soft);border-radius:12px;padding:12px;margin:12px 0;font-size:.92rem}
+.calc-res .hint:empty{display:none}
+.calc-res select,.calc-res input[type=number]{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);font:inherit}
+.calc-res .btn{width:100%;justify-content:center;margin-top:8px}
+.cond .card h3{margin-top:0}
+.cta-band{background:var(--accent-soft);border-radius:var(--r);padding:28px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}
+.cta-band h2{margin:0}
+</style>
+</head>
+<body>
+<a class="skip" href="#top">К содержимому</a>
+<header class="hdr"><div class="wrap">
+<a class="logo" href="index.html">Подача<span>.AI</span></a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="services/qr-menu.html">QR-меню и ИИ-официант</a><a href="services/ai-admin.html">ИИ-администратор</a><a href="services/marketing.html">Маркетинг и отзывы</a><a href="services/operations.html">Операционка и аналитика</a><a href="services/staff.html">Персонал</a><a href="services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="segments/restaurants.html">Рестораны</a><a href="segments/coffee.html">Кофейни и пекарни</a><a href="segments/bars.html">Бары и кальянные</a><a href="segments/delivery.html">Фастфуд и доставка</a><a href="segments/hotels.html">Отели</a></div></details><a href="pricing.html" aria-current="page">Цены</a><a href="demo.html">Демо</a><a href="cases.html">Кейсы</a><a href="market.html">Рынок</a>
+</nav>
+<a class="btn btn-primary btn-sm" href="index.html#lead-sec">Бесплатный аудит</a>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
+</div></header>
+
+<main id="top" tabindex="-1">
+<section class="pr-hero"><div class="wrap">
+<span class="eyebrow">Цены</span>
+<h1>Полный прайс: пакеты, услуги и условия</h1>
+<p class="lead">Цены за одну точку, итоговые, НДС не облагается. Можно взять пакет или собрать свой набор модулей. Помесячно, отмена за 30 дней.</p>
+<div class="pr-sum"><span class="badge">Экспресс-аудит — бесплатно</span><span class="badge">Пилот 30 дней — 9 900 ₽ с возвратом</span><span class="badge">−20% при оплате за год</span><span class="badge">QR-меню от 1 490 ₽/мес</span></div>
+<div class="cta" style="margin-top:20px"><a class="btn btn-primary" href="index.html#lead-sec">Получить расчёт под заведение</a><a class="btn btn-ghost" href="#builder">Собрать свой пакет</a></div>
+</div></section>
+
+<section id="packages" class="sec-alt"><div class="wrap">
+<span class="eyebrow">Пакеты</span>
+<h2>Пакет выгоднее, чем модули по отдельности</h2>
+<div class="pr-per" role="group" aria-label="Период оплаты">
+<button type="button" data-p="month" aria-pressed="true">Помесячно</button><button type="button" data-p="half" aria-pressed="false">6 мес −10%</button><button type="button" data-p="year" aria-pressed="false">12 мес −20%</button>
+</div>
+<div class="grid g4 pr-pkgs">
+<div class="card" data-m="2990"><h3>Старт</h3><p class="muted small">Кофейня, небольшое кафе</p><p class="pp"><span class="pm">2 990 ₽</span> <small>/мес</small></p><p class="note bl"></p><p class="setup">Внедрение: <span class="su" data-v="14 900 ₽">14 900 ₽</span></p>
+<ul><li>QR-меню с синхронизацией стоп-листа</li><li>Мультиязычное меню</li><li>ИИ-описания до 40 позиций</li><li>Центр отзывов: 1 площадка</li><li>Шаблоны документов по ПДн (без подачи в РКН)</li><li>14 дней бесплатно</li></ul>
+<p class="save">Отдельно 36 700 ₽ + 5 390 ₽/мес</p><a class="btn btn-ghost" href="index.html#lead-sec">Попробовать 14 дней</a></div>
+<div class="card hit" data-m="14900"><span class="tagx">Рекомендуем</span><h3>Рост</h3><p class="muted small">Кафе и ресторан 40–150 мест</p><p class="pp"><span class="pm">14 900 ₽</span> <small>/мес</small></p><p class="note bl"></p><p class="setup">Внедрение: 49 900 ₽</p>
+<ul><li>Всё из «Старт»</li><li>QR-заказ, оплата СБП, чаевые</li><li>ИИ-официант и допродажи</li><li>ИИ-администратор в TG / VK / MAX</li><li>ИИ-аналитик продаж</li></ul>
+<p class="save">Отдельно 151 300 ₽ + 21 170 ₽/мес</p><a class="btn btn-primary" href="index.html#lead-sec">Начать пилот за 9 900 ₽</a></div>
+<div class="card" data-m="34900"><h3>Про</h3><p class="muted small">Ресторан с высокой загрузкой</p><p class="pp"><span class="pm">34 900 ₽</span> <small>/мес</small></p><p class="note bl"></p><p class="setup">Внедрение: 129 900 ₽</p>
+<ul><li>Всё из «Рост»</li><li>Голосовой администратор (300 мин, далее 12 ₽/мин)</li><li>Контроль фудкоста и прогноз закупок</li><li>Распознавание накладных</li><li>Графики смен, CRM-лояльность</li></ul>
+<p class="save">Отдельно 360 700 ₽ + 64 570 ₽/мес</p><a class="btn btn-ghost" href="index.html#lead-sec">Выбрать «Про»</a></div>
+<div class="card" data-m="79000" data-from="1"><h3>Сеть</h3><p class="muted small">От 3 точек · цена за 3 точки</p><p class="pp"><span class="pm">от 79 000 ₽</span> <small>/мес</small></p><p class="note bl"></p><p class="setup">Внедрение: 290 000 ₽ за 3 точки + 70 000 ₽ за каждую следующую</p>
+<ul><li>Всё из «Про»</li><li>HR-контур: рекрутер, наставник, стандарты</li><li>Аудит процессов</li><li>Сводная аналитика по точкам</li><li>Персональный менеджер и SLA</li></ul>
+<p class="save">≈ 26 300 ₽ за точку; с 4-й точки +19 900 ₽/мес</p><a class="btn btn-ghost" href="index.html#lead-sec">Обсудить сеть</a></div>
+</div>
+
+<h3 style="margin-top:40px">Что входит в пакеты</h3>
+<div class="tbl-wrap"><table class="pr-cmp">
+<thead><tr><th>Модуль</th><th>Старт</th><th>Рост</th><th>Про</th><th>Сеть</th></tr></thead>
+<tbody id="cmp-body"></tbody>
+</table></div>
+</div></section>
+
+<section id="price-list"><div class="wrap">
+<span class="eyebrow">Прайс</span>
+<h2>Все услуги и модули</h2>
+<p class="lead">Любой модуль можно докупить к пакету или взять отдельно. Эффект с пометкой «оценка» — гипотеза, проверяем на пилоте.</p>
+<div class="pr-tools">
+<input class="search" id="q" type="search" placeholder="Поиск: бронь, отзывы, iiko…" aria-label="Поиск по услугам">
+<div class="tabs" id="cats" role="group" aria-label="Категория"></div>
+</div>
+<div class="tbl-wrap"><table class="pr-tbl">
+<thead><tr><th>Услуга</th><th class="n">Внедрение</th><th class="n">Абонентка</th><th class="n">Срок</th><th>Результат</th></tr></thead>
+<tbody id="tb"></tbody>
+</table></div>
+<p class="pr-cnt" id="cnt"></p>
+</div></section>
+
+<section id="builder" class="sec-alt"><div class="wrap">
+<span class="eyebrow">Калькулятор</span>
+<h2>Соберите свой пакет</h2>
+<p class="lead">Отметьте нужные модули: посчитаем разовую оплату и абонентку. Если готовый пакет выйдет дешевле, подскажем.</p>
+<div class="calc">
+<div id="calc-list"></div>
+<aside class="card calc-res" aria-live="polite">
+<h3 style="margin-top:0">Ваш набор</h3>
+<label class="small muted" for="cper">Оплата абонентки</label>
+<select id="cper"><option value="month">Помесячно</option><option value="half">За 6 мес (−10%)</option><option value="year">За 12 мес (−20%)</option></select>
+<label class="small muted" for="cmin" style="display:block;margin-top:10px">Минут голосового ИИ в месяц (если выбран)</label>
+<input id="cmin" type="number" min="0" step="50" value="300">
+<div class="row" style="margin-top:12px"><span>Модулей</span><b id="r-n">0</b></div>
+<div class="row"><span>Разово (внедрение)</span><b id="r-once">0 ₽</b></div>
+<div class="row"><span>В месяц</span><b id="r-mon">0 ₽</b></div>
+<p class="muted small" style="margin:12px 0 0">Первый год всего</p>
+<div class="big2" id="r-year">0 ₽</div>
+<p class="note" id="r-bill"></p>
+<div class="hint" id="r-hint"></div>
+<a class="btn btn-primary" id="r-cta" href="index.html#lead-sec">Обсудить этот набор</a>
+<button class="btn btn-ghost" type="button" id="r-reset">Сбросить</button>
+<p class="note" style="margin-top:10px">Предварительный расчёт, не оферта. Точную смету фиксируем в договоре после аудита.</p>
+</aside>
+</div>
+</div></section>
+
+<section id="conditions"><div class="wrap cond">
+<span class="eyebrow">Условия</span>
+<h2>Как мы работаем</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card"><h3>Пилот 30 дней за 9 900 ₽</h3><p>QR-меню, ИИ-официант и бот бронирований. Цели в договоре — доля QR-заказов и число обработанных броней (чек и рейтинг отслеживаем, не гарантируем).</p><p><b>Не достигли целей</b> — возвращаем 9 900 ₽. <b>Продолжаете</b> — сумма засчитывается во внедрение «Роста»: остаётся 40 000 ₽.</p><p class="note">Первые 10 заведений — по цене пилота в обмен на публичный кейс.</p></div>
+<div class="card"><h3>Скидка за предоплату</h3><ul class="terms"><li>Помесячно — без скидки, отмена за 30 дней</li><li>За 6 месяцев — −10% на абонентку</li><li>За 12 месяцев — −20% на абонентку</li><li>«Старт» при оплате за год — внедрение бесплатно</li></ul><p class="note">Можно без договора на год: работаем помесячно.</p></div>
+<div class="card"><h3>Что входит в абонентку</h3><ul class="terms"><li>Хостинг и работа ИИ (YandexGPT / GigaChat), данные в РФ</li><li>Обновление меню, стоп-листа и базы знаний</li><li>Поддержка и доработки в рамках модулей</li><li>Ежемесячный отчёт по KPI</li><li>Обновления и новые функции модулей</li></ul></div>
+<div class="card"><h3>Что оплачивается отдельно</h3><ul class="terms"><li>Тарифы вендора кассы на доступ к API (iiko, r_keeper и др.)</li><li>API hh.ru для ИИ-рекрутера</li><li>Минуты голосового ИИ сверх 300 — 12 ₽/мин</li><li>Оборудование для видеоаналитики</li><li>ИИ-фото сверх 40 позиций — 300 ₽/позиция</li></ul></div>
+<div class="card"><h3>Цены и налоги</h3><p>Цены итоговые, за одну точку. НДС не облагается (УСН). Модули из прайса докупаются к любому пакету.</p></div>
+<div class="card"><h3>С чего начать</h3><p>Бесплатный экспресс-аудит → «Старт» (QR + отзывы) → пилот «Рост». Начать можно с одного модуля.</p><a class="btn btn-ghost" href="index.html#lead-sec">Записаться на аудит</a></div>
+</div>
+</div></section>
+
+<section class="sec-alt"><div class="wrap">
+<span class="eyebrow">Пример расчёта</span>
+<h2>Сколько это стоит в реальности</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card"><span class="est">пример расчёта</span><h3 style="margin-top:10px">Кофейня</h3><p>«Старт» + CRM-лояльность: 15 890 ₽/мес + 39 800 ₽ внедрение. Эффект +40–80 тыс. ₽/мес <span class="est">гипотеза, проверяем на пилоте</span>.</p></div>
+<div class="card"><span class="est">пример расчёта</span><h3 style="margin-top:10px">Кафе на 80 мест</h3><p>«Рост»: 14 900 ₽/мес + 49 900 ₽. Эффект ≈ 22 000 ₽/мес маржи, внедрение окупается примерно за 7 мес <span class="est">оценка</span>.</p></div>
+<div class="card"><span class="est">пример расчёта</span><h3 style="margin-top:10px">Ресторан с бронями</h3><p>«Про» + 900 мин звонков: ≈ 42 100 ₽/мес + 129 900 ₽. Эффект ≈ 118 тыс. ₽/мес, ROI ≈ 1,2x <span class="est">оценка</span>.</p></div>
+</div>
+<p class="note" style="margin-top:12px">Посчитать эффект для своего заведения — в <a href="index.html#roi-sec">калькуляторе окупаемости</a>. Результаты зависят от заведения, KPI фиксируем на пилоте.</p>
+</div></section>
+
+<section><div class="wrap">
+<div class="cta-band"><div><h2>Не уверены, что выбрать?</h2><p class="muted" style="margin:6px 0 0">Бесплатный аудит за 2 часа: покажем, где теряются деньги, и подберём набор под бюджет.</p></div><a class="btn btn-primary" href="index.html#lead-sec">Получить бесплатный аудит</a></div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="services/qr-menu.html">QR-меню и ИИ-официант</a><a href="services/ai-admin.html">ИИ-администратор</a><a href="services/marketing.html">Маркетинг и отзывы</a><a href="services/operations.html">Операционка и аналитика</a><a href="services/staff.html">Персонал</a><a href="services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="segments/restaurants.html">Рестораны</a><a href="segments/coffee.html">Кофейни и пекарни</a><a href="segments/bars.html">Бары и кальянные</a><a href="segments/delivery.html">Фастфуд и доставка</a><a href="segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="index.html">Главная</a><a href="pricing.html">Цены</a><a href="demo.html">Демо</a><a href="cases.html">Кейсы</a><a href="market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="privacy.html">Политика ПДн</a><a href="consent.html">Согласие на обработку ПДн</a><a href="sitemap.xml">sitemap.xml</a></div></nav>
+<div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
+</div></footer>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+const fmt=n=>Math.round(n).toLocaleString('ru-RU').replace(/\s/g,'\u00a0')+'\u00a0₽';
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const DISC={month:1,half:.9,year:.8},MON={month:1,half:6,year:12};
+// [id, cat, name, desc, once, month(null=нет, 0=входит), term, result, flags]
+const S=[
+['qr1','qr','QR-меню «Старт»','Оцифровка меню, дизайн в стиле бренда, QR-таблички, синхронизация стоп-листа с кассой',9900,1490,'3–5 дней','Актуальное меню за 3 секунды'],
+['qr2','qr','QR-заказ, оплата СБП и чаевые','Заказ со стола в кассу, оплата по СБП/Яндекс Пэй, разделение счёта, чаевые. Доступ к API кассы — по тарифу вендора',19900,1990,'1–2 недели','СБП 0,4–0,7% вместо 1,6–2,5% у карт'],
+['qr3','qr','Мультиязычное меню','ИИ-перевод на 5–10 языков с ручной вычиткой',4900,0,'2–3 дня','Меньше вопросов к персоналу*'],
+['qr4','qr','ИИ-официант и допродажи','Подбор блюд, пары к напиткам, аллергены только из вашей базы',29900,2990,'1–2 недели','+5–12% к чеку у пользователей*'],
+['qr5','qr','ИИ-фото и описания блюд','Пакет до 40 позиций, +300 ₽ за доп. позицию',12000,null,'2–3 дня','Меню 30–50 позиций за 2–3 дня'],
+['g1','guests','ИИ-администратор бронирований','Telegram, VK, MAX и сайт: брони, FAQ, меню, передача человеку',34900,5900,'1–2 недели','Ответ 24/7, +10–20% броней*'],
+['g2','guests','Голосовой ИИ-администратор','Входящие звонки и брони. 300 мин включено, далее 12 ₽/мин',59900,9900,'2–3 недели','Возврат части потерянных броней*'],
+['g3','guests','Центр отзывов','Ответы в тоне бренда на всех площадках, алерт о негативе за 5 минут, отчёт по жалобам. Без накруток',0,3900,'2–3 дня','100% ответов, рейтинг +0,1–0,3*'],
+['m1','marketing','ИИ-контент и SMM','Контент-план, 12–20 постов в месяц для TG/VK, ИИ-визуалы, маркировка ERID',9900,14900,'1 неделя','Регулярный контент дешевле фрилансера'],
+['m2','marketing','CRM-лояльность и рассылки','UDS/Loona/своя, RFM-сегменты, триггеры, согласия по 38-ФЗ и 152-ФЗ',24900,12900,'2–3 недели','Кофейня: +40–80 тыс. ₽/мес*'],
+['m3','marketing','Сайт заведения: лендинг','Меню из кассы, бронь, SEO под карты. Хостинг в РФ и поддержка',39900,1990,'1–3 недели','Свой канал без комиссии'],
+['m4','marketing','Сайт заведения с онлайн-заказом','Лендинг + онлайн-заказ с интеграцией кассы',119900,1990,'1–3 недели','Заказы без комиссии 20–35%'],
+['m5','marketing','Карточки на Яндекс Картах и 2ГИС','Оформление, фото, меню, рекомендации по продвижению. Ведение входит в «Центр отзывов»',7900,0,'3 дня','Рост переходов*'],
+['o1','ops','ИИ-аналитик продаж','Telegram-бот над данными кассы: ABC, инженерия меню, утренняя сводка',29900,4900,'1–2 недели','+3–8% к чеку*'],
+['o2','ops','Контроль себестоимости (фудкост)','Мониторинг цен закупки, алерты по техкартам',29900,4900,'2 недели','Фудкост −1–3 п.п.*'],
+['o3','ops','Прогноз закупок и заготовок','ИИ-прогноз продаж с учётом погоды и праздников, план заготовок',39900,6900,'3–4 недели','−20–40% списаний*'],
+['o4','ops','Распознавание накладных (OCR)','Фото накладной → приходная накладная в iiko/r_keeper',24900,3900,'1–2 недели','−80% времени на приёмку*'],
+['o5','ops','Видеоаналитика касс (партнёрская)','Trassir ActivePOS и др., сверка с чеками. Оборудование отдельно',30000,3900,'2–4 недели','Меньше потерь на кассе','from'],
+['o6','ops','Экспресс-аудит','2 часа: меню, отзывы, карты, данные кассы. Отчёт с 10 точками роста',0,null,'3 дня','План с расчётом окупаемости'],
+['o7','ops','Аудит и оптимизация процессов','Выезд, чистка номенклатуры и техкарт, регламенты. Сеть — от 150 000 ₽',49900,null,'2–3 недели','База для всех ИИ-модулей'],
+['o8','ops','ПДн-комплект (152-ФЗ)','Политика, согласия, договор поручения + уведомление в РКН',9900,null,'3–5 дней','Соответствие закону для QR, ботов и рассылок'],
+['s1','staff','Графики смен','ИИ-график по прогнозу трафика, бот для обмена сменами',29900,4900,'2–3 недели','−5–12% ФОТ*'],
+['s2','staff','ИИ-рекрутер','Отклики hh/Авито/TG, скрининг, запись на собеседование. API hh.ru — за счёт клиента',29900,5900,'1–2 недели','Первый контакт за 5–15 минут'],
+['s3','staff','Бот-наставник и база знаний','Меню, техкарты, сервис, тесты, ответы 24/7',34900,4900,'2–3 недели','Ввод в должность за 1–1,5 недели'],
+['s4','staff','Контроль стандартов','Фото-чек-листы с ИИ-проверкой, рейтинг смен',39900,7900,'2 недели','100% смен под контролем'],
+];
+const CATS={all:'Все',qr:'QR-меню',guests:'Гости',marketing:'Маркетинг',ops:'Операционка',staff:'Персонал'};
+const PK=[
+{n:'Старт',once:14900,m:2990,ids:['qr1','qr3','qr5','g3','o8'],free:1},
+{n:'Рост',once:49900,m:14900,ids:['qr1','qr3','qr5','g3','o8','qr2','qr4','g1','o1']},
+{n:'Про',once:129900,m:34900,ids:['qr1','qr3','qr5','g3','o8','qr2','qr4','g1','o1','g2','o2','o3','o4','s1','m2']}];
+const by=id=>S.find(s=>s[0]===id);
+const from=s=>s[8]==='from'?'от ':'';
+const once=s=>s[4]===0?'бесплатно':from(s)+fmt(s[4]);
+const mon=s=>s[5]===null?'—':s[5]===0?'входит':from(s)+fmt(s[5])+'/мес';
+const est=t=>t.replace(/\*$/,' <span class="est">оценка</span>');
+
+// package period toggle
+const setPer=p=>{$$('.pr-per button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.p===p));const k=DISC[p];
+$$('.pr-pkgs .card').forEach(c=>{const m=+c.dataset.m,f=c.dataset.from?'от ':'';c.querySelector('.pm').textContent=f+fmt(m*k);
+c.querySelector('.bl').textContent=k<1?`при оплате за ${MON[p]} мес: ${f}${fmt(m*k*MON[p])} (было ${fmt(m)}/мес)`:'помесячно, отмена за 30 дней';
+const su=c.querySelector('.su');if(su)su.textContent=p==='year'?'бесплатно при оплате за 12 мес':su.dataset.v});};
+$$('.pr-per button').forEach(b=>b.onclick=()=>setPer(b.dataset.p));setPer('month');
+
+// comparison
+const CM=[['QR-меню, мультиязычность, ИИ-описания',1],['Центр отзывов','1 площадка','все','все','все'],['Документы по ПДн','шаблоны','шаблоны','шаблоны','шаблоны'],['QR-заказ, СБП, чаевые',2],['ИИ-официант',2],['ИИ-администратор в мессенджерах',2],['ИИ-аналитик продаж',2],['Голосовой администратор','','','300 мин','300 мин'],['Фудкост, прогноз закупок, OCR',3],['Графики смен, CRM-лояльность',3],['HR-контур, аудит процессов',4],['Сводная аналитика, менеджер, SLA',4]];
+$('#cmp-body').innerHTML=CM.map(r=>{let c=[];for(let i=1;i<=4;i++){let v=typeof r[1]==='number'?(i>=r[1]?'✓':''):r[i];c.push(v?`<td class="y">${v}</td>`:'<td class="x">—</td>')}return `<tr><td>${r[0]}</td>${c.join('')}</tr>`}).join('');
+
+// table
+let cat='all';
+$('#cats').innerHTML=Object.keys(CATS).map(k=>`<button type="button" class="tab" data-c="${k}" aria-pressed="${k==='all'}">${CATS[k]}</button>`).join('');
+const render=()=>{const q=$('#q').value.trim().toLowerCase();let h='',n=0;
+Object.keys(CATS).filter(c=>c!=='all'&&(cat==='all'||cat===c)).forEach(c=>{const rows=S.filter(s=>s[1]===c&&(!q||(s[2]+' '+s[3]+' '+s[7]).toLowerCase().includes(q)));if(!rows.length)return;n+=rows.length;
+h+=`<tr class="grp"><td colspan="5">${CATS[c]}</td></tr>`+rows.map(s=>`<tr><td><b>${s[2]}</b><div class="note">${s[3]}</div></td><td class="n">${once(s)}</td><td class="n">${mon(s)}</td><td class="n">${s[6]}</td><td>${est(s[7])}</td></tr>`).join('')});
+$('#tb').innerHTML=h||'<tr><td colspan="5">Ничего не найдено. <a href="index.html#lead-sec">Спросите нас</a> — подскажем.</td></tr>';
+$('#cnt').textContent=`Показано услуг: ${n} из ${S.length}`};
+$('#cats').onclick=e=>{const b=e.target.closest('button');if(!b)return;cat=b.dataset.c;$$('#cats button').forEach(x=>x.setAttribute('aria-pressed',x===b));render()};
+$('#q').oninput=render;render();
+
+// builder
+$('#calc-list').innerHTML=Object.keys(CATS).filter(c=>c!=='all').map(c=>`<fieldset><legend>${CATS[c]}</legend>`+S.filter(s=>s[1]===c).map(s=>`<label class="it"><input type="checkbox" value="${s[0]}"><span class="nm">${s[2]}</span><span class="pz">${once(s)}<br>${mon(s)}</span></label>`).join('')+'</fieldset>').join('');
+const calc=()=>{const sel=$$('#calc-list input:checked').map(i=>i.value),p=$('#cper').value,k=DISC[p];
+const exc=new Set(sel);if(exc.has('m3')&&exc.has('m4'))exc.delete('m3'); // сайт: берём старший вариант
+let o=0,m=0;exc.forEach(id=>{const s=by(id);o+=s[4];m+=s[5]||0});
+const min=Math.max(0,+$('#cmin').value||0),extra=exc.has('g2')?Math.max(0,min-300)*12:0;
+const mm=m*k+extra,y=o+mm*12;
+$('#r-n').textContent=exc.size;$('#r-once').textContent=fmt(o);$('#r-mon').textContent=fmt(mm)+(extra?` (вкл. ${fmt(extra)} за минуты)`:'');$('#r-year').textContent=fmt(y);
+$('#r-bill').textContent=k<1&&m?`Абонентка со скидкой ${Math.round((1-k)*100)}%: ${fmt(m*k*MON[p])} за ${MON[p]} мес`:'';
+// package hint
+let hint='',best=null;if(exc.size){for(const P of PK){const rest=[...exc].filter(id=>!P.ids.includes(id));
+let po=(P.free&&p==='year'?0:P.once),pm=P.m*k;rest.forEach(id=>{const s=by(id);po+=s[4];pm+=(s[5]||0)*k});pm+=extra;const py=po+pm*12;
+if(rest.length<exc.size&&py<y&&(!best||py<best.py))best={P,rest,po,pm,py}}
+if(best){const{P,rest,po,pm,py}=best;hint=`Выгоднее: пакет «${P.n}»${rest.length?' + '+rest.length+' мод.':''} — ${fmt(po)} разово и ${fmt(pm)}/мес, экономия ${fmt(y-py)} за первый год. В пакете больше модулей.`}}
+$('#r-hint').textContent=hint;
+const names=[...exc].map(id=>by(id)[2]).join(', ');$('#r-cta').href='index.html#lead-sec';$('#r-cta').title=names};
+$('#calc-list').onchange=calc;$('#cper').onchange=calc;$('#cmin').oninput=calc;
+$('#r-reset').onclick=()=>{$$('#calc-list input').forEach(i=>i.checked=false);calc()};
+['qr1','g3'].forEach(id=>{const i=$(`#calc-list input[value="${id}"]`);if(i)i.checked=true});calc();
+})();
+</script>
+</body>
+</html>

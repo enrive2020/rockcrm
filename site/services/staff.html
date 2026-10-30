@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ИИ для персонала ресторана — найм, обучение, стандарты | Подача.AI</title>
+<meta name="description" content="HR-контур для кафе и ресторанов: ИИ-рекрутер отвечает кандидатам за 5–15 минут, бот-наставник вводит новичка в должность за 1–1,5 недели, фото-чек-листы с ИИ-проверкой контролируют 100% смен. Внедрение от 29 900 ₽.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../assets/a11y.css">
+<style>
+.hero-grid>*{min-width:0}
+.hero-kpi{grid-template-columns:repeat(auto-fit,minmax(90px,1fr))}
+.flow{display:grid;gap:12px;grid-template-columns:1fr;counter-reset:f;margin-top:24px}
+@media(min-width:860px){.flow{grid-template-columns:repeat(4,1fr)}}
+.flow .card{position:relative}.flow .card:before{counter-increment:f;content:counter(f);display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--on-accent);font-weight:700;margin-bottom:8px}
+.mod{display:grid;gap:24px;grid-template-columns:1fr;align-items:start}
+@media(min-width:860px){.mod{grid-template-columns:1.1fr 1fr}}
+.mod ul{padding-left:18px;color:var(--muted)}.mod li{margin:6px 0}
+.pr{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.phone{max-width:420px;width:100%;border:1px solid var(--line);border-radius:22px;background:var(--surface);padding:14px;box-shadow:var(--shadow)}
+.phone-top{display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid var(--line);font-size:.9rem}
+.ava{width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-weight:700}
+.sys{align-self:center;font-size:.78rem;color:var(--muted);background:var(--surface-2);border-radius:999px;padding:3px 10px;text-align:center}
+.chk{list-style:none;padding:0;margin:0}.chk li{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:.93rem}
+.ok{color:var(--accent-2);font-weight:600}.bad{color:#d9534f;font-weight:600}
+.tbl-wrap{overflow-x:auto}
+.st-tbl{width:100%;border-collapse:collapse;font-size:.93rem;min-width:560px}.st-tbl th,.st-tbl td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.st-tbl th{font-weight:600;color:var(--muted);font-size:.82rem}.st-tbl td.n{white-space:nowrap;font-variant-numeric:tabular-nums}
+.calc{font-variant-numeric:tabular-nums}.calc div{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.calc .tot{font-weight:700;border-bottom:0;color:var(--accent-2)}
+details{border-bottom:1px solid var(--line);padding:14px 0}summary{cursor:pointer;font-weight:600}details p{color:var(--muted);margin:8px 0 0}
+.final{text-align:center}.final .cta{justify-content:center}
+</style>
+</head>
+<body>
+<a class="skip" href="#top">К содержимому</a>
+<header class="hdr"><div class="wrap">
+<a class="logo" href="../index.html">Подача<span>.AI</span></a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html" aria-current="page">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div></details><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Рынок</a>
+</nav>
+<a class="btn btn-primary btn-sm" href="../index.html#lead-sec">Бесплатный аудит</a>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
+</div></header>
+
+<main id="top" tabindex="-1">
+<section class="hero"><div class="wrap hero-grid">
+<div>
+<span class="eyebrow">Услуга · Персонал</span>
+<h1>Нанимайте быстрее, обучайте за неделю, держите стандарты в каждой смене</h1>
+<p class="lead">HR-контур для кафе и ресторанов в одном боте: ИИ-рекрутер отвечает кандидатам за минуты, бот-наставник учит новичков по вашим техкартам и стандартам сервиса, фото-чек-листы с ИИ-проверкой показывают, как прошла каждая смена.</p>
+<div class="cta"><a class="btn btn-primary" href="../index.html#lead-sec">Обсудить запуск</a><a class="btn btn-ghost" href="#price">Смотреть цены</a></div>
+<div class="pr"><span class="badge">hh.ru · Авито Работа · Telegram</span><span class="badge">Бот в Telegram / MAX</span><span class="badge">Данные в РФ</span></div>
+</div>
+<div class="hero-card">
+<div class="hero-kpi"><div><b>5–15 мин</b><span class="small muted">первый ответ кандидату</span></div><div><b>1–1,5 нед.</b><span class="small muted">ввод в должность вместо 2–3</span></div><div><b>100%</b><span class="small muted">смен под контролем</span></div></div>
+<div class="chat" style="margin-top:16px">
+<div class="msg g">Здравствуйте, откликнулся на вакансию официанта</div>
+<div class="msg a">Здравствуйте, Илья! Пара вопросов: есть опыт в зале? Какие дни удобны для смен?</div>
+<div class="msg g">Год в кофейне, могу 2/2</div>
+<div class="msg a">Отлично, подходит ✓ Собеседование с управляющей — завтра в 15:00 или в четверг в 11:00?</div>
+</div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="pains"><div class="wrap">
+<span class="eyebrow">Проблема</span>
+<h2>Персонал — самая дорогая и самая нестабильная статья</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card pain"><div class="num">+24%</div><h3>Зарплаты растут</h3><p>Рост зарплатных предложений в общепите с 2024 года, средняя — около 65 тыс. ₽ <span class="est">оценка</span>.</p></div>
+<div class="card pain"><div class="num">60–100%</div><h3>Текучесть линейного персонала</h3><p>За год может смениться почти весь зал <span class="est">оценка</span>. Каждый новичок — заново найм и обучение.</p></div>
+<div class="card pain"><div class="num">1–2 дня</div><h3>Кандидаты ждут ответа</h3><p>Пока управляющий разбирает отклики, хороший кандидат уже вышел к конкуренту.</p></div>
+<div class="card pain"><div class="num">2–3 нед.</div><h3>Долгое обучение</h3><p>Стандарты «в головах» у старших, новичка учат на ходу и отвлекают смену.</p></div>
+<div class="card pain"><div class="num">3–8 тыс. ₽</div><h3>Тайный гость</h3><p>Стоит за визит и проверяет лишь выборку смен. Остальное видно только по отзывам.</p></div>
+<div class="card pain"><div class="num">0</div><h3>Единой картины нет</h3><p>Найм, обучение и чек-листы — в разных чатах, тетрадях и таблицах.</p></div>
+</div>
+<p class="note" style="margin-top:16px">Источники цифр — на странице <a href="../market.html">«Анализ рынка»</a>.</p>
+</div></section>
+
+<section id="how"><div class="wrap">
+<span class="eyebrow">Как это работает</span>
+<h2>Путь сотрудника — от отклика до самостоятельной смены</h2>
+<div class="flow">
+<div class="card"><h3>Отклик</h3><p class="muted">Бот отвечает на hh.ru, Авито и в Telegram, задаёт скрининг-вопросы.</p></div>
+<div class="card"><h3>Собеседование</h3><p class="muted">Подходящих записывает к управляющему, напоминает о встрече.</p></div>
+<div class="card"><h3>Онбординг</h3><p class="muted">Бот-наставник выдаёт план на неделю, уроки и тесты по меню и сервису.</p></div>
+<div class="card"><h3>Работа по стандарту</h3><p class="muted">Фото-чек-листы смены, ИИ-проверка и рейтинг смен для управляющего.</p></div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="hire"><div class="wrap mod">
+<div>
+<span class="eyebrow">Модуль 1 · ИИ-рекрутер</span>
+<h2>Ни один отклик не остаётся без ответа</h2>
+<ul>
+<li>Отвечает на отклики с hh.ru, Авито Работы и из Telegram за 5–15 минут, в том числе ночью и в выходные.</li>
+<li>Проводит скрининг по вашим вопросам: опыт, график, район, медкнижка, ожидания по оплате.</li>
+<li>Записывает подходящих на собеседование в календарь управляющего и напоминает кандидату.</li>
+<li>Отказы — вежливо и сразу, с сохранением в резерв на будущее.</li>
+<li>Воронка по вакансиям: отклики → скрининг → собеседование → выход.</li>
+</ul>
+<p class="note">Запуск 1–2 недели. Доступ к API hh.ru оплачивает клиент.</p>
+</div>
+<div class="phone"><div class="phone-top"><span class="ava">П</span><div><b>Найм · Кафе «Пример»</b><br><span class="small muted">бот-рекрутер</span></div></div>
+<div class="chat">
+<div class="sys">Новый отклик · hh.ru · Повар холодного цеха</div>
+<div class="msg a">Добрый вечер, Ольга! Спасибо за отклик. Есть ли у вас действующая медкнижка?</div>
+<div class="msg g">Да, до марта</div>
+<div class="msg a">Отлично. График 2/2 с 10 до 22 подходит?</div>
+<div class="msg g">Да</div>
+<div class="msg a">Записала вас на пробную смену в среду в 10:00 ✓ Адрес и контакт шефа пришлю за день.</div>
+</div></div>
+</div></section>
+
+<section id="mentor"><div class="wrap mod">
+<div class="phone"><div class="phone-top"><span class="ava">Н</span><div><b>Наставник</b><br><span class="small muted">база знаний 24/7</span></div></div>
+<div class="chat">
+<div class="msg g">Что входит в «Цезарь» и какие аллергены?</div>
+<div class="msg a">По техкарте: романо, курица гриль, гренки, пармезан, соус на основе анчоусов и яйца. Аллергены: глютен, яйцо, рыба, молоко.</div>
+<div class="msg g">Что предложить к нему?</div>
+<div class="msg a">По стандарту допродажи: лимонад дня или бокал белого. Хотите мини-тест по салатам? 5 вопросов, 2 минуты.</div>
+<div class="sys">Тест «Салаты»: 5/5 ✓ · следующий урок — «Работа с кассой»</div>
+</div></div>
+<div>
+<span class="eyebrow">Модуль 2 · Бот-наставник и база знаний</span>
+<h2>Новичок выходит в зал за 1–1,5 недели вместо 2–3</h2>
+<ul>
+<li>Собираем базу знаний из ваших материалов: меню, техкарты, стандарты сервиса, правила кассы и смены.</li>
+<li>План онбординга по дням для каждой должности: официант, бармен, повар, кассир.</li>
+<li>Короткие уроки и тесты в мессенджере, отчёт управляющему, кто что прошёл.</li>
+<li>Ответы на вопросы 24/7 — по вашим документам, а не «из интернета». Если ответа нет, бот честно говорит и передаёт вопрос старшему.</li>
+<li>Изменили меню — обновили базу, бот сам рассылает изменения и мини-тест.</li>
+</ul>
+<p class="note">Запуск 2–3 недели.</p>
+</div>
+</div></section>
+
+<section class="sec-alt" id="standards"><div class="wrap mod">
+<div>
+<span class="eyebrow">Модуль 3 · Контроль стандартов</span>
+<h2>Каждая смена — под контролем, а не выборочно</h2>
+<ul>
+<li>Фото-чек-листы открытия, закрытия, чистоты зала, санузлов и витрины.</li>
+<li>ИИ проверяет фото: заполненность витрины, порядок на станциях, маркировку, чистоту.</li>
+<li>Нарушение — сразу уведомление управляющему с фото.</li>
+<li>Рейтинг смен и сотрудников: видно, кто держит стандарт, а кто нет.</li>
+<li>Для сети — сравнение точек в одной сводке.</li>
+</ul>
+<p class="note">Запуск около 2 недель. Не заменяет санитарный контроль и ответственность управляющего.</p>
+</div>
+<div class="card">
+<h3>Закрытие смены · пример отчёта</h3>
+<ul class="chk">
+<li><span>Витрина убрана, продукты промаркированы</span><span class="ok">✓ принято</span></li>
+<li><span>Бар: станция и раковина</span><span class="ok">✓ принято</span></li>
+<li><span>Зал: столы и стулья</span><span class="ok">✓ принято</span></li>
+<li><span>Холодильник №2: маркировка</span><span class="bad">✕ нет даты на 2 контейнерах</span></li>
+<li><span>Санузел</span><span class="ok">✓ принято</span></li>
+</ul>
+<p class="small muted" style="margin-top:12px">Рейтинг смены: 92/100 · управляющему отправлено 1 замечание. Данные условные, пример.</p>
+</div>
+</div></section>
+
+<section id="price"><div class="wrap">
+<span class="eyebrow">Цены</span>
+<h2>Прозрачный прайс за одну точку</h2>
+<p class="lead">Каждый модуль можно подключить отдельно. Весь HR-контур входит в пакет «Сеть».</p>
+<div class="tbl-wrap" style="margin-top:20px">
+<table class="st-tbl">
+<thead><tr><th>Модуль</th><th>Что даёт</th><th>Запуск</th><th>Внедрение</th><th>Абонентка</th></tr></thead>
+<tbody>
+<tr><td><b>ИИ-рекрутер</b></td><td>первый контакт с кандидатом за 5–15 мин</td><td>1–2 нед.</td><td class="n">29 900 ₽</td><td class="n">5 900 ₽/мес<br><span class="small muted">API hh.ru оплачивает клиент</span></td></tr>
+<tr><td><b>Бот-наставник и база знаний</b></td><td>ввод в должность за 1–1,5 нед. вместо 2–3</td><td>2–3 нед.</td><td class="n">34 900 ₽</td><td class="n">4 900 ₽/мес</td></tr>
+<tr><td><b>Контроль стандартов</b></td><td>контроль 100% смен</td><td>2 нед.</td><td class="n">39 900 ₽</td><td class="n">7 900 ₽/мес</td></tr>
+</tbody>
+</table>
+</div>
+<div class="grid g2" style="margin-top:24px">
+<div class="card"><h3>Пакет «Сеть» — от 3 точек</h3><p class="muted">Всё из «Про» + HR-контур (найм, наставник, стандарты), аудит процессов, сводная аналитика по точкам, персональный менеджер, SLA.</p>
+<p class="price">79 000 ₽ <small>/мес за 3 точки</small></p><p class="note">≈ 26 300 ₽ за точку; с 4-й точки +19 900 ₽/мес</p><p class="setup">Внедрение: 290 000 ₽ за 3 точки + 70 000 ₽ за каждую следующую</p>
+<a class="btn btn-primary" href="../index.html#lead-sec">Обсудить сеть</a></div>
+<div class="card calc"><h3>Окупаемость наставника</h3><p class="small muted">Пример расчёта, не обещание результата. Цифры условные.</p>
+<div><span>Новичков в месяц</span><span>2</span></div>
+<div><span>Экономия времени старшего на обучении</span><span>≈ 10 ч на новичка</span></div>
+<div><span>Стоимость часа старшего</span><span>≈ 450 ₽</span></div>
+<div><span>Экономия в месяц</span><span>≈ 9 000 ₽</span></div>
+<div><span>Абонентка наставника</span><span>4 900 ₽</span></div>
+<div class="tot"><span>Эффект без учёта более быстрого выхода новичка</span><span>≈ +4 100 ₽/мес</span></div>
+</div>
+</div>
+<p class="note" style="margin-top:16px">Оплата за 6 месяцев вперёд — −10%, за 12 месяцев — −20%. Цены без НДС (УСН). Полный прайс — на <a href="../index.html#pricing">главной</a>.</p>
+</div></section>
+
+<section class="sec-alt" id="faq"><div class="wrap">
+<span class="eyebrow">FAQ</span>
+<h2>Частые вопросы</h2>
+<details><summary>Бот сам решает, кого брать на работу?</summary><p>Нет. Бот отвечает, задаёт ваши скрининг-вопросы и записывает на собеседование. Решение о найме всегда принимает человек.</p></details>
+<details><summary>Где взять материалы для базы знаний?</summary><p>Используем то, что есть: меню, техкарты из iiko/r_keeper, документы, голосовые и фото. Остальное помогаем оформить при внедрении.</p></details>
+<details><summary>Может ли бот ответить неправильно?</summary><p>Бот отвечает только по вашей базе. Если ответа в ней нет — говорит об этом и передаёт вопрос старшему. Вопросы без ответа попадают в отчёт, чтобы дополнить базу.</p></details>
+<details><summary>Как с персональными данными кандидатов и сотрудников?</summary><p>Данные хранятся и обрабатываются в РФ (Yandex Cloud / Selectel). Готовим шаблоны согласий и политики. Подробнее — в <a href="../privacy.html">политике ПДн</a>.</p></details>
+<details><summary>Можно начать с одного модуля?</summary><p>Да. Чаще всего начинают с наставника или рекрутера, а контроль стандартов подключают после.</p></details>
+</div></section>
+
+<section class="final"><div class="wrap">
+<h2>Посчитаем, сколько вы теряете на найме и обучении</h2>
+<p class="lead">Бесплатный экспресс-аудит: разберём текучесть, время ввода в должность и стандарты смен, предложим план запуска.</p>
+<div class="cta"><a class="btn btn-primary" href="../index.html#lead-sec">Получить бесплатный аудит</a><a class="btn btn-ghost" href="../index.html#services">Все услуги</a></div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="../index.html">Главная</a><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="../privacy.html">Политика ПДн</a><a href="../consent.html">Согласие на обработку ПДн</a><a href="../sitemap.xml">sitemap.xml</a></div></nav>
+<div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
+</div></footer>
+<script src="../assets/app.js"></script>
+</body>
+</html>

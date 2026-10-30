@@ -7,19 +7,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/a11y.css">
 </head>
 <body>
 <a class="skip" href="#top">К содержимому</a>
 <header class="hdr"><div class="wrap">
 <a class="logo" href="index.html">Подача<span>.AI</span></a>
-<nav class="nav" id="nav">
-<a href="index.html#services">Услуги</a><a href="index.html#pricing">Цены</a><a href="#numbers">Цифры</a><a href="#competitors">Конкуренты</a><a href="#gaps">Пробелы</a><a href="#sources">Источники</a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="services/qr-menu.html">QR-меню и ИИ-официант</a><a href="services/ai-admin.html">ИИ-администратор</a><a href="services/marketing.html">Маркетинг и отзывы</a><a href="services/operations.html">Операционка и аналитика</a><a href="services/staff.html">Персонал</a><a href="services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="segments/restaurants.html">Рестораны</a><a href="segments/coffee.html">Кофейни и пекарни</a><a href="segments/bars.html">Бары и кальянные</a><a href="segments/delivery.html">Фастфуд и доставка</a><a href="segments/hotels.html">Отели</a></div></details><a href="pricing.html">Цены</a><a href="demo.html">Демо</a><a href="cases.html">Кейсы</a><a href="market.html" aria-current="page">Рынок</a>
 </nav>
 <a class="btn btn-primary btn-sm" href="index.html#lead-sec">Бесплатный аудит</a>
-<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню">☰</button>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
 </div></header>
 
-<main id="top">
+<main id="top" tabindex="-1">
 <section class="hero" style="padding-bottom:32px"><div class="wrap">
 <span class="eyebrow">Аналитика · октябрь 2026</span>
 <h1>Рынок заведений: где теряются деньги и что можно исправить</h1>
@@ -249,8 +250,8 @@
 </main>
 
 <footer><div class="wrap">
-<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ на подаче: продаёт, бронирует, считает</div>
-<div><a href="index.html#services">Услуги</a> · <a href="index.html#pricing">Цены</a> · <a href="market.html">Анализ рынка</a> · <a href="index.html#lead" data-tg>Telegram</a> · <a href="privacy.html">Политика ПДн</a></div>
+<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="services/qr-menu.html">QR-меню и ИИ-официант</a><a href="services/ai-admin.html">ИИ-администратор</a><a href="services/marketing.html">Маркетинг и отзывы</a><a href="services/operations.html">Операционка и аналитика</a><a href="services/staff.html">Персонал</a><a href="services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="segments/restaurants.html">Рестораны</a><a href="segments/coffee.html">Кофейни и пекарни</a><a href="segments/bars.html">Бары и кальянные</a><a href="segments/delivery.html">Фастфуд и доставка</a><a href="segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="index.html">Главная</a><a href="pricing.html">Цены</a><a href="demo.html">Демо</a><a href="cases.html">Кейсы</a><a href="market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="privacy.html">Политика ПДн</a><a href="consent.html">Согласие на обработку ПДн</a><a href="sitemap.xml">sitemap.xml</a></div></nav>
 <div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
 </div></footer>
 <script src="assets/app.js"></script>

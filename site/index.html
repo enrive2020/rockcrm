@@ -7,19 +7,21 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/a11y.css">
+<style>#lead-sec .grid>*,#roi .grid>*{min-width:0}#lead-sec .consent{display:block;padding-left:26px;text-indent:-26px}#lead-sec .consent input{margin:0 8px 0 0;vertical-align:-2px}#lead-sec .consent a{white-space:normal}#lead-sec .form>*,#lead-sec .row>*{min-width:0}#lead-sec select,#lead-sec input,#lead-sec textarea{max-width:100%;min-width:0;box-sizing:border-box}</style>
 </head>
 <body>
 <a class="skip" href="#top">К содержимому</a>
 <header class="hdr"><div class="wrap">
-<a class="logo" href="#top">Подача<span>.AI</span></a>
-<nav class="nav" id="nav">
-<a href="#services">Услуги</a><a href="#pricing">Цены</a><a href="#roi-sec">Калькулятор</a><a href="#compare">Сравнение</a><a href="#faq">FAQ</a><a href="market.html">Анализ рынка</a>
+<a class="logo" href="index.html">Подача<span>.AI</span></a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="services/qr-menu.html">QR-меню и ИИ-официант</a><a href="services/ai-admin.html">ИИ-администратор</a><a href="services/marketing.html">Маркетинг и отзывы</a><a href="services/operations.html">Операционка и аналитика</a><a href="services/staff.html">Персонал</a><a href="services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="segments/restaurants.html">Рестораны</a><a href="segments/coffee.html">Кофейни и пекарни</a><a href="segments/bars.html">Бары и кальянные</a><a href="segments/delivery.html">Фастфуд и доставка</a><a href="segments/hotels.html">Отели</a></div></details><a href="pricing.html">Цены</a><a href="demo.html">Демо</a><a href="cases.html">Кейсы</a><a href="market.html">Рынок</a>
 </nav>
-<a class="btn btn-primary btn-sm" href="#lead-sec">Бесплатный аудит</a>
-<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню">☰</button>
+<a class="btn btn-primary btn-sm" href="index.html#lead-sec">Бесплатный аудит</a>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
 </div></header>
 
-<main id="top">
+<main id="top" tabindex="-1">
 <section class="hero"><div class="wrap hero-grid">
 <div>
 <span class="eyebrow">ИИ для ресторанов, кафе, баров и кофеен</span>
@@ -59,12 +61,12 @@
 <h2>20+ решений: начните с одного</h2>
 <p class="lead">Берите пакет или отдельные модули. Цены указаны за одну точку. Эффект с пометкой «оценка» — гипотеза, проверяем на пилоте. С чего начать большинству: QR-меню + центр отзывов.</p>
 <div class="tabs" role="group" aria-label="Категории услуг">
-<button class="tab" data-cat="all" aria-selected="true">Все</button>
-<button class="tab" data-cat="guests" aria-selected="false">Гости</button>
-<button class="tab" data-cat="marketing" aria-selected="false">Маркетинг</button>
-<button class="tab" data-cat="ops" aria-selected="false">Операционка</button>
-<button class="tab" data-cat="staff" aria-selected="false">Персонал</button>
-<button class="tab" data-cat="qr" aria-selected="false">QR-меню</button>
+<button class="tab" data-cat="all" aria-pressed="true">Все</button>
+<button class="tab" data-cat="guests" aria-pressed="false">Гости</button>
+<button class="tab" data-cat="marketing" aria-pressed="false">Маркетинг</button>
+<button class="tab" data-cat="ops" aria-pressed="false">Операционка</button>
+<button class="tab" data-cat="staff" aria-pressed="false">Персонал</button>
+<button class="tab" data-cat="qr" aria-pressed="false">QR-меню</button>
 </div>
 <div class="grid g3" id="svc-grid"></div>
 </div></section>
@@ -122,7 +124,7 @@
 <div class="field"><label for="q">Гостей пользуются QR-меню <output for="q"></output></label><input type="range" id="q" min="5" max="70" value="15" data-u="%"></div>
 <div class="field"><label for="calls">Звонков на бронь в месяц <output for="calls"></output></label><input type="range" id="calls" min="0" max="1500" step="10" value="300"></div>
 <div class="field"><label for="b">Средний счёт брони <output for="b"></output></label><input type="range" id="b" min="1000" max="20000" step="500" value="4000" data-u="₽"></div>
-<div class="row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+<div class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
 <label class="small">Пакет<select id="plan"><option value="start">Старт</option><option value="grow" selected>Рост</option><option value="pro">Про</option></select></label>
 <label class="small">Оплата<select id="per"><option value="month">Помесячно</option><option value="half">6 мес −10%</option><option value="year">12 мес −20%</option></select></label>
 <label class="small">Сценарий<select id="mult"><option value="base" selected>Базовый</option><option value="low">Осторожный (×0,5)</option></select></label>
@@ -170,7 +172,7 @@
 <div class="tbl-wrap"><table>
 <thead><tr><th></th><th>Подача.AI</th><th>QR-конструкторы</th><th>Сервисы QR-оплаты</th><th>Модули кассы</th><th>SMM-фрилансер</th></tr></thead>
 <tbody>
-<tr><td>Цена</td><td class="n">от 2 990 ₽/мес</td><td class="n">0–3 000 ₽/мес</td><td>бесплатно, % эквайринга</td><td>в тарифе кассы</td><td class="n">15–40 тыс. ₽/мес</td></tr>
+<tr><td>Цена</td><td class="n">от 1 490 ₽/мес</td><td class="n">0–3 000 ₽/мес</td><td>бесплатно, % эквайринга</td><td>в тарифе кассы</td><td class="n">15–40 тыс. ₽/мес</td></tr>
 <tr><td>ИИ-официант и апсейл</td><td class="yes">✓</td><td class="no">нет в базовом тарифе</td><td class="no">нет в базовом тарифе</td><td class="no">нет в базовом тарифе</td><td class="no">нет в базовом тарифе</td></tr>
 <tr><td>Перевод меню</td><td class="yes">✓</td><td>частично</td><td class="no">нет в базовом тарифе</td><td class="no">нет в базовом тарифе</td><td class="no">нет в базовом тарифе</td></tr>
 <tr><td>Оплата по QR, чаевые</td><td class="yes">✓ через ваш эквайринг</td><td class="no">нет в базовом тарифе</td><td class="yes">✓</td><td>частично</td><td class="no">нет в базовом тарифе</td></tr>
@@ -200,7 +202,7 @@
 <details><summary>Что если бот упадёт в пятницу вечером?</summary><p>Мониторинг 24/7, реакция на сбой — до 30 минут. При сбое бот передаёт гостя сотруднику, а звонки идут на ваш обычный номер. Для «Сети» — SLA в договоре.</p></details>
 <details><summary>Что останется у нас, если откажемся?</summary><p>Всё: меню, база гостей, номер телефона и домен. Выгружаем данные в Excel/CSV, QR-коды ведут на ваш адрес, а не на наш.</p></details>
 <details><summary>С какими кассами что работает?</summary><p>iiko и r_keeper: меню, стоп-лист, заказы и продажи через API. Saby Presto, Quick Resto, Poster, Frontpad: меню и продажи через API, часть модулей (накладные, стоп-лист) — с ручной синхронизацией. Точный список по вашей кассе — в отчёте аудита.</p></details>
-<details><summary>Сколько стоит работа ИИ-моделей?</summary><p>Включена в абонентку: до 3 000 диалогов в месяц на точку. Сверх — 3 ₽ за диалог, предупреждаем заранее.</p></details>
+<details><summary>Сколько стоит работа ИИ-моделей?</summary><p>Включена в абонентку. Для голосового администратора — 300 мин в «Про», сверх — 12 ₽/мин.</p></details>
 <details><summary>Голосовой бот звонит гостям?</summary><p>Нет, работаем только на входящих звонках и предупреждаем о записи разговора.</p></details>
 <details><summary>Работаете в СНГ?</summary><p>Да: Казахстан, Узбекистан, Армения, Грузия. Мультиязычное меню включено, цены в местной валюте.</p></details>
 </div></section>
@@ -220,7 +222,7 @@
 <label class="small">Что хотите улучшить?<textarea name="Задача" rows="3"></textarea></label>
 <label class="small consent"><input type="checkbox" name="Согласие" required> Даю <a href="consent.html" target="_blank">согласие на обработку персональных данных</a> и ознакомлен с <a href="privacy.html" target="_blank">политикой</a></label>
 <button class="btn btn-primary" type="submit">Отправить заявку</button>
-<p class="note" id="form-hint">Заявка уйдёт нам напрямую. Если не получится — откроется ваш почтовый клиент.</p>
+<p class="note" id="form-hint">После отправки откроется ваш почтовый клиент с готовой заявкой.</p>
 <div class="ok" role="status" aria-live="polite"></div>
 </form>
 </div></section>
@@ -228,7 +230,7 @@
 
 <footer><div class="wrap">
 <div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
-<div><a href="#services">Услуги</a> · <a href="#pricing">Цены</a> · <a href="market.html">Анализ рынка</a> · <a href="#lead" data-tg>Telegram</a> · <a href="privacy.html">Политика ПДн</a></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="services/qr-menu.html">QR-меню и ИИ-официант</a><a href="services/ai-admin.html">ИИ-администратор</a><a href="services/marketing.html">Маркетинг и отзывы</a><a href="services/operations.html">Операционка и аналитика</a><a href="services/staff.html">Персонал</a><a href="services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="segments/restaurants.html">Рестораны</a><a href="segments/coffee.html">Кофейни и пекарни</a><a href="segments/bars.html">Бары и кальянные</a><a href="segments/delivery.html">Фастфуд и доставка</a><a href="segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="index.html">Главная</a><a href="pricing.html">Цены</a><a href="demo.html">Демо</a><a href="cases.html">Кейсы</a><a href="market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="privacy.html">Политика ПДн</a><a href="consent.html">Согласие на обработку ПДн</a><a href="sitemap.xml">sitemap.xml</a></div></nav>
 <div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
 </div></footer>
 <script src="assets/app.js"></script>

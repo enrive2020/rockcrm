@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Решения для фастфуда, доставки и дарк-китчен — свой канал заказов, рейтинг, меню | Подача.AI</title>
+<meta name="description" content="ИИ и QR для фастфуда, доставки и дарк-китчен: переводим повторных клиентов из агрегаторов в свой канал, держим рейтинг, считаем меню-инжиниринг с учётом комиссии, прогнозируем спрос и стоп-листы.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../assets/a11y.css">
+<style>
+.calc{font-variant-numeric:tabular-nums}.calc div{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px dashed var(--line)}
+.calc .tot{font-weight:700;border-bottom:0;color:var(--accent-2)}
+.flow{display:grid;gap:12px;grid-template-columns:1fr}
+@media(min-width:760px){.flow{grid-template-columns:repeat(4,1fr)}}
+.flow .t{font:800 1.1rem Manrope,sans-serif;color:var(--accent)}
+.sol{display:flex;flex-direction:column}.sol h3{margin-top:0}.sol ul{padding-left:18px;color:var(--muted);font-size:.93rem;margin:10px 0}.sol li{margin:5px 0}
+.sol .res{color:var(--accent-2);font-weight:600;font-size:.9rem;margin-top:auto}
+.mods{width:100%;border-collapse:collapse;font-size:.93rem}.mods th,.mods td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.mods th{font-weight:600;color:var(--muted);font-size:.82rem}.mods td:nth-child(n+2){white-space:nowrap}
+.dont{background:var(--accent-soft);border-radius:var(--r);padding:20px}
+.loop{display:grid;gap:10px;grid-template-columns:1fr}@media(min-width:760px){.loop{grid-template-columns:repeat(3,1fr)}}
+.loop .step{border:1px solid var(--line);border-radius:var(--r);padding:16px;background:var(--card,transparent)}
+.loop .step b{display:block;font:800 1rem Manrope,sans-serif;color:var(--accent);margin-bottom:6px}
+details{border-bottom:1px solid var(--line);padding:14px 0}summary{cursor:pointer;font-weight:600}details p{color:var(--muted);margin:8px 0 0}
+.final{text-align:center}.final .cta{justify-content:center}
+</style>
+</head>
+<body>
+<a class="skip" href="#top">К содержимому</a>
+<header class="hdr"><div class="wrap">
+<a class="logo" href="../index.html">Подача<span>.AI</span></a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html" aria-current="page">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div></details><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Рынок</a>
+</nav>
+<a class="btn btn-primary btn-sm" href="../index.html#lead-sec">Бесплатный аудит</a>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
+</div></header>
+
+<main id="top" tabindex="-1">
+<section class="hero"><div class="wrap hero-grid">
+<div>
+<span class="eyebrow">Решения · Фастфуд, доставка, дарк-китчен</span>
+<h1>Агрегатор приводит клиента. Второй заказ он делает напрямую у вас</h1>
+<p class="lead">До ~35% чека в доставке уходит агрегатору с учётом всех платежей. Мы не предлагаем уходить с площадок: оставляем их для привлечения, а повторных клиентов переводим в собственный канал. Плюс держим рейтинг, чистим меню и снижаем число отмен из-за стоп-листов.</p>
+<div class="cta"><a class="btn btn-primary" href="../index.html#lead-sec">Посчитать мою комиссию</a><a class="btn btn-ghost" href="#solutions">Смотреть решения</a></div>
+<div class="badges"><span class="badge">Яндекс Еда · Деливери · Купер</span><span class="badge">iiko · r_keeper · Frontpad</span><span class="badge">Telegram Mini App · СБП</span></div>
+</div>
+<div class="hero-card" aria-label="Пример вкладыша и заказа в Telegram">
+<div class="chat">
+<div class="msg a">Привет! Вы заказывали у нас через агрегатор. Здесь то же меню, а на второй заказ — скидка 10% по коду из пакета.</div>
+<div class="msg g">Двойной бургер и картошку, как в прошлый раз</div>
+<div class="msg a">Готово: 690 ₽ со скидкой, оплата по СБП. Привезём за 35–45 минут. Добавить соус за 49 ₽?</div>
+</div>
+<div class="hero-kpi"><div><b>25–35%</b><span class="small muted">комиссия с курьером агрегатора <span class="est">оценка</span></span></div><div><b>−5–10 п.п.</b><span class="small muted">эффективной комиссии — наша цель <span class="est">оценка</span></span></div></div>
+</div>
+</div></section>
+
+<section class="sec-alt"><div class="wrap">
+<span class="eyebrow">Где доставка теряет маржу</span>
+<h2>Четыре утечки, которые не видно в кабинете партнёра</h2>
+<div class="grid g4" style="margin-top:24px">
+<div class="card pain"><div class="num">до 35%</div><h3>Чека уходит площадке</h3><p>Комиссия, эквайринг, софинансирование скидок, платное продвижение. Оценка Data Insight, 2025.</p></div>
+<div class="card pain"><div class="num">&lt; 4,7</div><h3>Рейтинг — и вы ниже в выдаче</h3><p>Отзывы про холодное, опоздание и недовложение без ответа съедают позиции <span class="est">оценка</span></p></div>
+<div class="card pain"><div class="num">×3</div><h3>Клиент платит комиссию каждый раз</h3><p>Постоянный клиент заказывает снова через агрегатор, и вы платите за него как за нового.</p></div>
+<div class="card pain"><div class="num">Стоп</div><h3>Отмены из-за стоп-листов</h3><p>Позиция кончилась на кухне, но висит в приложении: отмена, штраф, плохой отзыв.</p></div>
+</div>
+</div></section>
+
+<section id="commission"><div class="wrap">
+<span class="eyebrow">Пример расчёта</span>
+<h2>Заказ на 1 000 ₽: агрегатор против своего канала</h2>
+<div class="grid g2" style="margin-top:24px;align-items:start">
+<div class="card calc">
+<h3>Куда уходит чек <span class="est">пример расчёта</span></h3>
+<div><span>Комиссия агрегатора (курьер площадки)</span><b>300 ₽</b></div>
+<div><span>Эквайринг</span><b>25 ₽</b></div>
+<div><span>Food cost 28–32%</span><b>300 ₽</b></div>
+<div><span>Упаковка</span><b>40–60 ₽</b></div>
+<div><span>Промо и скидки</span><b>50–100 ₽</b></div>
+<div class="tot"><span>Остаётся до ФОТ и аренды</span><span>≈ 215–285 ₽</span></div>
+<div><span>Повторный заказ в своём канале: удержание</span><b>20–50 ₽ вместо 300 ₽</b></div>
+</div>
+<div class="card calc">
+<h3>Перевод повторных в свой канал <span class="est">пример расчёта</span></h3>
+<div><span>Заказов через агрегатор в месяц</span><b>3 000</b></div>
+<div><span>Средний чек</span><b>1 000 ₽</b></div>
+<div><span>Повторных клиентов</span><b>40%</b></div>
+<div><span>Из них перешли в свой канал</span><b>25% → 300 заказов</b></div>
+<div><span>Экономия на комиссии (300 − 50 ₽)</span><b>250 ₽/заказ</b></div>
+<div class="tot"><span>Остаётся у вас</span><span>≈ 75 000 ₽/мес</span></div>
+<div><span>Если доставка своими курьерами — вычтите их стоимость (150–250 ₽/заказ)</span><b></b></div>
+</div>
+</div>
+<p class="note">Расчёт — пример на основе экспертных оценок исследования рынка, а не гарантия результата. Комиссии агрегаторов индивидуальны и зависят от договора. Своя доставка обычно окупается при 3–4 заказах в час на курьера и доле повторных клиентов от 40%; иначе выгоднее самовывоз или курьер агрегатора на прямых заказах. Для вашей точки посчитаем на бесплатном аудите.</p>
+</div></section>
+
+<section class="sec-alt"><div class="wrap">
+<span class="eyebrow">Стратегия</span>
+<h2>Агрегатор — для привлечения, свой канал — для удержания</h2>
+<div class="loop" style="margin-top:24px">
+<div class="step"><b>1. Первый заказ на площадке</b><span class="muted small">Сильная карточка: ИИ-фото, описания, КБЖУ, теги. Рейтинг от 4,7 и ответы на каждый отзыв.</span></div>
+<div class="step"><b>2. QR во вкладыше</b><span class="muted small">В пакете — карточка с QR и промокодом на прямой заказ. Ведёт в Telegram Mini App или на сайт с заказом.</span></div>
+<div class="step"><b>3. Повторы напрямую</b><span class="muted small">Оплата по СБП, база клиентов у вас, триггеры «давно не заказывали» и комбо по данным.</span></div>
+</div>
+</div></section>
+
+<section id="solutions"><div class="wrap">
+<span class="eyebrow">Решения</span>
+<h2>Что внедряем в фастфуде, доставке и дарк-китчен</h2>
+<div class="grid g2" style="margin-top:24px">
+<div class="card sol"><h3>Свой канал заказов</h3>
+<ul><li>Сайт с меню из POS и онлайн-заказом или Telegram-бот заказа</li><li>Оплата по СБП, заказ сразу в кассу</li><li>Вкладыш с QR и промокодом в каждый пакет агрегатора</li><li>Фолбэк на курьеров Яндекс Доставки, если своих нет</li></ul>
+<p class="res">−5–10 п.п. эффективной комиссии <span class="est">оценка</span></p></div>
+<div class="card sol"><h3>ИИ-рейтинг и отзывы</h3>
+<ul><li>Ответы в тоне бренда на агрегаторах, Яндекс Картах и 2ГИС</li><li>LLM размечает жалобы: время, температура, недовложение, вкус</li><li>Алерт о негативе в Telegram за 5 минут</li><li>Отчёт: какая смена и какое блюдо тянут рейтинг вниз</li></ul>
+<p class="res">+0,1–0,2 к рейтингу <span class="est">оценка</span> · накрутки не делаем</p></div>
+<div class="card sol"><h3>Меню-инжиниринг с учётом комиссии</h3>
+<ul><li>Матрица звёзд, лошадок, загадок и собак отдельно по залу и доставке</li><li>Маржа считается после комиссии канала</li><li>Цены по каналам: наценка в агрегаторе +10–20% к залу <span class="est">практика рынка</span></li><li>Комбо и промо с контролем ROI софинансирования скидок</li></ul>
+<p class="res">+3–8% к чеку за счёт решений по меню <span class="est">оценка</span></p></div>
+<div class="card sol"><h3>Карточки, которые продают</h3>
+<ul><li>ИИ-обработка фото с телефона без студийной съёмки</li><li>Продающие описания, КБЖУ и теги</li><li>Единый стиль для нескольких виртуальных брендов одной кухни</li></ul>
+<p class="res">+10–30% конверсии карточек с фото <span class="est">оценка</span></p></div>
+<div class="card sol"><h3>Прогноз спроса и стоп-листы</h3>
+<ul><li>Прогноз заказов по часам с учётом погоды и праздников</li><li>План заготовок и смен курьеров</li><li>Предупреждение о позициях, которые скоро кончатся, до появления отмен</li></ul>
+<p class="res">−20% отмен из-за стоп-листов, −20–40% списаний <span class="est">оценка</span></p></div>
+<div class="card sol"><h3>QR-заказ в зале фастфуда</h3>
+<ul><li>Заказ к столу и навынос без очереди на кассе</li><li>Оплата по СБП: 0,4–0,7% вместо 1,6–2,5% у карт</li><li>ИИ-апсейл: «добавить напиток к комбо?»</li></ul>
+<p class="res">Быстрее очередь в пик при чеке 400–800 ₽</p></div>
+</div>
+</div></section>
+
+<section class="sec-alt"><div class="wrap">
+<span class="eyebrow">Под ваш формат</span>
+<h2>С чего начать</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card"><h3 style="margin-top:0">Дарк-китчен</h3><p class="muted">70–100% выручки через агрегаторы, маржа зависит от комиссии и рейтинга. Начинаем с Центра отзывов, ИИ-карточек для всех брендов кухни и меню-инжиниринга по каналам.</p></div>
+<div class="card"><h3 style="margin-top:0">Фастфуд с залом</h3><p class="muted">Высокий трафик, чек 400–800 ₽, всё решает скорость. QR-заказ и оплата СБП в зале, вкладыш с QR в доставку, апсейл комбо.</p></div>
+<div class="card"><h3 style="margin-top:0">Пицца, суши, своя доставка</h3><p class="muted">Своя доставка уже есть, но повторы идут через площадки. Сайт с заказом из POS, CRM-триггеры, прогноз смен курьеров.</p></div>
+</div>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Как работаем</span>
+<h2>От аудита кабинета до отчёта за 2–6 недель</h2>
+<div class="flow" style="margin-top:24px">
+<div class="card"><div class="t">1. Аудит</div><p class="muted small">Бесплатно: отзывы и рейтинг, карточки, доля повторных клиентов. Считаем эффективную комиссию.</p></div>
+<div class="card"><div class="t">2. План</div><p class="muted small">Юнит-экономика по каналам: где оставить агрегатор, где вести клиента в свой канал.</p></div>
+<div class="card"><div class="t">3. Запуск</div><p class="muted small">Свой канал, вкладыши, интеграция с кассой, ответы на отзывы, обучение команды.</p></div>
+<div class="card"><div class="t">4. Отчёт</div><p class="muted small">Ежемесячно: доля прямых заказов, рейтинг, отмены, маржа по каналам.</p></div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="price"><div class="wrap">
+<span class="eyebrow">Цены</span>
+<h2>Пакеты и модули для доставки</h2>
+<p class="lead">Цены за одну точку. НДС не облагается (УСН).</p>
+<div class="grid g3" style="margin-top:28px">
+<div class="card plan"><h3>Старт</h3><div class="price">2 990 ₽<small>/мес</small></div><p class="small muted">внедрение 14 900 ₽ · небольшая точка</p>
+<ul><li>QR-меню с синхронизацией стоп-листа</li><li>Мультиязычное меню</li><li>ИИ-описания до 40 позиций</li><li>Центр отзывов: 1 площадка</li><li>Шаблоны документов по персональным данным</li></ul>
+<a class="btn btn-ghost" href="../index.html#lead-sec">Обсудить</a></div>
+<div class="card plan hit"><span class="tag">Для доставки</span><h3>Рост</h3><div class="price">14 900 ₽<small>/мес</small></div><p class="small muted">внедрение 49 900 ₽</p>
+<ul><li>Всё из «Старта»</li><li>QR-заказ и оплата СБП</li><li>ИИ-официант и апсейл в меню</li><li>ИИ-администратор в TG / VK / MAX</li><li>ИИ-аналитик продаж: меню-инжиниринг</li></ul>
+<a class="btn btn-primary" href="../index.html#lead-sec">Получить расчёт</a></div>
+<div class="card plan"><h3>Про</h3><div class="price">34 900 ₽<small>/мес</small></div><p class="small muted">внедрение 129 900 ₽ · высокий объём заказов</p>
+<ul><li>Всё из «Роста»</li><li>Голосовой администратор (300 мин)</li><li>Контроль фудкоста и прогноз закупок</li><li>Распознавание накладных</li><li>Графики смен, CRM-лояльность</li></ul>
+<a class="btn btn-ghost" href="../index.html#lead-sec">Обсудить</a></div>
+</div>
+<p class="note">Состав пакетов — как на <a href="../index.html#pricing">главной</a>. Сеть от 3 точек: 290 000 ₽ за 3 точки + 70 000 ₽ за каждую следующую, 79 000 ₽/мес за 3 точки, с 4-й +19 900 ₽/мес. Пилот 30 дней — 9 900 ₽, «Старт» — 14 дней бесплатно.</p>
+<h3 style="margin-top:40px">Модули для доставки отдельно</h3>
+<div class="tbl-wrap"><table class="mods">
+<thead><tr><th>Модуль</th><th>Разово</th><th>В месяц</th></tr></thead>
+<tbody>
+<tr><td>Сайт заведения с заказом и POS</td><td>119 900 ₽</td><td>1 990 ₽</td></tr>
+<tr><td>Сайт-лендинг</td><td>39 900 ₽</td><td>1 990 ₽</td></tr>
+<tr><td>QR-заказ и оплата СБП + чаевые</td><td>19 900 ₽</td><td>1 990 ₽</td></tr>
+<tr><td>ИИ-администратор (Telegram / VK / MAX / сайт)</td><td>34 900 ₽</td><td>5 900 ₽</td></tr>
+<tr><td>Центр отзывов</td><td>0 ₽</td><td>3 900 ₽</td></tr>
+<tr><td>ИИ-фото и описания блюд</td><td>12 000 ₽ до 40 позиций<br><span class="small muted">300 ₽ за доп. позицию</span></td><td>—</td></tr>
+<tr><td>ИИ-аналитик продаж (меню-инжиниринг)</td><td>29 900 ₽</td><td>4 900 ₽</td></tr>
+<tr><td>Прогноз закупок и заготовок</td><td>39 900 ₽</td><td>6 900 ₽</td></tr>
+<tr><td>CRM-лояльность и рассылки</td><td>24 900 ₽</td><td>12 900 ₽</td></tr>
+<tr><td>Аудит и оптимизация процессов</td><td>49 900 ₽<br><span class="small muted">сеть от 150 000 ₽</span></td><td>—</td></tr>
+<tr><td>ПДн-комплект (152-ФЗ)</td><td>9 900 ₽</td><td>—</td></tr>
+<tr><td>Экспресс-аудит</td><td>бесплатно</td><td>—</td></tr>
+</tbody></table></div>
+<p class="note">Оплата за 6 мес вперёд — −10%, за 12 мес — −20%. Подписку на конструктор сайта или POS-модуль доставки, если нужна, оплачивает клиент по тарифу вендора.</p>
+</div></section>
+
+<section><div class="wrap">
+<div class="grid g2">
+<div class="dont"><h3 style="margin-top:0">Чего мы не делаем</h3>
+<ul class="muted"><li>Не уговариваем уйти с агрегаторов: они дают новых клиентов.</li><li>Не накручиваем отзывы и рейтинг — это нарушает правила площадок.</li><li>Не обещаем точный процент экономии до аудита: комиссии у всех разные.</li><li>Не заставляем менять кассу: работаем с iiko, r_keeper, Frontpad и другими.</li></ul></div>
+<div class="card"><h3 style="margin-top:0">Риски, о которых предупреждаем</h3><p class="muted">Агрегаторы меняют правила и алгоритмы выдачи, открытых API почти нет. С 01.10.2026 действует закон о платформенной экономике (289-ФЗ), стоимость курьеров может расти. Свой канал снижает зависимость от этих решений. База клиентов своего канала — персональные данные: согласия и политику оформляем по 152-ФЗ.</p></div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="faq"><div class="wrap">
+<span class="eyebrow">FAQ</span>
+<h2>Частые вопросы</h2>
+<details><summary>Агрегатор не накажет за вкладыш с QR?</summary><p>Правила у площадок разные и меняются. Перед запуском проверяем ваш договор и формулируем вкладыш так, чтобы не нарушать его: например, как приглашение в программу лояльности бренда.</p></details>
+<details><summary>Нам нужна своя доставка, если курьеров нет?</summary><p>Не обязательно. Прямой заказ можно отдавать на самовывоз или курьерам Яндекс Доставки по API. Свои курьеры выгодны при 3–4 заказах в час на человека <span class="est">оценка</span>.</p></details>
+<details><summary>У нас дарк-китчен с пятью брендами. Это сложнее?</summary><p>Нет, это наш случай: одна кухня, один прогноз и стоп-лист, отдельные карточки и отзывы для каждого бренда. Меню-инжиниринг считаем по каждому бренду.</p></details>
+<details><summary>Откуда вы берёте данные агрегатора?</summary><p>Из выгрузок кабинета партнёра и вашей кассы. Открытых API у площадок почти нет, поэтому настраиваем регулярную выгрузку.</p></details>
+<details><summary>Сколько занимает запуск?</summary><p>Центр отзывов — 2–3 дня, ИИ-карточки — 2–3 дня, бот заказа — 1–2 недели, сайт с заказом — 1–3 недели.</p></details>
+</div></section>
+
+<section class="final"><div class="wrap">
+<h2>Узнайте свою реальную комиссию</h2>
+<p class="lead">Бесплатный экспресс-аудит: рейтинг и отзывы, карточки, доля повторных клиентов и расчёт, сколько можно вернуть через свой канал.</p>
+<div class="cta"><a class="btn btn-primary" href="../index.html#lead-sec">Получить бесплатный аудит</a><a class="btn btn-ghost" href="../index.html#pricing">Все цены</a></div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="../index.html">Главная</a><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="../privacy.html">Политика ПДн</a><a href="../consent.html">Согласие на обработку ПДн</a><a href="../sitemap.xml">sitemap.xml</a></div></nav>
+<div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
+</div></footer>
+<script src="../assets/app.js"></script>
+</body>
+</html>

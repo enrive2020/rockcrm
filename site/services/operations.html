@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ИИ для операционки ресторана: аналитика, фудкост, закупки, накладные, смены | Подача.AI</title>
+<meta name="description" content="ИИ-аналитик продаж, контроль себестоимости, прогноз закупок, распознавание накладных, графики смен и видеоаналитика касс поверх iiko и r_keeper. Внедрение от 24 900 ₽, абонентка от 3 900 ₽/мес.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../assets/a11y.css">
+<style>
+.mods{display:grid;gap:16px;grid-template-columns:1fr;margin-top:24px}
+@media(min-width:760px){.mods{grid-template-columns:1fr 1fr}}
+@media(min-width:1080px){.mods{grid-template-columns:1fr 1fr 1fr}}
+.mod{display:flex;flex-direction:column;gap:8px}
+.mod .ico{width:42px;height:42px;border-radius:12px;background:var(--surface-2);display:grid;place-items:center;font-size:1.3rem}
+.mod ul{padding-left:18px;margin:4px 0;color:var(--muted);font-size:.93rem}.mod li{margin:4px 0}
+.mod .eff{font-weight:600;color:var(--accent-2)}
+.mod .pr{margin-top:auto;padding-top:10px;border-top:1px dashed var(--line);font-size:.92rem;font-variant-numeric:tabular-nums}
+.mod .pr b{font-size:1.05rem}
+.demo{display:grid;gap:20px;grid-template-columns:1fr;margin-top:24px}
+@media(min-width:860px){.demo{grid-template-columns:1fr 1fr}}
+.phone{max-width:440px;width:100%;border:1px solid var(--line);border-radius:22px;background:var(--surface);padding:14px;box-shadow:var(--shadow)}
+.phone-top{display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid var(--line);font-size:.9rem}
+.ava{width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-weight:700}
+.sys{align-self:center;font-size:.78rem;color:var(--muted);background:var(--surface-2);border-radius:999px;padding:3px 10px;text-align:center}
+.ocr{display:grid;gap:10px;font-size:.88rem;font-variant-numeric:tabular-nums}
+.ocr .row{display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.ocr .warn{color:var(--accent-2);font-weight:600}
+.op-tbl{width:100%;border-collapse:collapse;font-size:.93rem}
+.op-tbl th,.op-tbl td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.op-tbl th{font-weight:600;color:var(--muted);font-size:.82rem}
+.op-tbl td.n{white-space:nowrap;font-variant-numeric:tabular-nums}
+.calc{font-variant-numeric:tabular-nums}.calc div.l{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.calc .tot{font-weight:700;border-bottom:0!important;color:var(--accent-2)}
+.ex{display:grid;gap:20px;grid-template-columns:1fr;margin-top:24px}
+@media(min-width:860px){.ex{grid-template-columns:1fr 1fr}}
+.ex input[type=range]{width:100%}
+details{border-bottom:1px solid var(--line);padding:14px 0}summary{cursor:pointer;font-weight:600}details p{color:var(--muted);margin:8px 0 0}
+.final{text-align:center}.final .cta{justify-content:center}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+</style>
+</head>
+<body>
+<a class="skip" href="#top">К содержимому</a>
+<header class="hdr"><div class="wrap">
+<a class="logo" href="../index.html">Подача<span>.AI</span></a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html" aria-current="page">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div></details><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Рынок</a>
+</nav>
+<a class="btn btn-primary btn-sm" href="../index.html#lead-sec">Бесплатный аудит</a>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
+</div></header>
+
+<main id="top" tabindex="-1">
+<section class="hero"><div class="wrap hero-grid">
+<div>
+<span class="eyebrow">Услуга · Операционка</span>
+<h1>ИИ-операционка: деньги, которые теряются на кухне, складе и в сменах</h1>
+<p class="lead">Аналитика продаж в Telegram, контроль себестоимости, прогноз закупок, распознавание накладных, графики смен и видеоаналитика касс. Работаем поверх вашей кассы, ничего не меняем.</p>
+<div class="cta"><a class="btn btn-primary" href="../index.html#lead-sec">Получить бесплатный аудит</a><a class="btn btn-ghost" href="#price">Цены на модули</a></div>
+<div class="chips"><span class="badge">iiko</span><span class="badge">r_keeper</span><span class="badge">Saby</span><span class="badge">Quick Resto</span><span class="badge">Poster</span><span class="badge">Telegram</span></div>
+</div>
+<div class="hero-card">
+<div class="hero-kpi"><div><b>−1–3 п.п.</b><span class="small muted">фудкоста <span class="est">оценка</span></span></div><div><b>−20–40%</b><span class="small muted">списаний <span class="est">оценка</span></span></div><div><b>−5–12%</b><span class="small muted">ФОТ <span class="est">оценка</span></span></div></div>
+<div class="chat" style="margin-top:16px">
+<div class="msg g">Что упало вчера?</div>
+<div class="msg a">Выручка 182 400 ₽ (−9% к прошлому вторнику). Главная причина: бар −14 600 ₽, вечер 19–22 ч. Кофе на вынос +6%. Свекла подорожала на 18% → фудкост «Борща» 34%. Предлагаю поднять цену на 30 ₽.</div>
+<div class="sys">Пример ответа · данные условные</div>
+</div>
+</div>
+</div></section>
+
+<section class="sec-alt"><div class="wrap">
+<span class="eyebrow">Проблема</span>
+<h2>Отчёты в кассе есть, но решения принимаются «на глаз»</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card pain"><div class="num">25–35%</div><h3>Себестоимость ползёт</h3><p>Поставщики поднимают цены, техкарты и цены в меню не обновляются месяцами <span class="est">оценка</span>.</p></div>
+<div class="card pain"><div class="num">4–10%</div><h3>Списания фудкоста</h3><p>Заготовки и закупки делаются по памяти шефа, а не по прогнозу продаж <span class="est">оценка</span>.</p></div>
+<div class="card pain"><div class="num">25–35%</div><h3>ФОТ от выручки</h3><p>Переработки в будни и нехватка людей в пятницу. Накладные вбивают вручную часами <span class="est">оценка</span>.</p></div>
+</div>
+</div></section>
+
+<section id="modules"><div class="wrap">
+<span class="eyebrow">Модули</span>
+<h2>Шесть модулей. Подключайте по одному или пакетом</h2>
+<p class="lead">Каждый модуль работает отдельно. Начните с того, где больше всего теряете, остальное добавите позже.</p>
+<div class="mods">
+<div class="card mod"><div class="ico">📊</div><h3>ИИ-аналитик продаж</h3><p class="muted">Telegram-бот над данными кассы: «спроси свою выручку».</p><ul><li>Утренняя сводка владельцу</li><li>«Что упало вчера?» — ответ с причинами</li><li>ABC-анализ и menu engineering</li><li>Алерты об аномалиях: возвраты, скидки, провалы по часам</li></ul><p class="eff">+3–8% к чеку <span class="est">оценка</span></p><div class="pr">Внедрение <b>29 900 ₽</b> · <b>4 900 ₽</b>/мес · запуск 1–2 нед.</div></div>
+<div class="card mod"><div class="ico">🥕</div><h3>Контроль себестоимости</h3><p class="muted">Фудкост под контролем при каждом изменении цен поставщиков.</p><ul><li>Мониторинг цен закупки</li><li>Алерты по техкартам: блюдо вышло за порог</li><li>Рекомендации по ценам меню</li></ul><p class="eff">−1–3 п.п. фудкоста <span class="est">оценка</span></p><div class="pr">Внедрение <b>29 900 ₽</b> · <b>4 900 ₽</b>/мес · запуск 2 нед.</div></div>
+<div class="card mod"><div class="ico">📦</div><h3>Прогноз закупок и заготовок</h3><p class="muted">ИИ-прогноз продаж по дням и часам с учётом погоды и праздников.</p><ul><li>План заготовок на смену</li><li>Готовый заказ поставщику</li><li>Сверка прогноза с фактом</li></ul><p class="eff">−20–40% списаний <span class="est">оценка</span></p><div class="pr">Внедрение <b>39 900 ₽</b> · <b>6 900 ₽</b>/мес · запуск 3–4 нед.</div></div>
+<div class="card mod"><div class="ico">🧾</div><h3>OCR накладных</h3><p class="muted">Фото накладной → приходная накладная в iiko или r_keeper.</p><ul><li>Распознавание позиций, количества и цен</li><li>Сопоставление с номенклатурой</li><li>Подсветка расхождений и подорожаний</li></ul><p class="eff">−80% времени на приёмку <span class="est">оценка</span></p><div class="pr">Внедрение <b>24 900 ₽</b> · <b>3 900 ₽</b>/мес · запуск 1–2 нед.</div></div>
+<div class="card mod"><div class="ico">🗓️</div><h3>Графики смен</h3><p class="muted">ИИ-график по прогнозу трафика и бот для обмена сменами.</p><ul><li>Сколько людей нужно в каждый час</li><li>Обмен сменами в Telegram без звонков</li><li>Контроль переработок</li></ul><p class="eff">−5–12% ФОТ <span class="est">оценка</span></p><div class="pr">Внедрение <b>29 900 ₽</b> · <b>4 900 ₽</b>/мес · запуск 2–3 нед.</div></div>
+<div class="card mod"><div class="ico">🎥</div><h3>Видеоаналитика касс</h3><p class="muted">Партнёрское решение: подбор и настройка готовых систем (Trassir ActivePOS и др.).</p><ul><li>Сверка видео с чеками</li><li>Недопробития и «сливы» на кассе</li><li>Отчёт о подозрительных операциях</li></ul><p class="eff">Меньше потерь на кассе</p><div class="pr">Внедрение <b>от 30 000 ₽</b> + оборудование · <b>от 3 900 ₽</b>/мес · 2–4 нед.</div></div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="demo"><div class="wrap">
+<span class="eyebrow">Как это выглядит</span>
+<h2>Владелец получает решения, а не таблицы</h2>
+<div class="demo">
+<div class="phone"><div class="phone-top"><span class="ava">П</span><div><b>Подача.AI · Аналитик</b><br><span class="small muted">Telegram · утро, 9:00</span></div></div>
+<div class="chat">
+<div class="msg a">Доброе утро! Вчера: выручка 214 тыс. ₽, чеков 238, средний чек 899 ₽ (+4%).<br>⚠️ 3 возврата после закрытия смены на 5 700 ₽.<br>📦 Завтра прогноз +22% (суббота, +18°C): заготовьте сырников на 40 порций, а не 25.</div>
+<div class="msg g">Какие блюда убрать из меню?</div>
+<div class="msg a">«Собаки» по menu engineering: салат с уткой и тартар из тунца — низкая маржа и мало продаж. Тартар держит фудкост 41%. Предлагаю убрать его или поднять цену на 120 ₽.</div>
+<div class="sys">Пример диалога · данные условные</div>
+</div></div>
+<div class="card"><h3>Накладная → приход за минуту</h3><p class="muted small">Повар фотографирует накладную в Telegram, ИИ распознаёт и сверяет с прошлыми ценами.</p>
+<div class="ocr" style="margin-top:12px">
+<div class="row"><b>Позиция</b><b>Кол-во</b><b>Цена</b></div>
+<div class="row"><span>Говядина вырезка</span><span>12 кг</span><span class="warn">1 890 ₽ ↑ 7%</span></div>
+<div class="row"><span>Сливки 33%</span><span>10 л</span><span>420 ₽</span></div>
+<div class="row"><span>Картофель</span><span>40 кг</span><span>38 ₽</span></div>
+<div class="row"><span>Лосось охл.</span><span>5 кг</span><span class="warn">не найдено в номенклатуре</span></div>
+</div>
+<p class="small muted" style="margin-top:12px">Пример. После проверки бухгалтер нажимает «Провести» — документ появляется в iiko / r_keeper. Подорожание вырезки сразу попадает в контроль себестоимости.</p></div>
+</div>
+</div></section>
+
+<section id="price"><div class="wrap">
+<span class="eyebrow">Цены</span>
+<h2>Прозрачный прайс по каждому модулю</h2>
+<div class="tbl-wrap" style="margin-top:24px"><table class="op-tbl">
+<thead><tr><th>Модуль</th><th>Внедрение</th><th>Абонентка</th><th>Срок запуска</th><th>Эффект</th></tr></thead>
+<tbody>
+<tr><td>ИИ-аналитик продаж</td><td class="n">29 900 ₽</td><td class="n">4 900 ₽/мес</td><td>1–2 нед.</td><td>+3–8% к чеку <span class="est">оценка</span></td></tr>
+<tr><td>Контроль себестоимости (фудкост)</td><td class="n">29 900 ₽</td><td class="n">4 900 ₽/мес</td><td>2 нед.</td><td>−1–3 п.п. фудкоста <span class="est">оценка</span></td></tr>
+<tr><td>Прогноз закупок и заготовок</td><td class="n">39 900 ₽</td><td class="n">6 900 ₽/мес</td><td>3–4 нед.</td><td>−20–40% списаний <span class="est">оценка</span></td></tr>
+<tr><td>OCR накладных</td><td class="n">24 900 ₽</td><td class="n">3 900 ₽/мес</td><td>1–2 нед.</td><td>−80% времени на приёмку <span class="est">оценка</span></td></tr>
+<tr><td>Графики смен</td><td class="n">29 900 ₽</td><td class="n">4 900 ₽/мес</td><td>2–3 нед.</td><td>−5–12% ФОТ <span class="est">оценка</span></td></tr>
+<tr><td>Видеоаналитика касс (партнёрская)</td><td class="n">от 30 000 ₽ + оборудование</td><td class="n">от 3 900 ₽/мес</td><td>2–4 нед.</td><td>меньше потерь на кассе</td></tr>
+<tr><td>Аудит и оптимизация процессов</td><td class="n">49 900 ₽ (сеть от 150 000 ₽)</td><td class="n">—</td><td>2–3 нед.</td><td>база для всех ИИ-модулей</td></tr>
+</tbody></table></div>
+<div class="grid g3" style="margin-top:24px">
+<div class="card"><h3>Пакет «Рост»</h3><p class="muted">14 900 ₽/мес · внедрение 49 900 ₽</p><p>Включает ИИ-аналитика продаж, а также QR-заказ, ИИ-официанта и ИИ-администратора.</p></div>
+<div class="card plan hit"><span class="tag">Выгоднее для операционки</span><h3>Пакет «Про»</h3><p class="muted">34 900 ₽/мес · внедрение 129 900 ₽</p><p>Всё из «Роста» + фудкост, прогноз закупок, OCR накладных, графики смен, голосовой администратор и CRM-лояльность.</p></div>
+<div class="card"><h3>Пакет «Сеть»</h3><p class="muted">от 79 000 ₽/мес за 3 точки</p><p>Всё из «Про» + сводная аналитика по точкам, аудит процессов, HR-контур, персональный менеджер и SLA.</p></div>
+</div>
+<p class="note small muted" style="margin-top:12px">Подробности пакетов и скидки за оплату на 6 и 12 месяцев — в <a href="../index.html#pricing">общем прайсе</a>. НДС не облагается (УСН).</p>
+</div></section>
+
+<section class="sec-alt" id="calc"><div class="wrap">
+<span class="eyebrow">Пример расчёта</span>
+<h2>Сколько можно вернуть: прикиньте на своих цифрах</h2>
+<p class="lead">Консервативные коэффициенты: фудкост −1,5 п.п., списания −25%, ФОТ −2,5%. Это <b>примеры расчёта</b>, а не гарантия — реальный эффект фиксируем на пилоте.</p>
+<div class="ex">
+<div class="card">
+<div class="field"><label for="x-r">Выручка в месяц <output id="x-ro"></output></label><input type="range" id="x-r" min="500000" max="15000000" step="100000" value="2000000"></div>
+<div class="field"><label for="x-fc">Фудкост, % выручки <output id="x-fco"></output></label><input type="range" id="x-fc" min="20" max="45" step="1" value="30"></div>
+<div class="field"><label for="x-w">Списания, % фудкоста <output id="x-wo"></output></label><input type="range" id="x-w" min="2" max="12" step="1" value="6"></div>
+<div class="field"><label for="x-l">ФОТ, % выручки <output id="x-lo"></output></label><input type="range" id="x-l" min="15" max="45" step="1" value="30"></div>
+</div>
+<div class="card calc" aria-live="polite">
+<span class="est">пример расчёта</span>
+<div class="l" style="margin-top:10px"><span>Контроль себестоимости</span><b id="x-o1"></b></div>
+<div class="l"><span>Прогноз закупок (списания)</span><b id="x-o2"></b></div>
+<div class="l"><span>Графики смен</span><b id="x-o3"></b></div>
+<div class="l tot"><span>Эффект в месяц</span><b id="x-ot"></b></div>
+<div class="l"><span>Пакет «Про», абонентка</span><b>34 900 ₽</b></div>
+<div class="l tot"><span>Окупаемость внедрения 129 900 ₽</span><b id="x-pb"></b></div>
+<p class="small muted" style="margin-top:10px">Формулы: выручка × 1,5%; выручка × фудкост × списания × 25%; выручка × ФОТ × 2,5%. В «Про» входят ещё ИИ-официант, голосовой администратор и CRM — их эффект здесь не учтён.</p>
+<a class="btn btn-primary" href="../index.html#lead-sec">Проверить на моих данных</a>
+</div>
+</div>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Как запускаем</span>
+<h2>От аудита до первых решений за 2–4 недели</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card step"><h3>1. Бесплатный экспресс-аудит</h3><p class="muted">Смотрим выгрузку из кассы, техкарты и номенклатуру. Показываем, где теряются деньги.</p></div>
+<div class="card step"><h3>2. Подключение и чистка данных</h3><p class="muted">Подключаемся к iiko / r_keeper по API, при необходимости приводим в порядок номенклатуру и техкарты.</p></div>
+<div class="card step"><h3>3. Сводки, алерты, планы</h3><p class="muted">Бот в Telegram начинает присылать сводки, прогнозы и рекомендации. Раз в месяц сверяем эффект с фактом.</p></div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="faq"><div class="wrap">
+<span class="eyebrow">FAQ</span>
+<h2>Частые вопросы</h2>
+<details><summary>Нужно ли менять кассу или учётную систему?</summary><p>Нет. Работаем поверх iiko, r_keeper, Saby, Quick Resto, Poster. Данные читаем по API, накладные создаём в вашей системе.</p></details>
+<details><summary>У нас в iiko беспорядок в номенклатуре. Это проблема?</summary><p>Частая ситуация. Прогноз и фудкост работают только на чистых данных, поэтому предлагаем аудит и оптимизацию процессов (49 900 ₽): чистим номенклатуру и техкарты, пишем регламенты.</p></details>
+<details><summary>Насколько точно ИИ распознаёт накладные?</summary><p>Печатные УПД и ТОРГ-12 распознаются хорошо. Неуверенные позиции и новые товары система подсвечивает — документ проводит человек после проверки.</p></details>
+<details><summary>Откуда прогноз знает про погоду и праздники?</summary><p>Модель учитывает историю продаж по часам, календарь праздников и прогноз погоды. Первые 2–3 недели сверяем прогноз с фактом и донастраиваем.</p></details>
+<details><summary>Видеоаналитику делаете сами?</summary><p>Нет, это партнёрское направление: подбираем и настраиваем готовые решения (Trassir ActivePOS и др.), сверяем видео с чеками. Стоимость оборудования — отдельно.</p></details>
+<details><summary>Почему эффект помечен как оценка?</summary><p>Цифры — оценки по отраслевым данным и консервативным коэффициентам. Реальный результат зависит от заведения, поэтому фиксируем базовую линию до запуска и сравниваем с ней.</p></details>
+</div></section>
+
+<section class="final"><div class="wrap">
+<h2>Узнайте, сколько теряет ваша кухня</h2>
+<p class="lead">Бесплатный экспресс-аудит: посмотрим выгрузку из кассы и покажем 3 главные точки потерь — фудкост, списания и смены.</p>
+<div class="cta"><a class="btn btn-primary" href="../index.html#lead-sec">Получить бесплатный аудит</a><a class="btn btn-ghost" href="../index.html#services">Все услуги</a></div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="../index.html">Главная</a><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="../privacy.html">Политика ПДн</a><a href="../consent.html">Согласие на обработку ПДн</a><a href="../sitemap.xml">sitemap.xml</a></div></nav>
+<div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
+</div></footer>
+<script src="../assets/app.js"></script>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var f=function(n){return Math.round(n).toLocaleString('ru-RU').replace(/,/g,' ')+' ₽'};
+function upd(){
+var r=+$('x-r').value,fc=$('x-fc').value/100,w=$('x-w').value/100,l=$('x-l').value/100;
+$('x-ro').textContent=f(r);$('x-fco').textContent=$('x-fc').value+'%';$('x-wo').textContent=$('x-w').value+'%';$('x-lo').textContent=$('x-l').value+'%';
+var a=r*0.015,b=r*fc*w*0.25,c=r*l*0.025,t=a+b+c,net=t-34900;
+$('x-o1').textContent=f(a);$('x-o2').textContent=f(b);$('x-o3').textContent=f(c);$('x-ot').textContent=f(t);
+$('x-pb').textContent=net>0?'≈ '+(129900/net).toFixed(1).replace('.',',')+' мес':'не окупается при этих данных';
+}
+['x-r','x-fc','x-w','x-l'].forEach(function(i){$(i).addEventListener('input',upd)});upd();
+})();
+</script>
+</body>
+</html>

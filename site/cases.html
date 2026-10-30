@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Кейсы и цифры — Подача.AI</title>
+<meta name="description" content="Публичные кейсы цифровизации и ИИ в общепите России и мира с источниками и примеры расчёта эффекта Подача.AI для кофеен, кафе, ресторанов, доставки и сетей.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/a11y.css">
+<style>
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;margin-right:6px;vertical-align:middle}
+.tag-p{background:var(--ok-soft);color:var(--accent-2)}
+.tag-v{background:var(--accent-soft);color:var(--accent)}
+.tag-o{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.case-grid{display:grid;gap:16px;grid-template-columns:1fr}
+@media(min-width:720px){.case-grid{grid-template-columns:1fr 1fr}}
+@media(min-width:1040px){.case-grid{grid-template-columns:1fr 1fr 1fr}}
+.case[hidden]{display:none}
+.case{display:flex;flex-direction:column;gap:8px}
+.case .num{font-family:Manrope,Inter,sans-serif;font-weight:800;font-size:28px;line-height:1.1;color:var(--accent)}
+.case h3{margin:0;font-size:17px}
+.case p{margin:0}
+.case .lesson{font-size:14px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px;margin-top:auto}
+.case .srcs{font-size:13px;word-break:break-word}
+.case .srcs a{color:var(--muted)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.filters button{font:inherit;font-size:14px;padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--text);cursor:pointer;min-height:36px}
+.filters button[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.scn{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+.scn>.card{min-width:0;overflow-x:auto}
+@media(min-width:900px){.scn{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.calc{width:100%;table-layout:fixed;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+.calc td{padding:6px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.calc td:last-child{text-align:right;white-space:normal;padding-left:12px;width:42%}
+.calc tr.sum td{font-weight:700;border-bottom:none;padding-top:10px}
+.calc tr.cost td{color:var(--muted)}
+.stamp{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:2px 8px}
+.res{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px}
+.res div{flex:1 1 120px;background:var(--surface-2);border-radius:12px;padding:10px 12px}
+.res b{display:block;font-family:Manrope,Inter,sans-serif;font-size:20px}
+.res span{font-size:13px;color:var(--muted)}
+.cta-band{background:var(--accent-soft);border-radius:var(--r);padding:28px 20px;text-align:center}
+.cta-band h2{margin-top:0}
+.cta-band .btns{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:16px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:14px;color:var(--muted)}
+.lessons li{margin-bottom:8px}
+</style>
+</head>
+<body>
+<a class="skip" href="#top">К содержимому</a>
+<header class="hdr"><div class="wrap">
+<a class="logo" href="index.html">Подача<span>.AI</span></a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="services/qr-menu.html">QR-меню и ИИ-официант</a><a href="services/ai-admin.html">ИИ-администратор</a><a href="services/marketing.html">Маркетинг и отзывы</a><a href="services/operations.html">Операционка и аналитика</a><a href="services/staff.html">Персонал</a><a href="services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="segments/restaurants.html">Рестораны</a><a href="segments/coffee.html">Кофейни и пекарни</a><a href="segments/bars.html">Бары и кальянные</a><a href="segments/delivery.html">Фастфуд и доставка</a><a href="segments/hotels.html">Отели</a></div></details><a href="pricing.html">Цены</a><a href="demo.html">Демо</a><a href="cases.html" aria-current="page">Кейсы</a><a href="market.html">Рынок</a>
+</nav>
+<a class="btn btn-primary btn-sm" href="index.html#lead-sec">Бесплатный аудит</a>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
+</div></header>
+
+<main id="top" tabindex="-1">
+<section class="hero" style="padding-bottom:32px"><div class="wrap">
+<span class="eyebrow">Кейсы и цифры · октябрь 2026</span>
+<h1>Что уже дала цифровизация заведениям и сколько это может дать вам</h1>
+<p class="lead">Сначала публичные кейсы России и мира со ссылками на источники. Затем наши примеры расчёта для кофейни, кафе, ресторана, доставки и сети. Мы честно разделяем факты и маркетинг вендоров, а все наши цифры помечаем как <span class="est">пример расчёта</span>.</p>
+<div class="legend"><span><span class="tag tag-p">П</span>опубликовано компанией или СМИ</span><span><span class="tag tag-v">В</span>заявление вендора, не аудит</span><span><span class="tag tag-o">О</span>наша оценка</span></div>
+<div class="toc" style="margin-top:16px"><a href="#public">Публичные кейсы</a><a href="#lessons">Что из этого следует</a><a href="#scenarios">Примеры расчёта по сегментам</a><a href="#honest">Как мы считаем</a><a href="#cta">Получить расчёт</a></div>
+</div></section>
+
+<section style="padding-top:8px"><div class="wrap">
+<div class="kpis">
+<div class="kpi"><b>&gt;85%</b><span>розничных продаж Domino's в США идут через цифровые каналы (2023) <span class="tag tag-p">П</span></span></div>
+<div class="kpi"><b>33%</b><span>транзакций Starbucks в собственных точках США через Mobile Order к Q3 FY2026 <span class="tag tag-p">П</span></span></div>
+<div class="kpi"><b>+7% / −19%</b><span>выручка и закуп шаурма-точки в РФ за 3 месяца после внедрения учёта <span class="tag tag-p">П</span></span></div>
+<div class="kpi"><b>576 ₽</b><span>средний чек в РФ за 8 мес. 2025 (+12%), при этом покупок −3% (Т-Бизнес) <span class="tag tag-p">П</span></span></div>
+</div>
+</div></section>
+
+<section id="public"><div class="wrap">
+<h2>Публичные кейсы рынка</h2>
+<p class="muted">18 кейсов из открытых источников. Громкие цифры по голосовому ИИ — в основном маркетинг вендоров, мы их так и помечаем. Ссылки проверены 30.10.2026; часть данных компании не раскрывают.</p>
+<div class="filters" role="group" aria-label="Фильтр кейсов">
+<button type="button" data-f="all" aria-pressed="true">Все</button>
+<button type="button" data-f="ru" aria-pressed="false">Россия</button>
+<button type="button" data-f="menu" aria-pressed="false">Меню и заказ</button>
+<button type="button" data-f="voice" aria-pressed="false">ИИ-голос и звонки</button>
+<button type="button" data-f="ops" aria-pressed="false">Операции и кухня</button>
+</div>
+<div class="case-grid" id="cases">
+
+<article class="card case" data-t="menu"><span class="num">+20–30%</span><h3>McDonald's — киоски самообслуживания</h3><p>Гости заказывают на киоске больше: визуальное меню с фото и допами поднимает чек относительно кассы.</p><p><span class="tag tag-p">П</span><span class="tag tag-v">В</span>заявления руководства и отраслевых СМИ</p><p class="lesson">Для нас: QR-меню с фото и допродажами — недорогой аналог киоска.</p><p class="srcs">Источник: investor.mcdonalds.com (отчётность 2024–2025)</p></article>
+
+<article class="card case" data-t="menu"><span class="num">&gt;85%</span><h3>Domino's — цифровые каналы</h3><p>Более 85% розничных продаж в США в 2023 году прошли через цифровые каналы (в 2020 — около 75%).</p><p><span class="tag tag-p">П</span>отчётность для инвесторов</p><p class="lesson">Для нас: если цифровой канал удобнее телефона, он становится основным.</p><p class="srcs"><a href="https://ir.dominos.com/node/23351/pdf" rel="noopener" target="_blank">ir.dominos.com</a></p></article>
+
+<article class="card case" data-t="menu"><span class="num">31% → 33%</span><h3>Starbucks — Deep Brew и Mobile Order</h3><p>ИИ-рекомендации, прогноз персонала и запасов. Mobile Order &amp; Pay — 31% транзакций за FY2025 и 33% к Q3 FY2026 (собственные точки США).</p><p><span class="tag tag-p">П</span>Digital IR Dashboard</p><p class="lesson">Для нас: персональные рекомендации и лояльность повышают частоту визитов.</p><p class="srcs"><a href="https://s203.q4cdn.com/326826266/files/doc_financials/2025/q4/Q4-FY25-Digital-IR-Dashboard.pdf" rel="noopener" target="_blank">FY25</a> · <a href="https://s203.q4cdn.com/326826266/files/doc_financials/2026/q3/Q3-FY26-Digital-IR-Dashboard.pdf" rel="noopener" target="_blank">Q3 FY26</a></p></article>
+
+<article class="card case" data-t="voice"><span class="num">~22 с</span><h3>Wendy's FreshAI — голосовой ИИ на драйв-тру</h3><p>Заказ быстрее примерно на 22 секунды, точность без участия человека — 86–99%. 36 точек к 10.2024, план — до ~600 к концу 2025 (выполнение не подтверждено).</p><p><span class="tag tag-p">П</span>Fortune, Business Insider</p><p class="lesson">Для нас: ИИ снимает с персонала приём заказов. В РФ аналог — бот на телефоне и в мессенджерах.</p><p class="srcs"><a href="https://fortune.com/2024/10/15/wendy-google-ai-drive-thru-expansion/" rel="noopener" target="_blank">fortune.com</a></p></article>
+
+<article class="card case" data-t="voice"><span class="num">500+</span><h3>Taco Bell — Voice AI и пересмотр сценариев</h3><p>Голосовой ИИ работал в 500+ драйв-тру, затем компания пересмотрела сценарии: в загруженных точках с очередями лучше работает человек.</p><p><span class="tag tag-p">П</span>WSJ / TechCrunch, 08.2025</p><p class="lesson">Для нас: ИИ должен передавать сложное человеку. У нас это заложено в каждый бот.</p><p class="srcs"><a href="https://gigazine.net/gsc_news/en/20250831-taco-bell-rethinks-voice-ai-drive-through" rel="noopener" target="_blank">gigazine.net</a></p></article>
+
+<article class="card case" data-t="voice"><span class="num">+35%</span><h3>Hostie AI — телефонные заказы</h3><p>+35% выручки take-out на базе более 500 тыс. звонков; в кейсе по Сан-Франциско пропущенных звонков на 80% меньше.</p><p><span class="tag tag-v">В</span>кейс вендора</p><p class="lesson">Для нас: главный эффект — перестать терять звонки в час пик.</p><p class="srcs"><a href="https://hostie.ai/resources/ai-voice-assistant-reduces-missed-calls-80-percent-san-francisco-restaurants-case-study" rel="noopener" target="_blank">hostie.ai</a></p></article>
+
+<article class="card case" data-t="voice"><span class="num">100 млн</span><h3>SoundHound — ИИ на телефоне в сетях США</h3><p>100 млн обработанных взаимодействий по телефонным заказам. Вендор также заявляет ROI «до 760%» — цифра не проверена.</p><p><span class="tag tag-p">П</span>пресс-релиз · <span class="tag tag-v">В</span>ROI</p><p class="lesson">Для нас: технология зрелая, но ROI считаем на своих данных.</p><p class="srcs"><a href="https://secure.businesswire.com/news/home/20241031567411/en/" rel="noopener" target="_blank">businesswire.com</a></p></article>
+
+<article class="card case" data-t="voice menu"><span class="num">+37%</span><h3>Maple — апселл голосом</h3><p>+37% к стоимости заказа за счёт того, что ИИ предлагает допы каждый раз. Dine Brands объявила Voice AI в 06.2025, Marco's Pizza тестирует в 50 точках.</p><p><span class="tag tag-v">В</span>бенчмарк вендора</p><p class="lesson">Для нас: системный апселл важнее «гениальных» рекомендаций.</p><p class="srcs"><a href="https://www.maple.inc/blog/voice-ai-transforming-restaurants-2025" rel="noopener" target="_blank">maple.inc</a></p></article>
+
+<article class="card case" data-t="ops"><span class="num">Edge-ИИ</span><h3>KFC Americana — ИИ в операциях</h3><p>ИИ на устройствах в ресторанах для ускорения обслуживания (Ближний Восток).</p><p><span class="tag tag-p">П</span><span class="tag tag-v">В</span>кейс Intel, 07.2025</p><p class="lesson">Для нас: операционный ИИ уже применяют крупные сети.</p><p class="srcs"><a href="https://www.intel.com/content/dam/www/central-libraries/us/en/documents/2025-07/kfc-americana-case-study.pdf" rel="noopener" target="_blank">intel.com (PDF)</a></p></article>
+
+<article class="card case" data-t="menu"><span class="num">~10 с</span><h3>sunday — QR-оплата за столом</h3><p>Оплата счёта за секунды, чаевые выше, стол освобождается быстрее (вендор называет 10–15 минут экономии).</p><p><span class="tag tag-v">В</span>данные вендора</p><p class="lesson">Для нас <span class="tag tag-o">О</span>: в кафе на 40 мест это +5–10% посадок в пик.</p><p class="srcs"><a href="https://sundayapp.com/en-gb/qr-code-ordering-trends-for-restaurants-in-2025/" rel="noopener" target="_blank">sundayapp.com</a></p></article>
+
+<article class="card case" data-t="ru ops"><span class="num">+7% · −19%</span><h3>Шаурма-точка (Россия)</h3><p>За 3 месяца после внедрения учёта и аналитики выручка выросла на 7%, затраты на закуп снизились на 19%.</p><p><span class="tag tag-p">П</span>Retail.ru</p><p class="lesson">Для нас: малым точкам больше всего дают учёт, техкарты и контроль списаний.</p><p class="srcs"><a href="https://www.retail.ru/cases/kak-tochka-s-shaurmoy-uvelichila-vyruchku-na-7-i-snizila-zatraty-na-zakup-na-19-za-3-mesyatsa/" rel="noopener" target="_blank">retail.ru</a></p></article>
+
+<article class="card case" data-t="ru ops"><span class="num">6 мес</span><h3>«Кофемания» — переход Aloha → iiko</h3><p>После ухода Aloha сеть перешла на iiko и тиражировала систему на все точки за 6 месяцев. Цифр по выручке нет.</p><p><span class="tag tag-p">П</span>Global CIO</p><p class="lesson">Для нас: iiko — стандарт рынка, наши модули работают поверх него.</p><p class="srcs"><a href="https://globalcio.ru/upload/main/ba4/aksymyvkxeikpjea02brmt2wjk7va04k.pdf" rel="noopener" target="_blank">globalcio.ru (PDF)</a></p></article>
+
+<article class="card case" data-t="ru voice"><span class="num">Бот</span><h3>iikoService — ИИ в поддержке</h3><p>Часть типовых обращений закрывает ИИ-бот без участия оператора.</p><p><span class="tag tag-p">П</span>Sostav.ru</p><p class="lesson">Для нас: бот для типовых вопросов гостей (меню, бронь, режим работы) — понятный продукт.</p><p class="srcs"><a href="https://www.sostav.ru/blogs/250077/58961" rel="noopener" target="_blank">sostav.ru</a></p></article>
+
+<article class="card case" data-t="ru menu"><span class="num">Киоски</span><h3>«Вкусно — и точка»</h3><p>Киоски и приложение сохранены после ребрендинга 2022 года и остаются основным каналом заказа в залах.</p><p><span class="tag tag-p">П</span>публичные заявления компании (требуют уточнения)</p><p class="lesson">Для нас: гости в РФ привыкли заказывать сами.</p></article>
+
+<article class="card case" data-t="ru ops"><span class="num">Dodo IS</span><h3>«Додо Пицца» — своя IT-платформа</h3><p>Dodo IS управляет заказами, сменами и кухней; компания публикует выручку по пиццериям.</p><p><span class="tag tag-p">П</span>dodobrands.io</p><p class="lesson">Для нас: прозрачная аналитика по точкам и автоматизация смен — эталон для франшиз.</p></article>
+
+<article class="card case" data-t="ru"><span class="num">+12%</span><h3>Рынок РФ — данные Т-Бизнеса</h3><p>Средний чек за 8 мес. 2025 вырос на 12% до 576 ₽, покупок стало на 3% меньше, оборот +8%. Доля QR-платежей растёт.</p><p><span class="tag tag-p">П</span>New Retail</p><p class="lesson">Для нас: рынок растёт за счёт цены, а не трафика. Важно удерживать гостя и поднимать чек.</p><p class="srcs"><a href="https://new-retail.ru/novosti/retail/oborot_rynka_obshchepita_rossii_s_nachala_goda_vyros_na_8/" rel="noopener" target="_blank">new-retail.ru</a></p></article>
+
+<article class="card case" data-t="ops"><span class="num">Маржа ↑</span><h3>Sweetgreen Infinite Kitchen</h3><p>В точках с роботизированной кухней выше пропускная способность и маржа ресторана.</p><p><span class="tag tag-p">П</span>отчётность 2024–2025</p><p class="lesson">Для нас: для малого HoReCa в РФ пока дорого, но ИИ-планирование доступно уже сейчас.</p></article>
+
+<article class="card case" data-t="ops"><span class="num">×2</span><h3>Chipotle — Autocado и Hyphen</h3><p>Подготовка гуакамоле в тесте примерно вдвое быстрее; ИИ-планирование смен.</p><p><span class="tag tag-p">П</span>сообщения компании</p><p class="lesson">Для нас: из всей кухонной автоматизации малым точкам сейчас доступно только планирование смен.</p></article>
+
+</div>
+</div></section>
+
+<section id="lessons"><div class="wrap">
+<h2>Что из этого следует для вашего заведения</h2>
+<p class="muted">Консервативные ориентиры, которые мы используем вместо вендорских «+30%». Это <span class="est">оценка</span>, и мы проверяем её на пилоте.</p>
+<div class="grid g2">
+<div class="card"><h3>Чек и оборачиваемость</h3><ul class="lessons">
+<li>QR-меню с фото, допами и рекомендациями: <b>+5–15% к чеку</b>.</li>
+<li>QR-оплата и вызов официанта: <b>+5–10% к оборачиваемости</b> столов в пик.</li>
+<li>Аналитика меню (ABC, menu engineering): <b>+3–8% к чеку</b>.</li></ul></div>
+<div class="card"><h3>Затраты и сервис</h3><ul class="lessons">
+<li>ИИ-бот на телефоне и в мессенджерах: <b>−50–80% пропущенных обращений</b>, экономия 0,5–1 ставки администратора.</li>
+<li>Учёт, техкарты, контроль списаний: <b>−10–20% к закупу</b> (подтверждается кейсом из РФ).</li>
+<li>ИИ-ответы на отзывы: <b>+0,1–0,3 к рейтингу</b> за 3–6 месяцев, без накруток.</li></ul></div>
+</div>
+</div></section>
+
+<section id="scenarios"><div class="wrap">
+<h2>Примеры расчёта по сегментам</h2>
+<p class="muted">Это не кейсы клиентов, а модели на типовых цифрах заведения. Цены — из нашего <a href="index.html#pricing">прайса</a>. Ваши цифры подставим на бесплатном аудите или в <a href="index.html#roi-sec">калькуляторе</a>.</p>
+<div class="scn">
+
+<div class="card"><span class="stamp">Пример расчёта</span><h3 style="margin-top:10px">Кофейня у метро</h3><p class="muted small">Пакет «Старт» + модуль «CRM-лояльность и рассылки». Вводные: 3 000 гостей в базе, чек 450 ₽.</p>
+<table class="calc"><tbody>
+<tr><td>Возврат «уснувших» гостей и триггеры на день рождения</td><td>+40–80 тыс. ₽ выручки</td></tr>
+<tr><td>Ответы на отзывы на 1 площадке, рост рейтинга</td><td>+0,1–0,3 ★ за 3–6 мес <span class="est">оценка</span></td></tr>
+<tr class="cost"><td>Абонентка: «Старт» 2 990 ₽ + CRM 12 900 ₽</td><td>15 890 ₽/мес</td></tr>
+<tr class="cost"><td>Внедрение: 14 900 ₽ + 24 900 ₽</td><td>39 800 ₽</td></tr>
+<tr class="sum"><td>Доп. выручка к абонентке</td><td>×2,5–5</td></tr>
+</tbody></table>
+<div class="res"><div><b>1–4 мес</b><span>окупаемость внедрения по валовой прибыли (фудкост 35%)</span></div><div><b>+9–18%</b><span>к выручке 450 тыс. ₽ при 1 000 чеков/мес</span></div></div>
+<p class="small"><a href="segments/coffee.html">Подробнее о решениях для кофеен →</a></p></div>
+
+<div class="card"><span class="stamp">Пример расчёта</span><h3 style="margin-top:10px">Кафе на 60 мест</h3><p class="muted small">Пакет «Рост». Вводные: выручка 3 млн ₽/мес, 200 броней/мес, средний чек брони 3 000 ₽, фудкост 35%.</p>
+<table class="calc"><tbody>
+<tr><td>ИИ-официант: 30% гостей пользуются, их чек +8%</td><td>+72 000 ₽</td></tr>
+<tr><td>ИИ-администратор: +10% броней (ночь и час пик)</td><td>+60 000 ₽</td></tr>
+<tr><td>Валовая прибыль с прироста (65%)</td><td>≈ 85 800 ₽</td></tr>
+<tr class="cost"><td>Абонентка «Рост»</td><td>−14 900 ₽/мес</td></tr>
+<tr class="sum"><td>Чистый эффект</td><td>≈ 70 900 ₽/мес</td></tr>
+</tbody></table>
+<div class="res"><div><b>&lt; 1 мес</b><span>окупаемость внедрения 49 900 ₽</span></div><div><b>9 900 ₽</b><span>пилот на 30 дней, идёт в зачёт внедрения</span></div></div>
+<p class="small">Не учтено: экономия на эквайринге СБП (0,4–0,7% вместо 1,6–2,5%) и время официантов. <a href="segments/restaurants.html">Решения для кафе и ресторанов →</a></p></div>
+
+<div class="card"><span class="stamp">Пример расчёта</span><h3 style="margin-top:10px">Ресторан с высокой загрузкой</h3><p class="muted small">Пакет «Про». Вводные: выручка 6 млн ₽/мес, фудкост 32%, 600 звонков/мес.</p>
+<table class="calc"><tbody>
+<tr><td>Контроль фудкоста и прогноз закупок: −1,5 п.п.</td><td>+90 000 ₽</td></tr>
+<tr><td>Голосовой администратор: 600 звонков × 30% пропущено × 20% возврата × 4 000 ₽ × 30% маржи</td><td>+43 200 ₽</td></tr>
+<tr class="cost"><td>Абонентка «Про» (300 минут включены)</td><td>−34 900 ₽/мес</td></tr>
+<tr class="sum"><td>Чистый эффект</td><td>≈ 98 300 ₽/мес</td></tr>
+</tbody></table>
+<div class="res"><div><b>≈ 1,3 мес</b><span>окупаемость внедрения 129 900 ₽</span></div><div><b>−80%</b><span>времени на приёмку накладных <span class="est">оценка</span></span></div></div>
+<p class="small">Минуты сверх 300 — 12 ₽/мин. <a href="services/operations.html">Операционные модули →</a></p></div>
+
+<div class="card"><span class="stamp">Пример расчёта</span><h3 style="margin-top:10px">Доставка и фастфуд</h3><p class="muted small">Модуль «Сайт заведения» с заказом и POS. Вводные: 400 заказов/мес переходят с агрегатора на свой сайт, чек 1 000 ₽, комиссия агрегатора 25%.</p>
+<table class="calc"><tbody>
+<tr><td>Экономия на комиссии: 400 × 1 000 ₽ × 25%</td><td>+100 000 ₽</td></tr>
+<tr class="cost"><td>Хостинг в РФ и поддержка</td><td>−1 990 ₽/мес</td></tr>
+<tr class="cost"><td>Внедрение (сайт с заказом и POS)</td><td>119 900 ₽</td></tr>
+<tr class="sum"><td>Чистый эффект</td><td>≈ 98 000 ₽/мес</td></tr>
+</tbody></table>
+<div class="res"><div><b>≈ 1,2 мес</b><span>окупаемость</span></div><div><b>Своя база</b><span>гостей для повторных заказов</span></div></div>
+<p class="small">Расходы на продвижение сайта не включены. <a href="segments/delivery.html">Решения для доставки →</a></p></div>
+
+<div class="card"><span class="stamp">Пример расчёта</span><h3 style="margin-top:10px">Сеть из 3 точек</h3><p class="muted small">Пакет «Сеть». Вводные: ФОТ 1,2 млн ₽/мес на точку (3,6 млн ₽ по сети).</p>
+<table class="calc"><tbody>
+<tr><td>Графики смен по прогнозу трафика: −5% ФОТ</td><td>+180 000 ₽</td></tr>
+<tr><td>Наставник: ввод новичка за 1–1,5 нед вместо 2–3</td><td>не учтено</td></tr>
+<tr class="cost"><td>Абонентка «Сеть» за 3 точки</td><td>−79 000 ₽/мес</td></tr>
+<tr class="sum"><td>Чистый эффект только по ФОТ</td><td>≈ 101 000 ₽/мес</td></tr>
+</tbody></table>
+<div class="res"><div><b>≈ 2,9 мес</b><span>окупаемость внедрения 290 000 ₽</span></div><div><b>−5–12%</b><span>ФОТ — диапазон оценки</span></div></div>
+<p class="small">С 4-й точки +19 900 ₽/мес и 70 000 ₽ за внедрение. <a href="services/staff.html">HR-модули →</a></p></div>
+
+<div class="card"><span class="stamp">Пример расчёта</span><h3 style="margin-top:10px">Бар или кальянная</h3><p class="muted small">Модули «ИИ-администратор бронирований» и «Центр отзывов». Вводные: 150 броней/мес, средний чек компании 4 000 ₽, маржа 30%.</p>
+<table class="calc"><tbody>
+<tr><td>+15% броней за счёт ответа 24/7: 22 брони × 4 000 ₽ × 30%</td><td>+26 400 ₽</td></tr>
+<tr class="cost"><td>Абонентка: 5 900 ₽ + 3 900 ₽</td><td>−9 800 ₽/мес</td></tr>
+<tr class="cost"><td>Внедрение: 34 900 ₽ + 0 ₽</td><td>34 900 ₽</td></tr>
+<tr class="sum"><td>Чистый эффект</td><td>≈ 16 600 ₽/мес</td></tr>
+</tbody></table>
+<div class="res"><div><b>≈ 2,1 мес</b><span>окупаемость</span></div><div><b>100%</b><span>отзывов с ответом</span></div></div>
+<p class="small">Продажу алкоголя и табака бот не рекламирует. <a href="segments/bars.html">Решения для баров →</a></p></div>
+
+</div>
+</div></section>
+
+<section id="honest"><div class="wrap">
+<h2>Как мы считаем</h2>
+<div class="grid g2">
+<div class="card"><h3>Без вендорских «+30%»</h3><p>Берём нижнюю половину диапазонов из публичных кейсов и считаем эффект по валовой прибыли, а не по выручке. Если цифра — маркетинг вендора, мы так и пишем.</p></div>
+<div class="card"><h3>Проверяем на пилоте</h3><p>Пилот 30 дней за 9 900 ₽: в договоре фиксируем цели и метрики «до/после». Российских кейсов с цифрами мало, поэтому собираем собственные на первых клиентах.</p></div>
+</div>
+<p class="note muted small" style="margin-top:16px">Все расчёты на этой странице — примеры расчёта на типовых вводных, а не обещание результата и не публичная оферта. Фактический эффект зависит от трафика, меню, команды и исходных данных в POS.</p>
+</div></section>
+
+<section id="cta"><div class="wrap">
+<div class="cta-band">
+<h2>Посчитаем на ваших цифрах — бесплатно</h2>
+<p class="lead" style="margin:0 auto;max-width:640px">Пришлите выручку, чек и число мест. За 1–2 дня покажем, какие модули окупятся у вас первыми, и сколько это стоит.</p>
+<div class="btns"><a class="btn btn-primary" href="index.html#lead-sec">Получить расчёт</a><a class="btn btn-ghost" href="index.html#roi-sec">Открыть калькулятор</a></div>
+</div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="services/qr-menu.html">QR-меню и ИИ-официант</a><a href="services/ai-admin.html">ИИ-администратор</a><a href="services/marketing.html">Маркетинг и отзывы</a><a href="services/operations.html">Операционка и аналитика</a><a href="services/staff.html">Персонал</a><a href="services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="segments/restaurants.html">Рестораны</a><a href="segments/coffee.html">Кофейни и пекарни</a><a href="segments/bars.html">Бары и кальянные</a><a href="segments/delivery.html">Фастфуд и доставка</a><a href="segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="index.html">Главная</a><a href="pricing.html">Цены</a><a href="demo.html">Демо</a><a href="cases.html">Кейсы</a><a href="market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="privacy.html">Политика ПДн</a><a href="consent.html">Согласие на обработку ПДн</a><a href="sitemap.xml">sitemap.xml</a></div></nav>
+<div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
+</div></footer>
+<script src="assets/app.js"></script>
+<script>
+(function(){var bs=document.querySelectorAll('.filters button'),cs=document.querySelectorAll('#cases .case');
+bs.forEach(function(b){b.addEventListener('click',function(){var f=b.dataset.f;bs.forEach(function(x){x.setAttribute('aria-pressed',x===b)});
+cs.forEach(function(c){c.hidden=!(f==='all'||c.dataset.t.split(' ').indexOf(f)>-1)})})})})();
+</script>
+</body>
+</html>
