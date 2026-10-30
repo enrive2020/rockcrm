@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QR-меню и ИИ для кофеен и пекарен — Подача.AI</title>
+<meta name="description" content="Решения для кофеен и пекарен: QR-меню, Wallet-лояльность и рассылки, ответы на отзывы, прогноз выпечки и списаний. Пакет «Старт» от 2 990 ₽/мес, 14 дней бесплатно.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../assets/a11y.css">
+<style>
+.cf-kit{display:flex;flex-direction:column;gap:6px}
+.cf-kit .pr{margin-top:auto;padding-top:10px;border-top:1px dashed rgba(127,127,127,.3);font-weight:600}
+.cf-tag{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:99px;border:1px solid rgba(127,127,127,.35);margin-right:4px}
+.cf-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid rgba(127,127,127,.2)}
+.cf-row:last-child{border-bottom:0;font-weight:700}
+.cf-row span:last-child{text-align:right;white-space:nowrap}
+.cf-total{font-size:1.6rem;font-weight:800;font-family:Manrope,Inter,sans-serif}
+.cf-switch{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.cf-switch button{font:inherit;padding:8px 14px;border-radius:99px;border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;cursor:pointer}
+.cf-switch button[aria-pressed="true"]{background:var(--accent,#e8590c);border-color:transparent;color:var(--on-accent,#fff)}
+.cf-day{display:grid;grid-template-columns:64px 1fr;gap:10px;padding:8px 0;border-bottom:1px dashed rgba(127,127,127,.25)}
+.cf-day b{font-variant-numeric:tabular-nums}
+.sticky-cta{position:sticky;bottom:12px;z-index:5;display:none;margin:0 16px}
+@media (max-width:720px){.sticky-cta{display:block}.sticky-cta .btn{width:100%;justify-content:center}.cf-total{font-size:1.35rem}}
+</style>
+</head>
+<body>
+<a class="skip" href="#top">К содержимому</a>
+<header class="hdr"><div class="wrap">
+<a class="logo" href="../index.html">Подача<span>.AI</span></a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html" aria-current="page">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div></details><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Рынок</a>
+</nav>
+<a class="btn btn-primary btn-sm" href="../index.html#lead-sec">Бесплатный аудит</a>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
+</div></header>
+
+<main id="top" tabindex="-1">
+<section class="hero"><div class="wrap hero-grid">
+<div>
+<span class="eyebrow">Кофейни · пекарни · to-go · мини-сети 2–15 точек</span>
+<h1>Возвращаем гостей в кофейню и сокращаем списания выпечки</h1>
+<p class="lead">Трафик в кофейнях падает, а зерно дорожает. Мы подключаем QR-меню, электронную карту лояльности, ответы на отзывы и ИИ-прогноз выпечки поверх вашей кассы. Старт за 3–5 дней, от 2 990 ₽ в месяц.</p>
+<div class="cta"><a class="btn btn-primary" href="../index.html#lead-sec">Бесплатный экспресс-аудит за 48 часов</a><a class="btn btn-ghost" href="#calc">Посчитать эффект</a></div>
+<div class="badges"><span class="badge">iiko · Saby · Quick Resto · Poster · r_keeper</span><span class="badge">«Старт» 14 дней бесплатно</span><span class="badge">Данные в РФ, 152-ФЗ</span></div>
+</div>
+<div class="hero-card" aria-label="Пример утренней сводки для пекарни">
+<p class="small muted" style="margin:0 0 8px">Утренняя сводка в Telegram · <span class="est">пример</span></p>
+<div class="cf-day"><b>07:00</b><span>Прогноз на сегодня: круассаны 64 шт. (вчера продано 58, дождь, вторник)</span></div>
+<div class="cf-day"><b>07:00</b><span>Синнабоны: испечь 22 вместо 30, во вторник остаток в среднем 9 шт.</span></div>
+<div class="cf-day"><b>19:30</b><span>Осталось 11 позиций: запустить вечернюю скидку −30% и пуш в Wallet-карту?</span></div>
+<div class="cf-day" style="border:0"><b>21:00</b><span>Новый отзыв 3★ на 2ГИС: ответ подготовлен, нужен ваш ок.</span></div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="pains"><div class="wrap">
+<span class="eyebrow">Что происходит с рынком</span>
+<h2>Чек растёт, гостей меньше</h2>
+<p class="muted">Данные Платформы ОФД и открытых источников за 2025 год, подробнее в <a href="../market.html">анализе рынка</a>.</p>
+<div class="grid g3" style="margin-top:24px">
+<div class="card pain"><div class="num">−7,3%</div><h3>Покупок меньше</h3><p>За январь–октябрь 2025 число покупок в кофейнях снизилось, оборот вырос только за счёт чека. Гостя нужно возвращать.</p></div>
+<div class="card pain"><div class="num">463 ₽</div><h3>Средний чек (+17%)</h3><p>Чашка стоит в среднем 213 ₽ (+15%). Дальше поднимать цены опасно: рядом сети с фиксированной ценой.</p></div>
+<div class="card pain"><div class="num">+25–29%</div><h3>Зерно дороже</h3><p>Техкарты и цены приходится пересчитывать часто, а печатное меню каждый раз переделывать дорого.</p></div>
+<div class="card pain"><div class="num">5–12%</div><h3>Списания выпечки</h3><p>У пекарен-кофеен выпечка уходит в мусор без прогноза по дням и часам <span class="est">оценка</span>.</p></div>
+<div class="card pain"><div class="num">10–20%</div><h3>Уходят из очереди</h3><p>В утренний пик 8–10 часов часть гостей не готова ждать <span class="est">оценка</span>. Помогает меню на телефоне и быстрый выбор.</p></div>
+<div class="card pain"><div class="num">0</div><h3>Базы гостей нет</h3><p>Гость платит картой анонимно, бумажные штампы теряются. Рассылать акции некому.</p></div>
+</div>
+</div></section>
+
+<section id="kit"><div class="wrap">
+<span class="eyebrow">Набор услуг</span>
+<h2>Что подключаем кофейне и пекарне</h2>
+<p class="muted">Цены из общего прайса. Модули можно докупать к любому пакету.</p>
+<div class="grid g3" style="margin-top:24px">
+<div class="card cf-kit"><div><span class="cf-tag">кофейня</span><span class="cf-tag">пекарня</span></div><h3>QR-меню</h3><p>Меню на телефоне гостя с фото, стоп-лист из кассы. Сезонный тыквенный латте или новая цена появляются за минуту, без перепечатки.</p><p class="pr">9 900 ₽ + 1 490 ₽/мес · входит в «Старт»</p></div>
+<div class="card cf-kit"><div><span class="cf-tag">кофейня</span><span class="cf-tag">пекарня</span></div><h3>Центр отзывов</h3><p>Ответы на Яндекс Картах и 2ГИС в тоне бренда, алерт о негативе в Telegram за 5 минут. Экономит владельцу 3–5 часов в неделю <span class="est">оценка</span>.</p><p class="pr">3 900 ₽/мес · 1 площадка входит в «Старт»</p></div>
+<div class="card cf-kit"><div><span class="cf-tag">кофейня</span></div><h3>CRM-лояльность и рассылки</h3><p>Электронная карта вместо бумажных штампов, сбор базы через QR, триггеры «давно не был» и «день рождения», журнал согласий по 38-ФЗ и 152-ФЗ.</p><p class="pr">24 900 ₽ + 12 900 ₽/мес</p></div>
+<div class="card cf-kit"><div><span class="cf-tag">пекарня</span></div><h3>Прогноз выпечки и заготовок</h3><p>ИИ-прогноз продаж по дням и часам с учётом погоды и праздников. План выпечки на утро и сигнал на вечернюю скидку. Списания −20–40% <span class="est">оценка</span>.</p><p class="pr">39 900 ₽ + 6 900 ₽/мес</p></div>
+<div class="card cf-kit"><div><span class="cf-tag">кофейня</span><span class="cf-tag">пекарня</span></div><h3>Бот-наставник для бариста</h3><p>Техкарты, стандарты и рецептуры в Telegram, тесты для новичков. Ввод в должность за 1–1,5 недели вместо 2–3.</p><p class="pr">34 900 ₽ + 4 900 ₽/мес</p></div>
+<div class="card cf-kit"><div><span class="cf-tag">кофейня</span><span class="cf-tag">пекарня</span></div><h3>Контроль себестоимости</h3><p>Отслеживаем цены на зерно, молоко и муку, предупреждаем, когда техкарта уходит в минус, и предлагаем новую цену. −1–3 п.п. фудкоста <span class="est">оценка</span>.</p><p class="pr">29 900 ₽ + 4 900 ₽/мес</p></div>
+<div class="card cf-kit"><div><span class="cf-tag">кофейня</span><span class="cf-tag">пекарня</span></div><h3>ИИ-контент для соцсетей</h3><p>Контент-план и 12–20 постов в месяц для Telegram и VK, акции к сезону, маркировка ERID.</p><p class="pr">9 900 ₽ + 14 900 ₽/мес</p></div>
+<div class="card cf-kit"><div><span class="cf-tag">кофейня</span><span class="cf-tag">пекарня</span></div><h3>Карточки на картах</h3><p>Оформляем Яндекс и 2ГИС: фото, меню, часы работы. Гость находит вас по запросу «кофе рядом».</p><p class="pr">7 900 ₽ разово</p></div>
+<div class="card cf-kit"><div><span class="cf-tag">все</span></div><h3>Экспресс-аудит</h3><p>Смотрим меню, отзывы, карточки на картах и данные кассы. Отчёт с 10 точками роста и расчётом окупаемости.</p><p class="pr">бесплатно</p></div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="pack"><div class="wrap">
+<span class="eyebrow">Готовые наборы</span>
+<h2>Три сборки под формат точки</h2>
+<p class="muted">В основе пакет «Старт» (14 900 ₽ внедрение + 2 990 ₽/мес, 14 дней бесплатно). К нему добавляем модуль под главную боль.</p>
+<div class="grid g3" style="margin-top:24px">
+<div class="card plan"><h3>Островок / to-go</h3><p class="muted small">Порог «не думая»: до 5 000 ₽/мес</p><p class="price">2 990 ₽ <small>/мес</small></p><p class="setup">Внедрение: 14 900 ₽</p>
+<ul><li>Пакет «Старт»: QR-меню, мультиязычность, ИИ-описания до 40 позиций</li><li>Центр отзывов: 1 площадка</li><li>Шаблоны документов по ПДн</li></ul><p class="note">За 12 мес вперёд: −20% и внедрение бесплатно</p><a class="btn btn-ghost" href="../index.html#lead-sec">14 дней бесплатно</a></div>
+<div class="card plan hit"><span class="tag">Для кофейни с посадкой</span><h3>Кофейня + возвраты</h3><p class="muted small">20–40 мест, 3 000+ гостей в месяц</p><p class="price">15 890 ₽ <small>/мес</small></p><p class="setup">Внедрение: 39 800 ₽</p>
+<ul><li>Всё из «Старт»</li><li>CRM-лояльность: электронная карта, база гостей</li><li>Триггерные рассылки «давно не был», ДР</li><li>Журнал согласий на рассылки</li></ul><p class="note">«Старт» 14 900 ₽ + 2 990 ₽/мес и CRM-лояльность 24 900 ₽ + 12 900 ₽/мес</p><a class="btn btn-primary" href="../index.html#lead-sec">Обсудить запуск</a></div>
+<div class="card plan"><h3>Старт + прогноз заготовок</h3><p class="muted small">200–400 чеков в день, своя выпечка</p><p class="price">9 890 ₽ <small>/мес</small></p><p class="setup">Внедрение: 54 800 ₽</p><p class="note">сумма пакета «Старт» и модуля по прайсу</p>
+<ul><li>Всё из «Старт»</li><li>ИИ-прогноз выпечки по дням и часам</li><li>План заготовок и заказ поставщику</li><li>Сигнал на вечернюю скидку</li></ul><p class="note">«Старт» 14 900 ₽ + 2 990 ₽/мес и прогноз 39 900 ₽ + 6 900 ₽/мес</p><a class="btn btn-ghost" href="../index.html#lead-sec">Обсудить запуск</a></div>
+</div>
+<p class="small muted" style="margin-top:16px">Мини-сеть от 3 точек: пакет «Сеть» 79 000 ₽/мес за 3 точки (≈ 26 300 ₽ за точку), с 4-й точки +19 900 ₽/мес; внедрение 290 000 ₽ за 3 точки + 70 000 ₽ за каждую следующую. Цены итоговые, НДС не облагается.</p>
+</div></section>
+
+<section id="calc"><div class="wrap grid g2" style="align-items:start">
+<div>
+<span class="eyebrow">Расчёт эффекта</span>
+<h2>Сколько это может дать вашей точке</h2>
+<p class="muted">Подставьте свои цифры. Коэффициенты консервативные, это <b>пример расчёта</b>, а не обещание: реальный эффект фиксируем на пилоте.</p>
+<div class="cf-switch" role="group" aria-label="Формат">
+<button type="button" data-mode="coffee" aria-pressed="true">Кофейня</button>
+<button type="button" data-mode="bakery" aria-pressed="false">Пекарня-кофейня</button>
+</div>
+<form class="card form" id="cf-form" onsubmit="return false">
+<div class="field"><label for="cf-check">Средний чек, ₽ <output id="o-check"></output></label><input type="range" id="cf-check" min="200" max="900" step="10" value="450"></div>
+<div class="field"><label for="cf-cnt">Чеков в день <output id="o-cnt"></output></label><input type="range" id="cf-cnt" min="50" max="500" step="10" value="150"></div>
+<div class="field" data-for="coffee"><label for="cf-ret">Доля гостей в базе лояльности, % <output id="o-ret"></output></label><input type="range" id="cf-ret" min="5" max="50" step="1" value="20"></div>
+<div class="field" data-for="bakery" hidden><label for="cf-waste">Списания выпечки, % от выручки выпечки <output id="o-waste"></output></label><input type="range" id="cf-waste" min="2" max="15" step="1" value="8"></div>
+<div class="field" data-for="bakery" hidden><label for="cf-bshare">Доля выпечки в выручке, % <output id="o-bshare"></output></label><input type="range" id="cf-bshare" min="20" max="80" step="5" value="50"></div>
+</form>
+</div>
+<div class="card" aria-live="polite">
+<span class="est">пример расчёта</span>
+<h3 style="margin-top:10px" id="r-title">Кофейня + возвраты</h3>
+<div id="r-rows"></div>
+<p class="cf-total" id="r-total"></p>
+<p class="small muted" id="r-note"></p>
+<a class="btn btn-primary" href="../index.html#lead-sec" style="margin-top:8px">Проверить на моих данных</a>
+</div>
+</div></section>
+
+<section class="sec-alt"><div class="wrap">
+<span class="eyebrow">Примеры</span>
+<h2>Два типовых сценария</h2>
+<div class="grid g2" style="margin-top:24px">
+<div class="card"><span class="est">пример расчёта</span><h3 style="margin-top:10px">Кофейня у метро</h3><p>Выручка 900 тыс. ₽/мес, чек 450 ₽, ~3 000 постоянных гостей. Пакет «Старт» + CRM-лояльность.</p><p><b>Эффект:</b> +40–80 тыс. ₽/мес выручки от возвратов гостей и рассылок <span class="est">гипотеза, проверяем на пилоте</span>.</p><p><b>Стоимость:</b> 15 890 ₽/мес + 39 800 ₽ внедрение.</p><p><b>Итог:</b> окупаемость ≈ 1–2 мес <span class="est">оценка</span>.</p></div>
+<div class="card"><span class="est">пример расчёта</span><h3 style="margin-top:10px">Пекарня-кофейня</h3><p>Выручка 3 млн ₽/мес, половина приходится на выпечку, списания 8% от неё ≈ 120 тыс. ₽ по цене продажи (≈ 40 тыс. ₽ по себестоимости при фудкосте 34%). Пакет «Старт» + прогноз выпечки.</p><p><b>Эффект:</b> списания −20–40% ≈ 8–16 тыс. ₽/мес по себестоимости, плюс выручка от вечерних скидок вместо мусора <span class="est">оценка</span>.</p><p><b>Стоимость:</b> 9 890 ₽/мес + 54 800 ₽ внедрение.</p><p><b>Итог:</b> в примере расчёта абонентка окупается с первого месяца при сокращении списаний от ~25%; при −40% внедрение окупается примерно за 9 мес, у мини-сети быстрее <span class="est">оценка</span>.</p></div>
+</div>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Как запускаем</span>
+<h2>От аудита до первых возвратов за 2–3 недели</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card step"><h3>1. Аудит за 48 часов</h3><p>Бесплатно смотрим меню, отзывы и карточки на картах, показываем 10 точек роста с расчётом.</p></div>
+<div class="card step"><h3>2. Запуск за 3–5 дней</h3><p>QR-меню, таблички на стойку, подключение к кассе, первые ответы на отзывы. «Старт» 14 дней бесплатно.</p></div>
+<div class="card step"><h3>3. Лояльность или прогноз</h3><p>За 2–4 недели подключаем модуль под вашу боль и через месяц сверяем цифры: возвраты гостей или списания.</p></div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="faq"><div class="wrap">
+<span class="eyebrow">FAQ</span>
+<h2>Частые вопросы владельцев кофеен</h2>
+<details><summary>У нас уже есть касса и карта лояльности от неё. Зачем вы?</summary><p>Мы не заменяем кассу и можем работать с вашей лояльностью (UDS, Loona, iikoCard). Добавляем то, чего нет: ИИ-ответы на отзывы, прогноз выпечки, триггерные рассылки и QR-меню, которое обновляется вместе со стоп-листом.</p></details>
+<details><summary>Мы франчайзи сети. Нам можно?</summary><p>Если стандарты УК ограничивают меню и лояльность, подключаем то, что разрешено: Центр отзывов, карточки на картах, контент и бот-наставник для бариста.</p></details>
+<details><summary>Гости в кофейне не сканируют QR.</summary><p>QR-меню в кофейне нужно не только гостю. Это быстрый способ обновить цены и сезонку без печати, собрать базу через карту лояльности и показать допродажи (сироп, десерт) тем, кто стоит в очереди.</p></details>
+<details><summary>Сколько нужно данных для прогноза выпечки?</summary><p>Желательно 3–6 месяцев продаж из кассы. Первые 2 недели прогноз работает в режиме подсказки, пекарь сравнивает его со своим планом.</p></details>
+<details><summary>А персональные данные гостей?</summary><p>Храним в РФ (Yandex Cloud / Selectel), согласия на рассылки берём отдельным документом и ведём журнал. Подробнее в <a href="../privacy.html">политике ПДн</a>.</p></details>
+</div></section>
+
+<section><div class="wrap" style="text-align:center">
+<h2>Узнайте, где ваша кофейня теряет гостей и выпечку</h2>
+<p class="lead">Бесплатный экспресс-аудит: меню, отзывы, карточки и касса. Результат за 48 часов.</p>
+<div class="cta" style="justify-content:center"><a class="btn btn-primary" href="../index.html#lead-sec">Получить аудит</a><a class="btn btn-ghost" href="../index.html#pricing">Все тарифы</a></div>
+</div></section>
+<div class="sticky-cta"><a class="btn btn-primary" href="../index.html#lead-sec">Бесплатный аудит за 48 часов</a></div>
+</main>
+
+<footer><div class="wrap">
+<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="../index.html">Главная</a><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="../privacy.html">Политика ПДн</a><a href="../consent.html">Согласие на обработку ПДн</a><a href="../sitemap.xml">sitemap.xml</a></div></nav>
+<div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
+</div></footer>
+<script src="../assets/app.js"></script>
+<script>
+(function(){
+  var mode='coffee', $=function(id){return document.getElementById(id)};
+  var f=function(n){return Math.round(n).toLocaleString('ru-RU')+' ₽'};
+  function row(a,b){return '<div class="cf-row"><span>'+a+'</span><span>'+b+'</span></div>'}
+  function calc(){
+    var check=+$('cf-check').value, cnt=+$('cf-cnt').value, ret=+$('cf-ret').value, waste=+$('cf-waste').value, bs=+$('cf-bshare').value;
+    $('o-check').textContent=check+' ₽'; $('o-cnt').textContent=cnt; $('o-ret').textContent=ret+'%'; $('o-waste').textContent=waste+'%'; $('o-bshare').textContent=bs+'%';
+    var rev=check*cnt*30, h='';
+    if(mode==='coffee'){
+      // база = уникальные гости ≈ чеки/мес / 4 визита; доля в базе; +0,5 доп. визита в мес у 20% базы
+      var base=Math.round(cnt*30/4*ret/100), extra=base*0.2*0.5, gain=extra*check, margin=gain*0.65, cost=15890;
+      h+=row('Выручка в месяц',f(rev))+row('Гостей в базе лояльности','≈ '+base.toLocaleString('ru-RU'))+row('Доп. визиты (20% базы × 0,5)','≈ '+Math.round(extra).toLocaleString('ru-RU'))+row('Доп. выручка',f(gain))+row('Валовая маржа (65%)',f(margin))+row('Абонентка «Старт» + CRM','−'+f(cost));
+      $('r-title').textContent='Кофейня + возвраты'; $('r-total').textContent='≈ '+f(margin-cost)+' в месяц';
+      $('r-note').textContent='Внедрение 39 800 ₽. '+(margin>cost?'Окупаемость внедрения ≈ '+Math.max(1,Math.ceil(39800/(margin-cost)))+' мес.':'При таких цифрах начните с «Старт» за 2 990 ₽/мес и наращивайте базу.')+' Пример расчёта, гипотеза проверяется на пилоте.';
+    } else {
+      var bake=rev*bs/100, w=bake*waste/100, wc=w*0.34, save=wc*0.3, cost=9890;
+      h+=row('Выручка в месяц',f(rev))+row('Выручка выпечки',f(bake))+row('Списания по цене продажи',f(w))+row('Списания по себестоимости (34%)',f(wc))+row('Экономия при −30% списаний',f(save))+row('Абонентка «Старт» + прогноз','−'+f(cost));
+      $('r-title').textContent='Пекарня-кофейня'; $('r-total').textContent='≈ '+f(save-cost)+' в месяц';
+      $('r-note').textContent='Внедрение 54 800 ₽. '+(save>cost?'Окупаемость внедрения ≈ '+Math.ceil(54800/(save-cost))+' мес.':'Для одной точки с такими списаниями прогноз окупается медленно: выгоднее подключать на мини-сеть.')+' Без учёта выручки от вечерних скидок. Пример расчёта.';
+    }
+    $('r-rows').innerHTML=h;
+  }
+  document.querySelectorAll('.cf-switch button').forEach(function(b){b.addEventListener('click',function(){
+    mode=b.dataset.mode;
+    document.querySelectorAll('.cf-switch button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});
+    document.querySelectorAll('[data-for]').forEach(function(el){el.hidden=el.dataset.for!==mode});
+    if(mode==='bakery'){$('cf-cnt').value=300;$('cf-check').value=420}else{$('cf-cnt').value=150;$('cf-check').value=450}
+    calc();
+  })});
+  document.querySelectorAll('#cf-form input').forEach(function(i){i.addEventListener('input',calc)});
+  calc();
+})();
+</script>
+</body>
+</html>

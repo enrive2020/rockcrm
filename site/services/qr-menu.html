@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QR-меню с ИИ-официантом, оплатой СБП и чаевыми — Подача.AI</title>
+<meta name="description" content="QR-меню для ресторанов и кафе: заказ со стола, оплата по СБП, чаевые, мультиязычное меню, ИИ-официант и стоп-лист из iiko/r_keeper. Запуск за 3–5 дней, от 1 490 ₽/мес.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../assets/a11y.css">
+<style>
+.qr-phone{border:1px solid var(--line,rgba(127,127,127,.25));border-radius:28px;padding:16px;max-width:340px;margin:0 auto;background:var(--card,transparent)}
+.qr-item{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px dashed rgba(127,127,127,.3)}
+.qr-item:last-of-type{border-bottom:0}
+.qr-item s{opacity:.55}
+.qr-pay{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.qr-pill{display:inline-block;font-size:.75rem;padding:2px 8px;border-radius:99px;border:1px solid rgba(127,127,127,.35)}
+.feat .ico{font-size:1.6rem;line-height:1}
+.feat h3{margin:8px 0 6px}
+.calc-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid rgba(127,127,127,.2)}
+.calc-row:last-child{border-bottom:0;font-weight:700}
+.sticky-cta{position:sticky;bottom:12px;z-index:5;display:none;margin:0 16px}
+@media (max-width:720px){.sticky-cta{display:block}.sticky-cta .btn{width:100%;justify-content:center}}
+</style>
+</head>
+<body>
+<a class="skip" href="#top">К содержимому</a>
+<header class="hdr"><div class="wrap">
+<a class="logo" href="../index.html">Подача<span>.AI</span></a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="../services/qr-menu.html" aria-current="page">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div></details><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Рынок</a>
+</nav>
+<a class="btn btn-primary btn-sm" href="../index.html#lead-sec">Бесплатный аудит</a>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
+</div></header>
+
+<main id="top" tabindex="-1">
+<section class="hero"><div class="wrap hero-grid">
+<div>
+<span class="eyebrow">Услуга · QR-меню</span>
+<h1>QR-меню, которое продаёт: заказ со стола, оплата СБП, чаевые и ИИ-официант</h1>
+<p class="lead">Гость сканирует QR, видит актуальное меню на своём языке, заказывает и платит без ожидания официанта. Стоп-лист подтягивается из iiko или r_keeper, а ИИ-официант подсказывает блюда и допродаёт. Работаем поверх вашей кассы — ничего не меняем.</p>
+<div class="cta"><a class="btn btn-primary" href="../index.html#lead-sec">Запустить QR-меню</a><a class="btn btn-ghost" href="#pricing">Тарифы от 1 490 ₽/мес</a></div>
+<div class="badges"><span class="badge">Запуск за 3–5 дней</span><span class="badge">iiko · r_keeper · Saby · Quick Resto · Poster</span><span class="badge">Чек по 54-ФЗ на вашей кассе</span><span class="badge">Данные в РФ</span></div>
+</div>
+<div class="qr-phone" aria-label="Пример QR-меню на телефоне гостя">
+<p class="small muted" style="margin:0 0 8px">Стол 7 · <span class="qr-pill">RU</span> <span class="qr-pill">EN</span> <span class="qr-pill">中文</span></p>
+<div class="qr-item"><span>Тартар из говядины</span><b>690 ₽</b></div>
+<div class="qr-item"><span>Ризотто с грибами</span><b>590 ₽</b></div>
+<div class="qr-item"><span><s>Сибас на гриле</s> <span class="small muted">в стоп-листе</span></span><b>—</b></div>
+<div class="chat" style="margin-top:10px">
+<div class="msg a">К ризотто отлично подойдёт бокал шардоне. Добавить панна-котту на десерт?</div>
+<div class="msg g">Да, добавь десерт</div>
+</div>
+<div class="qr-pay"><span class="btn btn-primary btn-sm">Оплатить СБП</span><span class="btn btn-ghost btn-sm">+ чаевые</span></div>
+<p class="small muted" style="margin:8px 0 0">Иллюстрация интерфейса</p>
+</div>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Зачем</span>
+<h2>Что меняется в зале</h2>
+<div class="grid g3">
+<div class="card pain"><div class="num">3 сек</div><h3>до актуального меню</h3><p>Без перепечаток и устаревших позиций: стоп-лист обновляется из кассы автоматически.</p></div>
+<div class="card pain"><div class="num">−5–7 мин</div><h3>работы официанта на стол</h3><p>Заказ и расчёт гость делает сам, официант занят сервисом (данные Яндекс Еды).</p></div>
+<div class="card pain"><div class="num">0,4–0,7%</div><h3>комиссия СБП</h3><p>Вместо 1,6–2,5% за оплату картой — разница остаётся у заведения.</p></div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="features"><div class="wrap">
+<span class="eyebrow">Функции</span>
+<h2>Всё, что нужно гостю и управляющему</h2>
+<div class="grid g3">
+<div class="card feat"><div class="ico" aria-hidden="true">🧾</div><h3>Заказ со стола</h3><p>Гость собирает заказ, он сразу падает в кассу и на кухню. Модификаторы, комментарии, дозаказ без ожидания.</p></div>
+<div class="card feat"><div class="ico" aria-hidden="true">⚡</div><h3>Оплата по СБП и Яндекс Пэй</h3><p>Оплата счёта в пару касаний, разделение счёта между гостями. Деньги идут через ваш эквайринг, чек — на вашей кассе по 54-ФЗ.</p></div>
+<div class="card feat"><div class="ico" aria-hidden="true">💚</div><h3>Чаевые</h3><p>Чаевые прямо при оплате счёта: официанту не нужно носить отдельный QR, гостю — искать наличные.</p></div>
+<div class="card feat"><div class="ico" aria-hidden="true">🌍</div><h3>Мультиязычность</h3><p>ИИ-перевод на 5–10 языков с ручной вычиткой и автоопределение языка телефона. Для туристов из СНГ, Китая, Европы.</p></div>
+<div class="card feat"><div class="ico" aria-hidden="true">🤖</div><h3>ИИ-официант</h3><p>Подбирает блюда под вкус, предлагает пары к напиткам и десерт. Об аллергенах отвечает только по данным из ваших техкарт.</p></div>
+<div class="card feat"><div class="ico" aria-hidden="true">🔄</div><h3>Стоп-лист из iiko / r_keeper</h3><p>Закончилось блюдо — оно сразу скрыто или помечено в меню. Также работаем с Saby, Quick Resto, Poster, Frontpad.</p></div>
+</div>
+<p class="note" style="margin-top:16px">Плюс: дизайн в стиле бренда, QR-таблички на столы, ИИ-фото и описания блюд (12 000 ₽ за пакет до 40 позиций).</p>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Как запускаем</span>
+<h2>От бумажного меню до QR за 3–5 дней</h2>
+<div class="grid g4 steps">
+<div class="card step"><h3>1. Аудит</h3><p>Бесплатно смотрим меню, кассу и эквайринг.</p></div>
+<div class="card step"><h3>2. Оцифровка</h3><p>Переносим меню, фото, описания, переводы.</p></div>
+<div class="card step"><h3>3. Интеграция</h3><p>Подключаем кассу, стоп-лист, СБП и чаевые.</p></div>
+<div class="card step"><h3>4. Запуск</h3><p>QR-таблички на столы, инструктаж персонала.</p></div>
+</div>
+<p class="note" style="margin-top:12px">QR-меню «Старт» — 3–5 дней; заказ и оплата с интеграцией кассы и ИИ-официант — 1–2 недели.</p>
+</div></section>
+
+<section class="sec-alt" id="pricing"><div class="wrap">
+<span class="eyebrow">Тарифы</span>
+<h2>Модули QR-меню: прозрачные цены за одну точку</h2>
+<div class="grid g4">
+<div class="card plan"><h3>QR-меню «Старт»</h3><p class="muted small">Оцифровка, дизайн, QR-таблички, стоп-лист из POS</p><p class="price">1 490 ₽ <small>/мес</small></p><p class="setup">Внедрение: 9 900 ₽ · 3–5 дней</p></div>
+<div class="card plan hit"><span class="tag">Главное</span><h3>QR-заказ, оплата СБП + чаевые</h3><p class="muted small">Заказ в POS, СБП / Яндекс Пэй, разделение счёта, чаевые</p><p class="price">1 990 ₽ <small>/мес</small></p><p class="setup">Внедрение: 19 900 ₽ · 1–2 нед</p><p class="note">+ доступ к API кассы по тарифу вендора, оплачивает клиент</p></div>
+<div class="card plan"><h3>Мультиязычное меню</h3><p class="muted small">5–10 языков, вычитка, автоопределение</p><p class="price">входит <small>в абонентку</small></p><p class="setup">Внедрение: 4 900 ₽ · 2–3 дня</p></div>
+<div class="card plan"><h3>ИИ-официант и апсейл</h3><p class="muted small">Подбор блюд, пары, «добавить десерт?», аллергены из базы</p><p class="price">2 990 ₽ <small>/мес</small></p><p class="setup">Внедрение: 29 900 ₽ · 1–2 нед</p><p class="note">+5–12% к чеку у гостей, которые им пользуются <span class="est">оценка</span></p></div>
+</div>
+<div class="grid g2" style="margin-top:20px">
+<div class="card"><h3>Выгоднее в пакете «Старт» — 2 990 ₽/мес</h3><p>QR-меню со стоп-листом, мультиязычность, ИИ-описания до 40 позиций, центр отзывов (1 площадка). Внедрение 14 900 ₽, 14 дней бесплатно.</p><a class="btn btn-ghost" href="../index.html#pricing">Подробнее о пакетах</a></div>
+<div class="card"><h3>Пакет «Рост» — 14 900 ₽/мес</h3><p>Всё из «Старт» + QR-заказ, СБП, чаевые, ИИ-официант, ИИ-администратор в TG/VK/MAX и ИИ-аналитик. Внедрение 49 900 ₽. Пилот 30 дней за 9 900 ₽ с возвратом, если не достигнем целей из договора.</p><a class="btn btn-primary" href="../index.html#lead-sec">Начать пилот</a></div>
+</div>
+</div></section>
+
+<section><div class="wrap" style="max-width:860px">
+<span class="eyebrow">Экономика</span>
+<h2>Сколько приносит QR-оплата и ИИ-официант</h2>
+<div class="card">
+<span class="est">пример расчёта</span>
+<p style="margin-top:10px">Кафе: выручка 2 000 000 ₽/мес, 15% гостей платят и заказывают через QR.</p>
+<div class="calc-row"><span>Экономия на эквайринге: 2 000 000 × 15% × (1,8% − 0,5%)</span><b>3 900 ₽</b></div>
+<div class="calc-row"><span>Допродажи ИИ-официанта: 300 000 ₽ × 6%, маржа при фудкосте 30%</span><b>12 600 ₽</b></div>
+<div class="calc-row"><span>Модули QR-заказ + ИИ-официант</span><b>−4 980 ₽</b></div>
+<div class="calc-row"><span>Итого в плюс в месяц (оценка)</span><span>≈ 11 520 ₽</span></div>
+<p class="note">Пример, а не гарантия: результат зависит от трафика и доли гостей, использующих QR. Посчитайте свои цифры в <a href="../index.html#roi-sec">калькуляторе</a>.</p>
+</div>
+</div></section>
+
+<section class="sec-alt" id="compare"><div class="wrap">
+<span class="eyebrow">Сравнение</span>
+<h2>Чем мы отличаемся от других QR-решений</h2>
+<div class="tbl-wrap"><table>
+<thead><tr><th></th><th>Подача.AI</th><th>QR-конструкторы</th><th>Сервисы QR-оплаты</th><th>QR-модуль кассы</th><th>Зарубежные QR-меню</th></tr></thead>
+<tbody>
+<tr><td>Цена</td><td class="n">от 1 490 ₽/мес</td><td>0 – ~3 000 ₽/мес <span class="est">оценка</span></td><td>бесплатно, % эквайринга</td><td>в тарифе кассы</td><td>$10–50/мес, настройка от €350</td></tr>
+<tr><td>Стоп-лист из кассы</td><td class="yes">✓</td><td class="no">нет в базовом тарифе</td><td>частично</td><td class="yes">✓</td><td class="no">нет в базовом тарифе</td></tr>
+<tr><td>Оплата СБП, чаевые</td><td class="yes">✓ через ваш эквайринг</td><td class="no">нет в базовом тарифе</td><td class="yes">✓</td><td>частично</td><td class="no">СБП и 54-ФЗ нет</td></tr>
+<tr><td>Перевод меню</td><td class="yes">✓ 5–10 языков</td><td>частично</td><td class="no">нет в базовом тарифе</td><td class="no">нет в базовом тарифе</td><td class="yes">✓</td></tr>
+<tr><td>ИИ-официант и апсейл</td><td class="yes">✓</td><td class="no">нет в базовом тарифе</td><td class="no">нет в базовом тарифе</td><td class="no">нет в базовом тарифе</td><td class="no">нет в базовом тарифе</td></tr>
+<tr><td>Дизайн, фото, внедрение под ключ</td><td class="yes">✓</td><td class="no">сами по шаблону</td><td>частично</td><td class="no">сами</td><td>за доплату</td></tr>
+</tbody></table></div>
+<p class="note" style="margin-top:8px">Сравнение категорий решений (Qr-menu.ru, Menuqr, Restik; Tapper, Нетмонет, Яндекс Пэй; Poster QR, Saby Presto, iiko), а не конкретных брендов, по открытым данным на 10.2026. «Нет в базовом тарифе» не исключает доплат и интеграций. Источники — в <a href="../market.html">анализе рынка</a>.</p>
+</div></section>
+
+<section id="faq"><div class="wrap" style="max-width:860px">
+<span class="eyebrow">FAQ</span>
+<h2>Частые вопросы о QR-меню</h2>
+<details><summary>Кто получает деньги за оплату по QR?</summary><p>Ваш эквайринг (Яндекс Пэй, Нетмонет, ваш банк). Мы не платёжный агент, чек пробивается на вашей кассе по 54-ФЗ.</p></details>
+<details><summary>Почему не взять бесплатный QR от кассы?</summary><p>Он статичный: без допродаж, перевода, аналитики и внедрения. У нас QR — только вход, а деньги приносит ИИ-слой.</p></details>
+<details><summary>Нужно ли менять кассу?</summary><p>Нет. Работаем поверх iiko, r_keeper, Saby, Quick Resto, Poster и Frontpad. Доступ к API кассы оплачивается по тарифу вендора.</p></details>
+<details><summary>Как обновляется стоп-лист?</summary><p>Автоматически из кассы: как только блюдо попало в стоп-лист в iiko или r_keeper, гость видит это в меню.</p></details>
+<details><summary>Не напутает ли ИИ-официант с аллергенами?</summary><p>Он отвечает только по составу из ваших техкарт и всегда советует уточнить у официанта при аллергии. Ничего не придумывает.</p></details>
+<details><summary>Сколько ждать запуска?</summary><p>QR-меню — 3–5 дней, перевод — 2–3 дня, заказ и оплата с интеграцией и ИИ-официант — 1–2 недели.</p></details>
+<details><summary>Что если гости не будут пользоваться?</summary><p>Пилот 30 дней за 9 900 ₽: цель по доле QR-заказов фиксируем в договоре. Не достигли — возвращаем 9 900 ₽.</p></details>
+<details><summary>Что останется у нас, если откажемся?</summary><p>Меню, фото, переводы и данные выгружаем в Excel/CSV.</p></details>
+</div></section>
+
+<section class="sec-alt"><div class="wrap" style="text-align:center;max-width:760px">
+<h2>Запустим QR-меню за 3–5 дней</h2>
+<p class="lead">Бесплатный аудит меню и кассы: покажем, сколько вы теряете на эквайринге и допродажах.</p>
+<div class="cta" style="justify-content:center"><a class="btn btn-primary" href="../index.html#lead-sec">Получить бесплатный аудит</a><a class="btn btn-ghost" href="../index.html#pricing">Все пакеты</a></div>
+</div></section>
+<div class="sticky-cta"><a class="btn btn-primary" href="../index.html#lead-sec">Запустить QR-меню</a></div>
+</main>
+
+<footer><div class="wrap">
+<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="../index.html">Главная</a><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="../privacy.html">Политика ПДн</a><a href="../consent.html">Согласие на обработку ПДн</a><a href="../sitemap.xml">sitemap.xml</a></div></nav>
+<div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
+</div></footer>
+<script src="../assets/app.js"></script>
+</body>
+</html>

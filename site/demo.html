@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Демо QR-меню с ИИ-официантом — Подача.AI</title>
+<meta name="description" content="Интерактивное демо QR-меню вымышленного кафе «Пример»: категории, корзина, оплата СБП, чаевые, RU/EN и ИИ-официант с рекомендациями.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/a11y.css">
+<style>
+.demo-grid{display:grid;gap:32px;align-items:start;grid-template-columns:minmax(0,1fr)}
+.demo-grid>*{min-width:0}
+@media(min-width:960px){.demo-grid{grid-template-columns:400px minmax(0,1fr)}}
+.phone{width:100%;max-width:380px;margin:0 auto;border:10px solid #1c1c22;border-radius:42px;background:var(--bg);box-shadow:var(--shadow);overflow:hidden;position:relative;height:740px;display:flex;flex-direction:column}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .phone{border-color:#3a3b44}}
+:root[data-theme="dark"] .phone{border-color:#3a3b44}
+.notch{height:22px;display:flex;justify-content:center;background:var(--surface)}
+.notch i{width:110px;height:16px;background:#1c1c22;border-radius:0 0 12px 12px}
+.ph-top{background:var(--surface);padding:8px 14px 10px;border-bottom:1px solid var(--line)}
+.ph-row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ph-name{font-family:Manrope,sans-serif;font-weight:800;font-size:18px}
+.ph-table{font-size:12px;color:var(--muted)}
+.lang{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.lang button{border:0;background:none;color:var(--muted);padding:4px 10px;font:600 12px Inter,sans-serif;cursor:pointer;min-height:28px}
+.lang button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.cats{display:flex;gap:6px;overflow-x:auto;margin-top:10px;scrollbar-width:none}
+.cats::-webkit-scrollbar{display:none}
+.cats button{flex:none;border:1px solid var(--line);background:var(--surface-2);color:var(--text);border-radius:999px;padding:6px 12px;font:500 13px Inter,sans-serif;cursor:pointer}
+.cats button[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.ph-body{flex:1;overflow-y:auto;padding:12px}
+.dish{display:flex;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px;margin-bottom:10px}
+.dish .ill{flex:none;width:72px;height:72px;border-radius:12px;background:var(--accent-soft);display:grid;place-items:center;font-size:38px}
+.dish h4{margin:0;font-size:15px}
+.dish p{margin:2px 0 6px;font-size:12px;color:var(--muted);line-height:1.35}
+.dish .meta{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.dish b{font-size:14px}
+.tagx{display:inline-block;font-size:10px;padding:1px 6px;border-radius:6px;background:var(--ok-soft);color:var(--accent-2);margin-right:4px;font-weight:600}
+.tagx.hit{background:var(--accent-soft);color:var(--accent)}
+.add{border:0;background:var(--accent);color:var(--on-accent);border-radius:10px;padding:6px 10px;font:600 13px Inter,sans-serif;cursor:pointer;min-height:32px}
+.qty{display:flex;align-items:center;gap:6px}
+.qty button{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--surface-2);color:var(--text);cursor:pointer;font-weight:700}
+.ph-bar{display:flex;gap:8px;padding:10px 12px;background:var(--surface);border-top:1px solid var(--line)}
+.ph-bar button{flex:1;border-radius:12px;padding:11px 8px;font:600 14px Inter,sans-serif;cursor:pointer;border:1px solid var(--line);background:var(--surface-2);color:var(--text)}
+.ph-bar .go{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.sheet{position:absolute;inset:22px 0 0;background:var(--bg);display:none;flex-direction:column;z-index:5}
+.sheet.open{display:flex}
+.sh-h{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:var(--surface);border-bottom:1px solid var(--line)}
+.sh-h b{font-family:Manrope,sans-serif;font-size:17px}
+.x{border:0;background:var(--surface-2);color:var(--text);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px}
+.sh-b{flex:1;overflow-y:auto;padding:14px}
+.line{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.tips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0 14px}
+.tips button{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:10px;padding:8px 0;font:600 13px Inter,sans-serif;cursor:pointer}
+.tips button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.sum{font-size:14px}.sum div{display:flex;justify-content:space-between;padding:3px 0}
+.sum .tot{font-weight:700;font-size:17px;border-top:1px solid var(--line);margin-top:6px;padding-top:8px}
+.upsell{background:var(--accent-soft);border-radius:12px;padding:10px;font-size:13px;margin:12px 0;display:flex;gap:8px;align-items:center;justify-content:space-between}
+.paybtn{width:100%;margin-top:14px;border:0;border-radius:12px;padding:13px;font:700 15px Inter,sans-serif;background:#1d1d6b;color:#fff;cursor:pointer}
+.sbp{text-align:center;padding:10px}
+.sbp .qr{width:170px;height:170px;margin:12px auto;border-radius:12px;background:#fff;padding:10px}
+.spin{width:36px;height:36px;border:4px solid var(--line);border-top-color:var(--accent);border-radius:50%;margin:16px auto;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spin{animation:none}}
+.done{font-size:56px;text-align:center;margin-top:30px}
+.chatbox{display:flex;flex-direction:column;gap:8px}
+.bub{max-width:85%;padding:8px 11px;border-radius:14px;font-size:13.5px;line-height:1.4}
+.bub.ai{background:var(--surface);border:1px solid var(--line);align-self:flex-start;border-bottom-left-radius:4px}
+.bub.me{background:var(--accent);color:var(--on-accent);align-self:flex-end;border-bottom-right-radius:4px}
+.bub .add{margin-top:6px;font-size:12px;padding:4px 8px;min-height:26px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px 0}
+.chips button{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:999px;padding:5px 10px;font:500 12px Inter,sans-serif;cursor:pointer}
+.chat-in{display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--line);background:var(--surface)}
+.chat-in input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:10px;padding:9px 10px;font:14px Inter,sans-serif}
+.chat-in button{border:0;background:var(--accent);color:var(--on-accent);border-radius:10px;padding:0 14px;font-weight:700;cursor:pointer}
+.toast{position:absolute;left:50%;bottom:76px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:7px 14px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9;white-space:nowrap}
+.toast.on{opacity:1}
+.fab-ai{position:absolute;right:14px;bottom:72px;z-index:4;border:0;border-radius:999px;background:var(--accent-2);color:var(--on-accent,#fff);padding:10px 14px;font:700 13px Inter,sans-serif;box-shadow:var(--shadow);cursor:pointer}
+.side h2{margin-top:0}
+.feat{display:grid;gap:12px;margin:20px 0}
+@media(min-width:600px){.feat{grid-template-columns:1fr 1fr}}
+.feat .card h3{font-size:16px;margin:0 0 4px}.feat .card p{margin:0;font-size:14px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}
+.stats div{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+.stats b{display:block;font-family:Manrope,sans-serif;font-size:22px;color:var(--accent)}
+.stats span{font-size:12px;color:var(--muted)}
+.log{font-size:13px;color:var(--muted);background:var(--surface-2);border-radius:12px;padding:10px 12px;min-height:44px}
+#aiSheet{top:var(--ai-top,22px)}
+</style>
+</head>
+<body>
+<a class="skip" href="#top">К содержимому</a>
+<header class="hdr"><div class="wrap">
+<a class="logo" href="index.html">Подача<span>.AI</span></a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="services/qr-menu.html">QR-меню и ИИ-официант</a><a href="services/ai-admin.html">ИИ-администратор</a><a href="services/marketing.html">Маркетинг и отзывы</a><a href="services/operations.html">Операционка и аналитика</a><a href="services/staff.html">Персонал</a><a href="services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="segments/restaurants.html">Рестораны</a><a href="segments/coffee.html">Кофейни и пекарни</a><a href="segments/bars.html">Бары и кальянные</a><a href="segments/delivery.html">Фастфуд и доставка</a><a href="segments/hotels.html">Отели</a></div></details><a href="pricing.html">Цены</a><a href="demo.html" aria-current="page">Демо</a><a href="cases.html">Кейсы</a><a href="market.html">Рынок</a>
+</nav>
+<a class="btn btn-primary btn-sm" href="index.html#lead-sec">Бесплатный аудит</a>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
+</div></header>
+
+<main id="top" tabindex="-1">
+<section class="hero"><div class="wrap">
+<span class="eyebrow">Интерактивное демо · кафе «Пример» вымышленное</span>
+<h1>Попробуйте QR-меню глазами гостя</h1>
+<p class="lead">Так увидит меню ваш гость, отсканировав QR на столе: выберите блюда, спросите ИИ-официанта, что взять к кофе, переключите меню на английский и оплатите по СБП. Оплата не настоящая, деньги не списываются.</p>
+
+<div class="demo-grid" style="margin-top:28px">
+<div>
+<div class="phone" id="phone" aria-label="Демо QR-меню на телефоне">
+<div class="notch"><i></i></div>
+<div class="ph-top">
+<div class="ph-row"><div><div class="ph-name">Кафе «Пример»</div><div class="ph-table" data-t="table">Стол №7 · меню обновлено сейчас</div></div>
+<div class="lang" role="group" aria-label="Язык"><button data-lang="ru" aria-pressed="true">RU</button><button data-lang="en" aria-pressed="false">EN</button></div></div>
+<div class="cats" id="cats" role="group" aria-label="Категории"></div>
+</div>
+<div class="ph-body" id="list"></div>
+<button class="fab-ai" id="openAi">✨ <span data-t="ai">ИИ-официант</span></button>
+<div class="ph-bar"><button id="callW" data-t="call">🔔 Позвать</button><button class="go" id="openCart">🛒 <span id="cartLbl">Корзина</span></button></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="sheet" id="cartSheet" role="dialog" aria-label="Корзина">
+<div class="sh-h"><b data-t="order">Ваш заказ</b><button class="x" data-close aria-label="Закрыть">✕</button></div>
+<div class="sh-b" id="cartBody"></div>
+</div>
+<div class="sheet" id="aiSheet" role="dialog" aria-label="ИИ-официант">
+<div class="sh-h"><b>✨ <span data-t="ai">ИИ-официант</span></b><button class="x" data-close aria-label="Закрыть">✕</button></div>
+<div class="sh-b"><div class="chatbox" id="chat" aria-live="polite"></div></div>
+<div class="chips" id="chips"></div>
+<form class="chat-in" id="chatForm"><input id="chatIn" autocomplete="off" aria-label="Сообщение"><button aria-label="Отправить">➤</button></form>
+</div>
+</div>
+<p class="note" style="text-align:center;margin-top:10px">Блюда, цены кафе и ответы — демонстрационные.</p>
+</div>
+
+<div class="side">
+<h2>Что вы сейчас видите</h2>
+<div class="feat">
+<div class="card"><h3>📋 Актуальное меню</h3><p>Стоп-лист синхронизируется с iiko, r_keeper, Saby, Quick Resto, Poster: закончившееся блюдо пропадает само.</p></div>
+<div class="card"><h3>✨ ИИ-официант</h3><p>Подбирает блюда по вкусу и бюджету, предлагает пару к напитку и десерт. Аллергены берёт только из ваших техкарт.</p></div>
+<div class="card"><h3>🌍 Мультиязычность</h3><p>Меню на английском и других языках без перепечатки — для туристов и гостей из СНГ.</p></div>
+<div class="card"><h3>⚡ Оплата СБП и чаевые</h3><p>Гость платит со стола, не ждёт официанта. Комиссия СБП 0,4–0,7% вместо 1,6–2,5% у карт.</p></div>
+</div>
+<h3>Ваша сессия в демо</h3>
+<div class="stats"><div><b id="sItems">0</b><span>позиций</span></div><div><b id="sSum">0 ₽</b><span>сумма</span></div><div><b id="sUp">0 ₽</b><span>от ИИ-допродаж</span></div></div>
+<div class="log" id="log">Добавьте блюдо или спросите ИИ-официанта «что взять к кофе?»</div>
+<p class="note" style="margin-top:8px"><span class="est">оценка</span> ИИ-официант даёт +5–12% к чеку у гостей, которые им пользуются; подтверждаем A/B-тестом на пилоте.</p>
+
+<div class="card" style="margin-top:20px">
+<span class="est">пример расчёта</span>
+<h3 style="margin-top:10px">Сколько это стоит</h3>
+<p>QR-меню — от 1 490 ₽/мес. QR-заказ, оплата СБП, чаевые и ИИ-официант входят в пакет «Рост»: 14 900 ₽/мес + 49 900 ₽ внедрение. Пилот 30 дней — 9 900 ₽ с возвратом, если не достигнем целей из договора.</p>
+<div class="cta"><a class="btn btn-primary" href="index.html#lead-sec">Хочу такое меню</a><a class="btn btn-ghost" href="index.html#pricing">Все цены</a></div>
+</div>
+</div>
+</div>
+</div></section>
+
+<section class="sec-alt"><div class="wrap">
+<span class="eyebrow">Запуск</span>
+<h2>Ваше меню в таком виде — за 3–5 дней</h2>
+<div class="grid g3" style="margin-top:20px">
+<div class="card"><h3>1. Присылаете меню</h3><p>Фото, PDF или выгрузку из кассы. Мы оцифруем, напишем описания и подберём иллюстрации.</p></div>
+<div class="card"><h3>2. Подключаем кассу</h3><p>Синхронизация стоп-листа и заказов, оплата СБП, чаевые. Данные хранятся в РФ.</p></div>
+<div class="card"><h3>3. Ставим QR на столы</h3><p>Обучаем ИИ-официанта на ваших блюдах и настраиваем допродажи.</p></div>
+</div>
+<div class="cta" style="margin-top:24px"><a class="btn btn-primary" href="index.html#lead-sec">Получить бесплатный аудит</a></div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="services/qr-menu.html">QR-меню и ИИ-официант</a><a href="services/ai-admin.html">ИИ-администратор</a><a href="services/marketing.html">Маркетинг и отзывы</a><a href="services/operations.html">Операционка и аналитика</a><a href="services/staff.html">Персонал</a><a href="services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="segments/restaurants.html">Рестораны</a><a href="segments/coffee.html">Кофейни и пекарни</a><a href="segments/bars.html">Бары и кальянные</a><a href="segments/delivery.html">Фастфуд и доставка</a><a href="segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="index.html">Главная</a><a href="pricing.html">Цены</a><a href="demo.html">Демо</a><a href="cases.html">Кейсы</a><a href="market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="privacy.html">Политика ПДн</a><a href="consent.html">Согласие на обработку ПДн</a><a href="sitemap.xml">sitemap.xml</a></div></nav>
+<div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
+</div></footer>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+var L='ru';
+var T={ru:{table:'Стол №7 · меню обновлено сейчас',ai:'ИИ-официант',call:'🔔 Позвать',order:'Ваш заказ',cart:'Корзина',add:'+ В заказ',empty:'Корзина пуста. Загляните в меню или спросите ИИ-официанта.',sub:'Блюда',tip:'Чаевые',tot:'Итого',tipH:'Чаевые официанту Анне',none:'Без',pay:'Оплатить по СБП',scan:'Отсканируйте QR в приложении банка или нажмите кнопку — это демо, деньги не списываются.',bank:'Открыть банк (демо)',wait:'Ожидаем подтверждение банка…',ok:'Оплачено! Спасибо 🙌',okP:'Заказ передан на кухню. Чек 54-ФЗ придёт на почту.',again:'Новый заказ',added:'Добавлено: ',called:'Официант уже идёт 🙂',up:'К этому заказу часто берут',ph:'Спросите: что к кофе? без мяса? до 500 ₽?',hi:'Здравствуйте! Я ИИ-официант кафе «Пример». Подскажу, что выбрать: спросите про сытное, вегетарианское, десерт, что к кофе или бюджет.',chips:['Что к кофе?','Без мяса','Хит кафе','Что-то сытное','До 500 ₽','Аллергия на орехи'],fb:'Я пока демо и понимаю ключевые слова: кофе, сытное, без мяса, десерт, острое, детям, бюджет, орехи, хит. Попробуйте так!',allergy:'По техкартам орехов нет в: ',allergy2:'. При аллергии уточните у официанта — возможен перекрёстный контакт.',cnt:'шт'},
+en:{table:'Table 7 · menu updated just now',ai:'AI waiter',call:'🔔 Call',order:'Your order',cart:'Cart',add:'+ Add',empty:'Your cart is empty. Browse the menu or ask the AI waiter.',sub:'Items',tip:'Tip',tot:'Total',tipH:'Tip for your waiter Anna',none:'None',pay:'Pay via SBP',scan:'Scan the QR in your bank app or tap the button — demo only, no money is charged.',bank:'Open bank (demo)',wait:'Waiting for bank confirmation…',ok:'Paid! Thank you 🙌',okP:'Your order is sent to the kitchen. Receipt goes to your email.',again:'New order',added:'Added: ',called:'Your waiter is on the way 🙂',up:'Often ordered with this',ph:'Ask: what goes with coffee? vegetarian? under 500?',hi:'Hi! I am the AI waiter of cafe "Primer". Ask me about something hearty, vegetarian, desserts, what goes with coffee, or your budget.',chips:['With coffee?','Vegetarian','Bestseller','Something hearty','Under 500 ₽','Nut allergy'],fb:'I am a demo and understand keywords: coffee, hearty, vegetarian, dessert, spicy, kids, budget, nuts, bestseller. Give it a try!',allergy:'According to recipes, no nuts in: ',allergy2:'. If allergic, please check with the waiter — cross-contact is possible.',cnt:'pcs'}};
+var CATS=[{id:'hit',ru:'🔥 Хиты',en:'🔥 Bestsellers'},{id:'brk',ru:'Завтраки',en:'Breakfast'},{id:'main',ru:'Горячее',en:'Mains'},{id:'sal',ru:'Салаты',en:'Salads'},{id:'des',ru:'Десерты',en:'Desserts'},{id:'drk',ru:'Напитки',en:'Drinks'}];
+var D=[
+{id:'syr',c:'brk',e:'🥞',p:390,ru:['Сырники со сметаной','Творожные, с ягодным соусом'],en:['Syrniki','Cottage cheese pancakes, berry sauce'],t:['veg','hit','coffee','cheap'],nut:0},
+{id:'egg',c:'brk',e:'🍳',p:450,ru:['Шакшука','Яйца в томатах с перцем и хлебом'],en:['Shakshuka','Eggs in spiced tomatoes, bread'],t:['veg','spicy','hearty','cheap'],nut:0},
+{id:'brg',c:'main',e:'🍔',p:690,ru:['Бургер «Пример»','Говядина, чеддер, соус барбекю, картофель'],en:['Primer Burger','Beef, cheddar, BBQ sauce, fries'],t:['meat','hearty','hit'],nut:0},
+{id:'pas',c:'main',e:'🍝',p:620,ru:['Паста с грибами','Сливочный соус, белые грибы, пармезан'],en:['Mushroom pasta','Cream sauce, porcini, parmesan'],t:['veg','hearty'],nut:0},
+{id:'tom',c:'main',e:'🍜',p:560,ru:['Том-ям с креветками','Острый, на кокосовом молоке'],en:['Tom yum with shrimp','Spicy, coconut milk'],t:['spicy','hit'],nut:0},
+{id:'nug',c:'main',e:'🍗',p:390,ru:['Наггетсы детские','Куриные, с картофелем и кетчупом'],en:['Kids nuggets','Chicken, fries, ketchup'],t:['kids','meat','cheap'],nut:0},
+{id:'ces',c:'sal',e:'🥗',p:520,ru:['Цезарь с курицей','Романо, пармезан, гренки'],en:['Chicken Caesar','Romaine, parmesan, croutons'],t:['meat'],nut:0},
+{id:'grk',c:'sal',e:'🫒',p:460,ru:['Греческий','Фета, оливки, свежие овощи'],en:['Greek salad','Feta, olives, fresh veggies'],t:['veg','cheap'],nut:0},
+{id:'chz',c:'des',e:'🍰',p:350,ru:['Чизкейк Нью-Йорк','Классический, с ягодами'],en:['NY cheesecake','Classic, with berries'],t:['dessert','coffee','hit','cheap'],nut:0},
+{id:'brn',c:'des',e:'🍫',p:320,ru:['Брауни с пломбиром','Тёплый, с грецким орехом'],en:['Brownie & ice cream','Warm, with walnuts'],t:['dessert','coffee','kids','cheap'],nut:1},
+{id:'cro',c:'des',e:'🥐',p:220,ru:['Круассан миндальный','Свежая выпечка'],en:['Almond croissant','Freshly baked'],t:['coffee','cheap'],nut:1},
+{id:'cap',c:'drk',e:'☕',p:250,ru:['Капучино','300 мл, можно на овсяном'],en:['Cappuccino','300 ml, oat milk available'],t:['coffee','cheap'],nut:0},
+{id:'lem',c:'drk',e:'🍋',p:290,ru:['Лимонад облепиха-маракуйя','Домашний, 400 мл'],en:['Sea buckthorn lemonade','Homemade, 400 ml'],t:['kids','cheap'],nut:0},
+{id:'tea',c:'drk',e:'🫖',p:340,ru:['Чай с чабрецом','Чайник 600 мл'],en:['Thyme tea','Pot, 600 ml'],t:['cheap'],nut:0}];
+var PAIR={brg:'lem',pas:'grk',tom:'lem',syr:'cap',egg:'cap',ces:'tea',cap:'chz',nug:'lem',grk:'tea',chz:'cap',brn:'cap',cro:'cap'};
+var cart={},cat='hit',tip=10,upsell=0,$=function(i){return document.getElementById(i)};
+function by(id){for(var i=0;i<D.length;i++)if(D[i].id===id)return D[i]}
+function nm(d){return d[L][0]}
+function rub(n){return n.toLocaleString('ru-RU').replace(/,/g,' ')+' ₽'}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function toast(s){var t=$('toast');t.textContent=s;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(function(){t.classList.remove('on')},1600)}
+function log(s){$('log').textContent=s}
+function count(){var n=0;for(var k in cart)n+=cart[k];return n}
+function sub(){var s=0;for(var k in cart)s+=by(k).p*cart[k];return s}
+function renderCats(){$('cats').innerHTML=CATS.map(function(c){return '<button data-c="'+c.id+'" aria-pressed="'+(c.id===cat)+'">'+c[L]+'</button>'}).join('')}
+function ctrl(d){var q=cart[d.id]||0;return q?'<div class="qty"><button data-dec="'+d.id+'" aria-label="−">−</button><b>'+q+'</b><button data-inc="'+d.id+'" aria-label="+">+</button></div>':'<button class="add" data-inc="'+d.id+'">'+T[L].add+'</button>'}
+function renderList(){var items=D.filter(function(d){return cat==='hit'?d.t.indexOf('hit')>=0:d.c===cat});
+$('list').innerHTML=items.map(function(d){return '<div class="dish"><div class="ill" aria-hidden="true">'+d.e+'</div><div style="flex:1;min-width:0"><h4>'+esc(nm(d))+'</h4><p>'+esc(d[L][1])+'</p><div>'+(d.t.indexOf('hit')>=0?'<span class="tagx hit">HIT</span>':'')+(d.t.indexOf('veg')>=0?'<span class="tagx">VEG</span>':'')+(d.t.indexOf('spicy')>=0?'<span class="tagx hit">🌶</span>':'')+'</div><div class="meta"><b>'+rub(d.p)+'</b>'+ctrl(d)+'</div></div></div>'}).join('')}
+function stats(){var n=count();$('cartLbl').textContent=T[L].cart+(n?' · '+rub(sub()):'');$('sItems').textContent=n;$('sSum').textContent=rub(sub());$('sUp').textContent=rub(upsell)}
+function renderAll(){document.querySelectorAll('[data-t]').forEach(function(e){var v=T[L][e.getAttribute('data-t')];if(v)e.textContent=v});$('chatIn').placeholder=T[L].ph;renderCats();renderList();stats();renderChips();if($('cartSheet').classList.contains('open')&&!paying)renderCart()}
+function add(id,fromAi){cart[id]=(cart[id]||0)+1;if(fromAi){upsell+=by(id).p;log('ИИ-официант допродал: '+by(id).ru[0]+' (+'+rub(by(id).p)+'). Так растёт средний чек.')}else log('Гость добавил: '+by(id).ru[0]+'. Стоп-лист проверен в кассе.');toast(T[L].added+nm(by(id)));renderList();stats();if($('cartSheet').classList.contains('open')&&!paying)renderCart()}
+function dec(id){if(!cart[id])return;cart[id]--;if(!cart[id])delete cart[id];renderList();stats();if($('cartSheet').classList.contains('open')&&!paying)renderCart()}
+var paying=false;
+function suggest(){for(var k in cart){var p=PAIR[k];if(p&&!cart[p])return by(p)}if(count()&&!cart.chz)return by('chz');return null}
+function renderCart(){paying=false;var t=T[L],b=$('cartBody');if(!count()){b.innerHTML='<p class="muted">'+t.empty+'</p>';return}
+var s=sub(),tp=Math.round(s*tip/100),h='';
+for(var k in cart){var d=by(k);h+='<div class="line"><span>'+d.e+' '+esc(nm(d))+'</span><span style="display:flex;gap:8px;align-items:center">'+ctrl(d)+'<b>'+rub(d.p*cart[k])+'</b></span></div>'}
+var u=suggest();if(u)h+='<div class="upsell"><span>✨ '+t.up+': <b>'+u.e+' '+esc(nm(u))+'</b> '+rub(u.p)+'</span><button class="add" data-ai="'+u.id+'">+</button></div>';
+h+='<p style="margin:12px 0 0;font-weight:600;font-size:14px">'+t.tipH+'</p><div class="tips">'+[0,5,10,15].map(function(v){return '<button data-tip="'+v+'" aria-pressed="'+(v===tip)+'">'+(v?v+'%':t.none)+'</button>'}).join('')+'</div>';
+h+='<div class="sum"><div><span>'+t.sub+'</span><span>'+rub(s)+'</span></div><div><span>'+t.tip+'</span><span>'+rub(tp)+'</span></div><div class="tot"><span>'+t.tot+'</span><span>'+rub(s+tp)+'</span></div></div>';
+h+='<button class="paybtn" id="payBtn">⚡ '+t.pay+' · '+rub(s+tp)+'</button>';b.innerHTML=h}
+function qrSvg(){var n=21,c='',seed=7;function r(){seed=(seed*9301+49297)%233280;return seed/233280}
+function fin(x,y){return(x<7&&y<7)||(x>n-8&&y<7)||(x<7&&y>n-8)}
+for(var y=0;y<n;y++)for(var x=0;x<n;x++){var on;if(fin(x,y)){var fx=x>n-8?x-(n-7):x,fy=y>n-8?y-(n-7):y;on=fx===0||fy===0||fx===6||fy===6||(fx>1&&fx<5&&fy>1&&fy<5)}else on=r()>.5;if(on)c+='<rect x="'+x+'" y="'+y+'" width="1" height="1"/>'}
+return '<svg viewBox="0 0 21 21" width="150" height="150" fill="#111" role="img" aria-label="Демо QR-код СБП">'+c+'</svg>'}
+function pay(){paying=true;var t=T[L],s=sub(),tot=s+Math.round(s*tip/100);
+$('cartBody').innerHTML='<div class="sbp"><b style="font-size:18px">СБП · '+rub(tot)+'</b><div class="qr">'+qrSvg()+'</div><p class="muted small">'+t.scan+'</p><button class="paybtn" id="bankBtn">'+t.bank+'</button></div>'}
+function bank(){var t=T[L];$('cartBody').innerHTML='<div class="spin" role="status"></div><p class="muted" style="text-align:center">'+t.wait+'</p>';
+setTimeout(function(){if(!$('cartSheet').classList.contains('open')||!paying)return;var s=sub(),tp=Math.round(s*tip/100);log('Оплачено по СБП: '+rub(s+tp)+(tp?', чаевые '+rub(tp):'')+'. Комиссия СБП ≈ '+rub(Math.round((s+tp)*0.005))+' вместо ≈ '+rub(Math.round((s+tp)*0.02))+' по карте (пример расчёта).');
+$('cartBody').innerHTML='<div class="done">✅</div><h3 style="text-align:center">'+t.ok+'</h3><p class="muted" style="text-align:center">'+t.okP+'</p><button class="paybtn" id="againBtn">'+t.again+'</button>';cart={};paying=false;renderList();stats()},1400)}
+// AI waiter
+function card(d){return '<br><span>'+d.e+' <b>'+esc(nm(d))+'</b> — '+rub(d.p)+'</span><br><button class="add" data-ai="'+d.id+'">'+T[L].add+'</button>'}
+function bot(html){var c=$('chat');c.insertAdjacentHTML('beforeend','<div class="bub ai">'+html+'</div>');c.parentNode.scrollTop=c.parentNode.scrollHeight}
+function me(s){$('chat').insertAdjacentHTML('beforeend','<div class="bub me">'+esc(s)+'</div>')}
+var R=[
+{k:['кофе','капуч','латте','coffee','cappu'],tag:'coffee',ru:'К кофе гости чаще всего берут чизкейк — нежный и не приторный. Или миндальный круассан, он только из печи:',en:'With coffee our guests love the cheesecake, or a fresh almond croissant:',ids:['chz','cro']},
+{k:['без мяс','вега','вегет','veg','meat-free','постн'],ru:'Без мяса советую пасту с белыми грибами — очень сытно. Лёгкий вариант — греческий салат:',en:'Meat-free: mushroom pasta is filling, Greek salad is lighter:',ids:['pas','grk']},
+{k:['сыт','голод','мяс','бургер','hearty','hungry','burger'],ru:'Если хочется поплотнее — бургер «Пример» с картофелем. А к нему отлично идёт облепиховый лимонад:',en:'For something hearty — the Primer Burger with fries, great with our lemonade:',ids:['brg','lem']},
+{k:['десерт','сладк','dessert','sweet'],ru:'Из десертов хит — чизкейк Нью-Йорк. Любителям шоколада — тёплый брауни с пломбиром:',en:'Our dessert hit is NY cheesecake; chocolate lovers take the warm brownie:',ids:['chz','brn']},
+{k:['остр','spicy','hot'],ru:'Острое — это том-ям с креветками. Если остроты мало, попросите добавить чили 🌶',en:'Spicy? Tom yum with shrimp. Ask for extra chili if you like 🌶',ids:['tom']},
+{k:['дет','ребён','реб','kid','child'],ru:'Для детей: наггетсы с картофелем и облепиховый лимонад. На десерт — брауни (содержит орехи):',en:'For kids: nuggets with fries and lemonade, brownie for dessert (contains nuts):',ids:['nug','lem']},
+{k:['500','бюджет','недорог','дешев','budget','cheap','under'],ru:'До 500 ₽ можно собрать вкусный обед: шакшука 450 ₽ или сырники 390 ₽. Добавить капучино за 250 ₽?',en:'Under 500 ₽: shakshuka 450 ₽ or syrniki 390 ₽. Add a cappuccino for 250 ₽?',ids:['egg','syr']},
+{k:['хит','популяр','посовет','что взять','рекоменд','best','popular','recommend'],ru:'Чаще всего заказывают бургер «Пример», том-ям и сырники. Самое популярное сегодня:',en:'Most ordered: Primer Burger, tom yum and syrniki:',ids:['brg','tom']},
+{k:['завтрак','утро','breakfast','morning'],ru:'Завтраки весь день: сырники и шакшука. С капучино — идеальное утро:',en:'Breakfast all day: syrniki and shakshuka, perfect with a cappuccino:',ids:['syr','cap']},
+{k:['пить','напит','чай','drink','tea','лимонад'],ru:'Из напитков: домашний облепиховый лимонад и чай с чабрецом на компанию:',en:'Drinks: homemade lemonade or a pot of thyme tea:',ids:['lem','tea']}];
+function answer(q){var s=q.toLowerCase(),t=T[L];
+if(/орех|nut|аллерг|allerg/.test(s)){var safe=D.filter(function(d){return !d.nut&&(d.c==='des'||d.c==='main')}).map(nm);bot(t.allergy+esc(safe.join(', '))+t.allergy2);return}
+for(var i=0;i<R.length;i++)for(var j=0;j<R[i].k.length;j++)if(/^[a-z]+$/.test(R[i].k[j])?new RegExp('\\b'+R[i].k[j]+'\\b').test(s):s.indexOf(R[i].k[j])>=0){var r=R[i];bot(esc(r[L])+r.ids.map(function(id){return card(by(id))}).join(''));return}
+if(/привет|здравств|hello|hi\b/.test(s)){bot(esc(t.hi));return}
+if(/счёт|счет|оплат|bill|pay/.test(s)){bot(L==='ru'?'Оплатить можно прямо здесь по СБП — откройте корзину. Чаевые выберете там же.':'You can pay right here via SBP — open the cart. Tips are there too.');return}
+bot(esc(t.fb))}
+function renderChips(){$('chips').innerHTML=T[L].chips.map(function(c){return '<button type="button">'+esc(c)+'</button>'}).join('')}
+function ask(q){if(!q.trim())return;me(q);setTimeout(function(){answer(q);var c=$('chat');c.parentNode.scrollTop=c.parentNode.scrollHeight},450)}
+function openSheet(id){$(id).classList.add('open');if(id==='cartSheet')renderCart();if(id==='aiSheet'&&!$('chat').children.length)bot(esc(T[L].hi))}
+// events
+$('phone').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;
+if(b.dataset.c){cat=b.dataset.c;renderCats();renderList();return}
+if(b.dataset.lang){L=b.dataset.lang;document.querySelectorAll('[data-lang]').forEach(function(x){x.setAttribute('aria-pressed',x.dataset.lang===L)});$('chat').innerHTML='';if($('aiSheet').classList.contains('open'))bot(esc(T[L].hi));renderAll();log(L==='en'?'Меню переключено на английский — без перепечатки.':'Меню на русском.');return}
+if(b.dataset.inc){add(b.dataset.inc);return}
+if(b.dataset.dec){dec(b.dataset.dec);return}
+if(b.dataset.ai){add(b.dataset.ai,true);return}
+if(b.dataset.tip){tip=+b.dataset.tip;renderCart();return}
+if(b.hasAttribute('data-close')){b.closest('.sheet').classList.remove('open');return}
+if(b.id==='openCart')return openSheet('cartSheet');
+if(b.id==='openAi'){var pt=document.querySelector('.ph-top');if(pt)$('aiSheet').style.setProperty('--ai-top',(pt.offsetTop+pt.offsetHeight)+'px');return openSheet('aiSheet')}
+if(b.id==='callW'){toast(T[L].called);log('Вызов официанта ушёл на планшет персонала (демо).');return}
+if(b.id==='payBtn')return pay();
+if(b.id==='bankBtn')return bank();
+if(b.id==='againBtn'){$('cartSheet').classList.remove('open');paying=false;return}
+if(b.parentNode.id==='chips'){ask(b.textContent);return}
+});
+$('chatForm').addEventListener('submit',function(e){e.preventDefault();var v=$('chatIn').value;$('chatIn').value='';ask(v)});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')document.querySelectorAll('.sheet.open').forEach(function(s){s.classList.remove('open')})});
+renderAll();
+})();
+</script>
+</body>
+</html>

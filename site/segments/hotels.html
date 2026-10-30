@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Рум-сервис и ИИ-консьерж для отелей — Подача.AI</title>
+<meta name="description" content="Решения для отелей и апарт-отелей: QR-меню ресторана и рум-сервиса на 5–10 языках, ИИ-консьерж в Telegram/MAX/веб, допродажи SPA, трансфера и позднего выезда. Без покупки оборудования, запуск за 7 дней.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../assets/a11y.css">
+<style>
+.ht-kit{display:flex;flex-direction:column;gap:6px}
+.ht-kit .pr{margin-top:auto;padding-top:10px;border-top:1px dashed rgba(127,127,127,.3);font-weight:600}
+.ht-tag{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:99px;border:1px solid rgba(127,127,127,.35);margin-right:4px}
+.ht-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid rgba(127,127,127,.2)}
+.ht-row:last-child{border-bottom:0;font-weight:700}
+.ht-row span:last-child{text-align:right;white-space:nowrap}
+.ht-total{font-size:1.6rem;font-weight:800;font-family:Manrope,Inter,sans-serif}
+.ht-chat{display:flex;flex-direction:column;gap:8px}
+.ht-msg{max-width:88%;padding:8px 12px;border-radius:14px;font-size:.92rem;line-height:1.4}
+.ht-msg.g{align-self:flex-end;background:rgba(127,127,127,.15);border-bottom-right-radius:4px}
+.ht-msg.b{align-self:flex-start;border:1px solid rgba(127,127,127,.3);border-bottom-left-radius:4px}
+.ht-langs{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.ht-langs span{font-size:.78rem;font-weight:600;padding:4px 10px;border-radius:8px;border:1px solid rgba(127,127,127,.35)}
+.ht-cmp{width:100%;border-collapse:collapse;font-size:.92rem}
+.ht-cmp th,.ht-cmp td{padding:10px 8px;border-bottom:1px solid rgba(127,127,127,.2);text-align:left;vertical-align:top}
+.ht-cmp th{font-weight:600}
+.ht-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.sticky-cta{position:sticky;bottom:12px;z-index:5;display:none;margin:0 16px}
+@media (max-width:720px){.sticky-cta{display:block}.sticky-cta .btn{width:100%;justify-content:center}.ht-total{font-size:1.35rem}.ht-cmp{font-size:.85rem;min-width:520px}}
+</style>
+</head>
+<body>
+<a class="skip" href="#top">К содержимому</a>
+<header class="hdr"><div class="wrap">
+<a class="logo" href="../index.html">Подача<span>.AI</span></a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html" aria-current="page">Отели</a></div></details><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Рынок</a>
+</nav>
+<a class="btn btn-primary btn-sm" href="../index.html#lead-sec">Бесплатный аудит</a>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
+</div></header>
+
+<main id="top" tabindex="-1">
+<section class="hero"><div class="wrap hero-grid">
+<div>
+<span class="eyebrow">Отели 3–4★ · апарт-отели · мини-отели · гостиничные рестораны</span>
+<h1>Рум-сервис, который гости заказывают сами, и ИИ-консьерж на их языке</h1>
+<p class="lead">QR в номере открывает меню ресторана и рум-сервиса на 5–10 языках, а ИИ-консьерж отвечает про Wi-Fi, завтрак и парковку, продаёт SPA, трансфер и поздний выезд. Без колонок и приложений: работает в браузере, Telegram и MAX. Запуск за 7 дней.</p>
+<div class="cta"><a class="btn btn-primary" href="../index.html#lead-sec">Бесплатный аудит рум-сервиса</a><a class="btn btn-ghost" href="#calc">Посчитать эффект</a></div>
+<div class="badges"><span class="badge">Без покупки оборудования</span><span class="badge">TravelLine · Bnovo · iiko · r_keeper</span><span class="badge">Данные в РФ, 152-ФЗ</span></div>
+</div>
+<div class="hero-card" aria-label="Пример диалога гостя с ИИ-консьержем">
+<p class="small muted" style="margin:0 0 10px">Номер 412 · Telegram · <span class="est">пример</span></p>
+<div class="ht-chat">
+<div class="ht-msg g">早餐几点？可以送到房间吗？</div>
+<div class="ht-msg b">Завтрак с 7:00 до 10:30 на 2 этаже. В номер — да, до 11:00. Открыть меню рум-сервиса на китайском? 🍳 <i class="small muted">(ответ на языке гостя)</i></div>
+<div class="ht-msg g">Late checkout?</div>
+<div class="ht-msg b">Поздний выезд до 16:00 — 1 500 ₽. Оформить? Счёт добавим к номеру.</div>
+<div class="ht-msg b small muted">→ Ресепшен: заявка на поздний выезд, №412, подтвердить</div>
+</div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="pains"><div class="wrap">
+<span class="eyebrow">Почему это важно сейчас</span>
+<h2>Номера заполнены, а F&B и ресепшен теряют деньги</h2>
+<p class="muted">Данные открытых источников, подробнее в <a href="../market.html">анализе рынка</a>.</p>
+<div class="grid g3" style="margin-top:24px">
+<div class="card pain"><div class="num">38,3 тыс.</div><h3>Объектов в реестре</h3><p>Классификация обязательна, без записи в реестре с 01.09.2025 нельзя принимать брони. Конкуренция за отзывы и оценку растёт.</p></div>
+<div class="card pain"><div class="num">5%</div><h3>Номеров заказывают рум-сервис</h3><p>Меню в папке, заказ по телефону через ресепшен, ошибки и долгий отклик. Рум-сервис часто убыточен <span class="est">оценка</span>.</p></div>
+<div class="card pain"><div class="num">30–50%</div><h3>Типовых вопросов на ресепшен</h3><p>Wi-Fi, завтрак, парковка, такси. Эту долю ИИ-консьерж может снять с администраторов <span class="est">оценка</span>.</p></div>
+<div class="card pain"><div class="num">RU / EN</div><h3>Языковой барьер</h3><p>Гости из Китая, Ближнего Востока, Индии и СНГ не понимают меню, а персонал не говорит на их языке.</p></div>
+<div class="card pain"><div class="num">0 ₽</div><h3>Нет допродаж</h3><p>SPA, поздний выезд, трансфер и экскурсии никто не предлагает: ресепшену некогда.</p></div>
+<div class="card pain"><div class="num">от 0,4 млн ₽</div><h3>Оборудование у альтернатив</h3><p>Голосовые колонки в номера для отеля на 80 номеров — от 5 тыс. ₽ за номер плюс подписка от 500 ₽/мес за номер <span class="est">оценка</span>.</p></div>
+</div>
+</div></section>
+
+<section id="kit"><div class="wrap">
+<span class="eyebrow">Набор услуг</span>
+<h2>Что подключаем отелю</h2>
+<p class="muted">Цены из общего прайса. Модули можно докупать к любому пакету.</p>
+<div class="grid g3" style="margin-top:24px">
+<div class="card ht-kit"><div><span class="ht-tag">ресторан</span><span class="ht-tag">рум-сервис</span></div><h3>QR-меню ресторана и рум-сервиса</h3><p>Меню с фото на телефоне гостя, стоп-лист из кассы. QR-наклейки и тейбл-тенты в номерах, лифтах и лобби.</p><p class="pr">9 900 ₽ + 1 490 ₽/мес · входит в «Старт»</p></div>
+<div class="card ht-kit"><div><span class="ht-tag">все гости</span></div><h3>Мультиязычное меню</h3><p>ИИ-перевод на 5–10 языков: EN, ZH, AR, TR, HI, FA, языки СНГ. Меню и аллергены вычитывает человек, язык определяется автоматически.</p><p class="pr">4 900 ₽ · входит в «Старт»</p></div>
+<div class="card ht-kit"><div><span class="ht-tag">ресепшен</span><span class="ht-tag">допродажи</span></div><h3>ИИ-консьерж (Telegram / MAX / веб)</h3><p>Отвечает 24/7 по базе знаний отеля, принимает заказы и заявки, предлагает SPA, трансфер, поздний выезд. Сложное передаёт на ресепшен.</p><p class="pr">34 900 ₽ + 5 900 ₽/мес</p></div>
+<div class="card ht-kit"><div><span class="ht-tag">ресторан</span><span class="ht-tag">рум-сервис</span></div><h3>ИИ-официант и апсейл в меню</h3><p>Подсказывает блюда и напитки, предлагает десерт к заказу, показывает аллергены только из базы. +5–12% к чеку у тех, кто пользуется <span class="est">оценка</span>.</p><p class="pr">29 900 ₽ + 2 990 ₽/мес</p></div>
+<div class="card ht-kit"><div><span class="ht-tag">ресепшен</span></div><h3>Голосовой ИИ-администратор</h3><p>Берёт входящие звонки в ресторан и на ресепшен, бронирует столы, отвечает на частые вопросы, переводит на человека.</p><p class="pr">59 900 ₽ + 9 900 ₽/мес</p></div>
+<div class="card ht-kit"><div><span class="ht-tag">репутация</span></div><h3>Центр отзывов</h3><p>Ответы на Яндекс Картах, 2ГИС и площадках бронирования в тоне отеля, алерт о негативе в Telegram за 5 минут.</p><p class="pr">1 площадка входит в «Старт»</p></div>
+<div class="card ht-kit"><div><span class="ht-tag">персонал</span></div><h3>Бот-наставник и база знаний</h3><p>Стандарты сервиса, меню и ответы для новых сотрудников ресепшена и ресторана. Ввод в должность за 1–1,5 недели вместо 2–3.</p><p class="pr">34 900 ₽ + 4 900 ₽/мес</p></div>
+<div class="card ht-kit"><div><span class="ht-tag">закон</span></div><h3>ПДн-комплект (152-ФЗ)</h3><p>Уведомление РКН, политика, формы согласий и договор поручения для QR-меню, консьержа и рассылок. Данные гостей хранятся в РФ.</p><p class="pr">9 900 ₽ разово</p></div>
+<div class="card ht-kit"><div><span class="ht-tag">все</span></div><h3>Экспресс-аудит</h3><p>Смотрим меню рум-сервиса, FAQ ресепшена, отзывы и карточки. Отчёт с точками роста и расчётом окупаемости.</p><p class="pr">бесплатно</p></div>
+</div>
+<div class="ht-langs" aria-label="Языки"><span>RU</span><span>EN</span><span>中文</span><span>العربية</span><span>Türkçe</span><span>हिन्दी</span><span>فارسی</span><span>O‘zbek</span><span>Қазақ</span><span>Azərbaycan</span><span>Հայերեն</span></div>
+</div></section>
+
+<section class="sec-alt" id="pack"><div class="wrap">
+<span class="eyebrow">Готовые наборы</span>
+<h2>Три сборки под размер отеля</h2>
+<p class="muted">В основе пакет «Старт» (14 900 ₽ внедрение + 2 990 ₽/мес, 14 дней бесплатно). К нему добавляем модули по прайсу.</p>
+<div class="grid g3" style="margin-top:24px">
+<div class="card plan"><h3>Мини-отель</h3><p class="muted small">10–30 номеров, завтраки или кафе</p><p class="price">2 990 ₽ <small>/мес</small></p><p class="setup">Внедрение: 14 900 ₽</p>
+<ul><li>Пакет «Старт»: QR-меню и рум-сервис, мультиязычность, ИИ-описания до 40 позиций</li><li>QR в каждом номере</li><li>Центр отзывов: 1 площадка</li><li>Шаблоны документов по ПДн</li></ul><p class="note">За 12 мес вперёд: −20% и внедрение бесплатно</p><a class="btn btn-ghost" href="../index.html#lead-sec">14 дней бесплатно</a></div>
+<div class="card plan hit"><span class="tag">Рекомендуем</span><h3>Старт + ИИ-администратор</h3><p class="muted small">30–200 номеров, свой ресторан или бар</p><p class="price">8 890 ₽ <small>/мес</small></p><p class="setup">Внедрение: 49 800 ₽</p><p class="note">сумма пакета «Старт» и модуля по прайсу</p>
+<ul><li>Всё из «Старт»</li><li>ИИ-консьерж в Telegram, MAX и на сайте</li><li>Допродажи SPA, трансфера, позднего выезда</li><li>Эскалация на ресепшен</li></ul><p class="note">«Старт» 14 900 ₽ + 2 990 ₽/мес и ИИ-администратор 34 900 ₽ + 5 900 ₽/мес</p><a class="btn btn-primary" href="../index.html#lead-sec">Обсудить запуск</a></div>
+<div class="card plan"><h3>Старт + ИИ-администратор + ИИ-официант</h3><p class="muted small">Ресторан с высокой загрузкой, активный рум-сервис</p><p class="price">11 880 ₽ <small>/мес</small></p><p class="setup">Внедрение: 79 700 ₽</p><p class="note">сумма пакета «Старт» и модулей по прайсу</p>
+<ul><li>Всё из «Старт + ИИ-администратор»</li><li>ИИ-официант: подсказки и апсейл в меню</li><li>Аллергены только из базы</li></ul><p class="note">+ ИИ-официант 29 900 ₽ + 2 990 ₽/мес</p><a class="btn btn-ghost" href="../index.html#lead-sec">Обсудить запуск</a></div>
+</div>
+<p class="small muted" style="margin-top:16px">Проводка заказа на счёт номера в PMS (TravelLine, Bnovo, Shelter, 1С) и передача в iiko/r_keeper — по индивидуальному расчёту после аудита. Сеть от 3 объектов: пакет «Сеть» 79 000 ₽/мес за 3 точки, внедрение 290 000 ₽. Цены итоговые, НДС не облагается.</p>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Сравнение</span>
+<h2>Почему не колонки в номер</h2>
+<div class="ht-scroll" style="margin-top:20px"><table class="ht-cmp">
+<thead><tr><th></th><th>Голосовые колонки</th><th>Подача.AI «Старт + ИИ-администратор»</th></tr></thead>
+<tbody>
+<tr><td>Оборудование</td><td>от 5 тыс. ₽ за номер</td><td>не нужно: QR и телефон гостя</td></tr>
+<tr><td>Подписка, 80 номеров</td><td>от 40 000 ₽/мес <span class="est">оценка</span></td><td>8 890 ₽/мес</td></tr>
+<tr><td>Меню ресторана и заказ</td><td>визуальное меню рум-сервиса</td><td>QR-меню ресторана и рум-сервиса, стоп-лист из кассы, апсейл</td></tr>
+<tr><td>Языки</td><td>ограничено</td><td>5–10 языков с вычиткой</td></tr>
+<tr><td>Где работает</td><td>только в номере</td><td>номер, лобби, ресторан, до заезда и после</td></tr>
+</tbody></table></div>
+<p class="small muted">Цены альтернативы — по открытым источникам (Яндекс, 3DNews) на 30.10.2026.</p>
+</div></section>
+
+<section class="sec-alt" id="calc"><div class="wrap grid g2" style="align-items:start">
+<div>
+<span class="eyebrow">Расчёт эффекта</span>
+<h2>Сколько может дать ваш отель</h2>
+<p class="muted">Подставьте свои цифры. Это <b>пример расчёта</b>, а не обещание: реальный эффект фиксируем на двухнедельном пилоте.</p>
+<form class="card form" onsubmit="return false">
+<div class="field"><label for="h-rooms">Номеров <output id="o-rooms"></output></label><input type="range" id="h-rooms" min="10" max="250" step="5" value="80"></div>
+<div class="field"><label for="h-occ">Загрузка, % <output id="o-occ"></output></label><input type="range" id="h-occ" min="30" max="100" step="5" value="70"></div>
+<div class="field"><label for="h-check">Средний чек рум-сервиса, ₽ <output id="o-check"></output></label><input type="range" id="h-check" min="500" max="4000" step="100" value="1500"></div>
+<div class="field"><label for="h-up">Рост доли номеров с заказом, п.п. <output id="o-up"></output></label><input type="range" id="h-up" min="1" max="8" step="1" value="4"></div>
+<div class="field"><label for="h-late">Гостей с допродажей (поздний выезд, трансфер), % <output id="o-late"></output></label><input type="range" id="h-late" min="0" max="5" step="0.5" value="2"></div>
+</form>
+</div>
+<div class="card" aria-live="polite">
+<span class="est">пример расчёта</span>
+<h3 style="margin-top:10px">Старт + ИИ-администратор</h3>
+<div id="r-rows"></div>
+<p class="ht-total" id="r-total"></p>
+<p class="small muted" id="r-note"></p>
+<a class="btn btn-primary" href="../index.html#lead-sec" style="margin-top:8px">Проверить на моих данных</a>
+</div>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Пример</span>
+<h2>Отель на 80 номеров с рестораном</h2>
+<div class="card" style="margin-top:20px"><span class="est">пример расчёта</span>
+<p style="margin-top:10px">Загрузка 70%, около 56 занятых номеров в сутки. Доля номеров с заказом рум-сервиса растёт с 5% до 9% при чеке 1 500 ₽ — это примерно <b>+100 тыс. ₽ выручки в месяц</b>. ИИ-консьерж снимает 30–50% типовых вопросов: экономия 0,3–0,5 ставки администратора, или <b>25–40 тыс. ₽/мес</b>. Плюс поздний выезд и трансфер у 2–3% гостей по 1 500–3 000 ₽.</p>
+<p><b>Стоимость:</b> 8 890 ₽/мес + 49 800 ₽ внедрение. <b>Окупаемость:</b> 1–3 месяца <span class="est">оценка</span>.</p></div>
+</div></section>
+
+<section class="sec-alt"><div class="wrap">
+<span class="eyebrow">Как запускаем</span>
+<h2>Пилот за 2 недели — цифры до оплаты подписки</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card step"><h3>1. Аудит</h3><p>Бесплатно разбираем меню рум-сервиса и FAQ ресепшена, собираем базу знаний отеля (10–30 страниц).</p></div>
+<div class="card step"><h3>2. Запуск за 7 дней</h3><p>QR в 100% номеров, в лифтах и лобби. Заказы приходят персоналу в Telegram, консьерж отвечает гостям.</p></div>
+<div class="card step"><h3>3. Замер и отчёт</h3><p>Две недели считаем заказы, средний чек и вопросы на ресепшен. Показываем отчёт — решаете о подписке.</p></div>
+</div>
+</div></section>
+
+<section id="faq"><div class="wrap">
+<span class="eyebrow">FAQ</span>
+<h2>Частые вопросы отельеров</h2>
+<details><summary>Гостю нужно скачивать приложение?</summary><p>Нет. QR открывает меню в браузере, консьерж работает в Telegram, MAX или на сайте — там, где гостю удобно.</p></details>
+<details><summary>Можно ли списывать заказ на счёт номера?</summary><p>На старте заказ приходит персоналу и проводится вручную. Автоматическая проводка в PMS (TravelLine, Bnovo, Shelter, 1С) и передача в iiko/r_keeper подключаются отдельным проектом по расчёту после аудита.</p></details>
+<details><summary>ИИ не наговорит гостю лишнего?</summary><p>Консьерж отвечает только по базе знаний отеля, а если не знает или вопрос сложный — передаёт ресепшену. Меню и аллергены на всех языках вычитывает человек.</p></details>
+<details><summary>Мы в сети, решения согласует УК.</summary><p>Начинаем с пилота в одном объекте с отчётом в цифрах — его удобно нести на согласование. Для сетей от 3 объектов есть пакет «Сеть».</p></details>
+<details><summary>Где хранятся данные гостей?</summary><p>В РФ (Yandex Cloud / Selectel), согласия берём отдельным документом. Подробнее в <a href="../privacy.html">политике ПДн</a>.</p></details>
+</div></section>
+
+<section class="sec-alt"><div class="wrap" style="text-align:center">
+<h2>Узнайте, сколько ваш отель недобирает на рум-сервисе</h2>
+<p class="lead">Бесплатный аудит меню, FAQ ресепшена и отзывов. Результат за 48 часов.</p>
+<div class="cta" style="justify-content:center"><a class="btn btn-primary" href="../index.html#lead-sec">Получить аудит</a><a class="btn btn-ghost" href="../index.html#pricing">Все тарифы</a></div>
+</div></section>
+<div class="sticky-cta"><a class="btn btn-primary" href="../index.html#lead-sec">Бесплатный аудит рум-сервиса</a></div>
+</main>
+
+<footer><div class="wrap">
+<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="../index.html">Главная</a><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="../privacy.html">Политика ПДн</a><a href="../consent.html">Согласие на обработку ПДн</a><a href="../sitemap.xml">sitemap.xml</a></div></nav>
+<div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
+</div></footer>
+<script src="../assets/app.js"></script>
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var f=function(n){return Math.round(n).toLocaleString('ru-RU')+' ₽'};
+  function row(a,b){return '<div class="ht-row"><span>'+a+'</span><span>'+b+'</span></div>'}
+  function calc(){
+    var rooms=+$('h-rooms').value, occ=+$('h-occ').value, check=+$('h-check').value, up=+$('h-up').value, late=+$('h-late').value;
+    $('o-rooms').textContent=rooms; $('o-occ').textContent=occ+'%'; $('o-check').textContent=check+' ₽'; $('o-up').textContent='+'+up; $('o-late').textContent=late+'%';
+    var occd=rooms*occ/100, rs=occd*up/100*check*30, rsm=rs*0.35;
+    var guests=occd*30/2.5, upsell=guests*late/100*2000;
+    var staff=Math.min(40000,Math.max(5000,rooms*400)), cost=8890;
+    var total=rsm+upsell+staff-cost;
+    $('r-rows').innerHTML=row('Занятых номеров в сутки','≈ '+Math.round(occd))+row('Доп. выручка рум-сервиса',f(rs))+row('Маржа рум-сервиса (35%)',f(rsm))+row('Допродажи (≈ 2 000 ₽, заезд 2,5 ночи)',f(upsell))+row('Разгрузка ресепшена',f(staff))+row('Абонентка «Старт + ИИ-администратор»','−'+f(cost));
+    $('r-total').textContent='≈ '+f(total)+' в месяц';
+    $('r-note').textContent='Внедрение 49 800 ₽. '+(total>0?'Окупаемость ≈ '+Math.max(1,Math.ceil(49800/total))+' мес.':'Начните с «Старт» за 2 990 ₽/мес.')+' Пример расчёта: коэффициенты — наши оценки, проверяются на пилоте.';
+  }
+  ['h-rooms','h-occ','h-check','h-up','h-late'].forEach(function(id){$(id).addEventListener('input',calc)});
+  calc();
+})();
+</script>
+</body>
+</html>

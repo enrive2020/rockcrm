@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QR-меню и ИИ для баров, кальянных и караоке — Подача.AI</title>
+<meta name="description" content="Решения для баров, кальянных и караоке: кнопка «позвать кальянщика», QR-заказ и оплата СБП со стола, онлайн-бронь 24/7 в Telegram и VK, ответы на отзывы. Пакет «Рост» 49 900 ₽ + 14 900 ₽/мес, пилот 30 дней за 9 900 ₽.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../assets/a11y.css">
+<style>
+.br-kit{display:flex;flex-direction:column;gap:6px}
+.br-kit .pr{margin-top:auto;padding-top:10px;border-top:1px dashed rgba(127,127,127,.3);font-weight:600}
+.br-tag{display:inline-block;font-size:.72rem;padding:2px 8px;border-radius:99px;border:1px solid rgba(127,127,127,.35);margin-right:4px}
+.br-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid rgba(127,127,127,.2)}
+.br-row:last-child{border-bottom:0;font-weight:700}
+.br-row span:last-child{text-align:right;white-space:nowrap}
+.br-total{font-size:1.6rem;font-weight:800;font-family:Manrope,Inter,sans-serif}
+.br-switch{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.br-switch button{font:inherit;padding:8px 14px;border-radius:99px;border:1px solid rgba(127,127,127,.4);background:transparent;color:inherit;cursor:pointer}
+.br-switch button[aria-pressed="true"]{background:var(--accent,#e8590c);border-color:transparent;color:var(--on-accent,#fff)}
+.br-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.br-btns span{display:block;text-align:center;padding:10px 6px;border-radius:12px;border:1px solid rgba(127,127,127,.35);font-weight:600;font-size:.9rem}
+.br-btns span.on{background:var(--accent,#e8590c);color:var(--on-accent,#fff);border-color:transparent}
+.br-msg{padding:8px 0;border-bottom:1px dashed rgba(127,127,127,.25);font-size:.92rem}
+.br-msg:last-child{border:0}
+.br-msg b{font-variant-numeric:tabular-nums;margin-right:6px}
+.br-legal{border-left:3px solid var(--accent,#e8590c);padding-left:14px}
+.sticky-cta{position:sticky;bottom:12px;z-index:5;display:none;margin:0 16px}
+@media (max-width:720px){.sticky-cta{display:block}.sticky-cta .btn{width:100%;justify-content:center}.br-total{font-size:1.35rem}}
+</style>
+</head>
+<body>
+<a class="skip" href="#top">К содержимому</a>
+<header class="hdr"><div class="wrap">
+<a class="logo" href="../index.html">Подача<span>.AI</span></a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html" aria-current="page">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div></details><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Рынок</a>
+</nav>
+<a class="btn btn-primary btn-sm" href="../index.html#lead-sec">Бесплатный аудит</a>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
+</div></header>
+
+<main id="top" tabindex="-1">
+<section class="hero"><div class="wrap hero-grid">
+<div>
+<span class="eyebrow">Бары · кальянные · караоке · лаунжи</span>
+<h1>Ни одного пустого стола в пятницу и ни одного «где кальянщик?»</h1>
+<p class="lead">Половина недельной выручки делается в вечер пятницы и субботы. Мы подключаем онлайн-бронь с предоплатой по СБП, бота-администратора 24/7, QR-меню с кнопкой вызова кальянщика и оплатой со стола. Работает поверх вашей кассы, запуск за 1–2 недели.</p>
+<div class="cta"><a class="btn btn-primary" href="../index.html#lead-sec">Пилот 30 дней за 9 900 ₽</a><a class="btn btn-ghost" href="#calc">Посчитать неявки</a></div>
+<div class="badges"><span class="badge">iiko · r_keeper · Quick Resto · Poster</span><span class="badge">СБП 0,4–0,7% вместо 1,6–2,5%</span><span class="badge">18+ и 152-ФЗ учтены</span></div>
+</div>
+<div class="hero-card" aria-label="Пример экрана QR-меню за столом кальянной">
+<p class="small muted" style="margin:0 0 8px">Экран гостя за столом №7 · <span class="est">пример</span></p>
+<b>Lounge «Дым» · стол 7</b>
+<div class="br-btns"><span class="on">Позвать кальянщика</span><span>Сменить угли</span><span>Повторить заказ</span><span>Оплатить по СБП</span></div>
+<div class="br-msg" style="margin-top:10px"><b>23:41</b>Кальянщик принял вызов, подойдёт через 2 мин</div>
+<div class="br-msg"><b>23:42</b>ИИ-подсказка: к миксу «Ягоды + мята» часто берут лимонад «Тархун» — 390 ₽</div>
+<div class="br-msg"><b>00:15</b>Счёт 6 480 ₽ разделён на 4 гостей · чаевые по QR</div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="pains"><div class="wrap">
+<span class="eyebrow">Специфика вечернего формата</span>
+<h2>Где бар и кальянная теряют деньги</h2>
+<p class="muted">Цифры по сегменту — экспертные оценки по Москве и СПб, открытой статистики по кальянным нет. Подробнее в <a href="../market.html">анализе рынка</a>.</p>
+<div class="grid g3" style="margin-top:24px">
+<div class="card pain"><div class="num">50–70%</div><h3>Выручки — в пт–сб</h3><p>Каждый простаивающий стол в пятничный вечер — прямая потеря, которую не отыграть во вторник <span class="est">оценка</span>.</p></div>
+<div class="card pain"><div class="num">15–30%</div><h3>Неявки без предоплаты</h3><p>Бронь на пятницу держат, гости не приходят. Предоплата 20–50% снижает no-show в 2–3 раза <span class="est">оценка</span>.</p></div>
+<div class="card pain"><div class="num">2–3 ч</div><h3>Слот, а не стол</h3><p>В караоке бронируют кабинку по времени: нужен календарь слотов, продление и почасовой тариф, а не тетрадка.</p></div>
+<div class="card pain"><div class="num">«Депозита нет»</div><h3>Конфликты на входе</h3><p>По телефону сказали одно, на месте требуют другое — и вот отзыв на 1★. Условия брони должны быть письменными.</p></div>
+<div class="card pain"><div class="num">40–60%</div><h3>Выручки — кальяны</h3><p>Гость ждёт кальянщика, угли гаснут, повторный заказ не случается. Самая дорогая пауза в зале <span class="est">оценка</span>.</p></div>
+<div class="card pain"><div class="num">ночь</div><h3>Заявки без ответа</h3><p>Пишут в Telegram и VK в 01:00, а администратор занят залом. Бронь уходит к соседу.</p></div>
+</div>
+</div></section>
+
+<section id="qr"><div class="wrap">
+<span class="eyebrow">QR-сценарии для сегмента</span>
+<h2>Шесть QR-сценариев, которые гости действительно используют</h2>
+<p class="muted">Вызов кальянщика гостю выгоден — поэтому QR в кальянной сканируют охотнее, чем в ресторане.</p>
+<div class="grid g3" style="margin-top:24px">
+<div class="card step"><h3>1. Меню с фото миксов</h3><p>Крепость, вкус, чаша, фото коктейлей; объём порции и маркировка 18+. Средний чек +10–20% <span class="est">оценка</span>.</p></div>
+<div class="card step"><h3>2. «Позвать кальянщика / сменить угли»</h3><p>Кнопка со стола прямо в Telegram персонала. Снимает главную операционную боль и ускоряет повторный заказ.</p></div>
+<div class="card step"><h3>3. Заказ и оплата со стола</h3><p>Деление счёта на компанию, оплата по СБП. Особенно важно для больших столов и караоке.</p></div>
+<div class="card step"><h3>4. Продление кабинки</h3><p>В караоке гость продлевает время и дозаказывает со своего телефона (если позволяет ваша система).</p></div>
+<div class="card step"><h3>5. Отзыв и чаевые</h3><p>QR на чаевые (Нетмонет, CloudTips) и короткий отзыв. Негатив прилетает вам, а не на карты.</p></div>
+<div class="card step"><h3>6. QR на входе</h3><p>Wi-Fi или регистрация с согласием на рассылку — база гостей для событий, плюс подтверждение 18+.</p></div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="kit"><div class="wrap">
+<span class="eyebrow">Набор услуг</span>
+<h2>Что подключаем бару, кальянной и караоке</h2>
+<p class="muted">Цены из общего прайса. Модули можно докупать к любому пакету.</p>
+<div class="grid g3" style="margin-top:24px">
+<div class="card br-kit"><div><span class="br-tag">все</span></div><h3>QR-меню «Старт»</h3><p>Миксы, коктейли, сеты с фото; стоп-лист из кассы. Новый вкус табака или цена — за минуту, без перепечатки.</p><p class="pr">9 900 ₽ + 1 490 ₽/мес · входит в «Старт»</p></div>
+<div class="card br-kit"><div><span class="br-tag">бар</span><span class="br-tag">кальянная</span><span class="br-tag">караоке</span></div><h3>QR-заказ и оплата СБП + чаевые</h3><p>Заказ со стола в POS, деление счёта, чаевые. СБП 0,4–0,7% вместо 1,6–2,5% у карт.</p><p class="pr">19 900 ₽ + 1 990 ₽/мес · входит в «Рост»</p></div>
+<div class="card br-kit"><div><span class="br-tag">все</span></div><h3>ИИ-администратор бронирований</h3><p>Бот в Telegram / VK / MAX / на сайте принимает брони 24/7, письменно фиксирует условия депозита, напоминает о визите, передаёт сложное человеку.</p><p class="pr">34 900 ₽ + 5 900 ₽/мес · входит в «Рост»</p></div>
+<div class="card br-kit"><div><span class="br-tag">бар</span><span class="br-tag">кальянная</span></div><h3>ИИ-официант и апсейл</h3><p>Подбирает микс под вкус компании, пару к коктейлю, предлагает «повторить». Без рекламы табака и алкоголя — только внутри меню.</p><p class="pr">29 900 ₽ + 2 990 ₽/мес · входит в «Рост»</p></div>
+<div class="card br-kit"><div><span class="br-tag">караоке</span><span class="br-tag">бар</span></div><h3>Голосовой ИИ-администратор</h3><p>Отвечает на звонки, когда в зале громко и администратор не слышит телефон. Бронирует кабинку, переводит на человека.</p><p class="pr">59 900 ₽ + 9 900 ₽/мес · 300 мин входит в «Про»</p></div>
+<div class="card br-kit"><div><span class="br-tag">все</span></div><h3>Центр отзывов</h3><p>Ответы на Яндекс Картах, 2ГИС и агрегаторах в тоне заведения, алерт о негативе в Telegram за 5 минут. Накрутки не делаем.</p><p class="pr">3 900 ₽/мес · 1 площадка входит в «Старт»</p></div>
+<div class="card br-kit"><div><span class="br-tag">все</span></div><h3>CRM-лояльность и рассылки</h3><p>Web-карта гостя, «каждый 6-й кальян», день рождения ±7 дней, VIP с приоритетной бронью, рассылки о событиях — только по согласию.</p><p class="pr">24 900 ₽ + 12 900 ₽/мес · входит в «Про»</p></div>
+<div class="card br-kit"><div><span class="br-tag">бар</span><span class="br-tag">ивенты</span></div><h3>Сайт и лендинги событий</h3><p>Страница квиза, DJ-сета или Нового года с бронью и QR. Свой канал без комиссии агрегаторов.</p><p class="pr">лендинг 39 900 ₽; с заказом и POS 119 900 ₽ · 1 990 ₽/мес</p></div>
+<div class="card br-kit"><div><span class="br-tag">все</span></div><h3>ИИ-аналитик продаж</h3><p>«Сколько кальянов продали в пятницу и какой микс упал?» — ответ в Telegram. Утренняя сводка, ABC-анализ меню.</p><p class="pr">29 900 ₽ + 4 900 ₽/мес · входит в «Рост»</p></div>
+<div class="card br-kit"><div><span class="br-tag">все</span></div><h3>ИИ-контент и SMM</h3><p>Анонсы событий, 12–20 постов в месяц для TG и VK, маркировка ERID. Без рекламы табака и алкоголя — акцент на событиях и атмосфере.</p><p class="pr">9 900 ₽ + 14 900 ₽/мес</p></div>
+<div class="card br-kit"><div><span class="br-tag">все</span></div><h3>ПДн-комплект (152-ФЗ)</h3><p>Уведомление РКН, политика, формы согласий для QR на входе, ботов и рассылок. Штрафы до 15 млн ₽.</p><p class="pr">9 900 ₽ разово</p></div>
+<div class="card br-kit"><div><span class="br-tag">все</span></div><h3>Экспресс-аудит</h3><p>Смотрим бронь, меню, отзывы и кассу. Отчёт с точками роста и расчётом окупаемости за 48 часов.</p><p class="pr">бесплатно</p></div>
+</div>
+</div></section>
+
+<section id="pack"><div class="wrap">
+<span class="eyebrow">Пакеты</span>
+<h2>Какой пакет выбрать</h2>
+<p class="muted">Общие пакеты Подача.AI — те же цены, что на <a href="../index.html#pricing">главной</a>. Подсказываем, какой подходит вашему формату.</p>
+<div class="grid g3" style="margin-top:24px">
+<div class="card plan"><h3>Старт</h3><p class="muted small">Небольшой бар или кальянная до 15 столов</p><p class="price">2 990 ₽ <small>/мес</small></p><p class="setup">Внедрение: 14 900 ₽</p>
+<ul><li>QR-меню с фото миксов и коктейлей</li><li>Мультиязычность</li><li>ИИ-описания до 40 позиций</li><li>Центр отзывов: 1 площадка</li><li>Шаблоны документов по ПДн</li></ul><p class="note">14 дней бесплатно. Кнопку «позвать кальянщика» добавляем модулем QR-заказа (19 900 ₽ + 1 990 ₽/мес)</p><a class="btn btn-ghost" href="../index.html#lead-sec">14 дней бесплатно</a></div>
+<div class="card plan hit"><span class="tag">Рекомендуем для кальянных и баров</span><h3>Рост</h3><p class="muted small">40–150 мест, загрузка в пт–сб</p><p class="price">14 900 ₽ <small>/мес</small></p><p class="setup">Внедрение: 49 900 ₽</p>
+<ul><li>Всё из «Старт»</li><li>QR-заказ, вызов персонала, оплата СБП, чаевые</li><li>ИИ-официант и апсейл</li><li>ИИ-администратор броней в TG/VK/MAX</li><li>ИИ-аналитик продаж</li></ul><p class="note">Отдельно было бы 151 300 ₽ + 21 170 ₽/мес</p><a class="btn btn-primary" href="../index.html#lead-sec">Начать с пилота</a></div>
+<div class="card plan"><h3>Про</h3><p class="muted small">Караоке, большой бар с банкетами</p><p class="price">34 900 ₽ <small>/мес</small></p><p class="setup">Внедрение: 129 900 ₽</p>
+<ul><li>Всё из «Рост»</li><li>Голосовой администратор (300 мин)</li><li>CRM-лояльность: VIP, клубные карты, ДР</li><li>Фудкост, прогноз закупок, OCR накладных</li><li>Графики смен</li></ul><p class="note">Отдельно было бы 360 700 ₽ + 64 570 ₽/мес</p><a class="btn btn-ghost" href="../index.html#lead-sec">Обсудить запуск</a></div>
+</div>
+<div class="card" style="margin-top:20px"><h3>Пилот 30 дней за 9 900 ₽</h3><p>QR-меню, ИИ-официант и бот бронирований. Цели в договоре — доля QR-заказов и число обработанных броней. Не достигли — возвращаем 9 900 ₽; продолжаете — сумма засчитывается во внедрение «Роста» (остаётся 40 000 ₽).</p></div>
+<p class="small muted" style="margin-top:16px">Оплата за 6 мес: −10%, за 12 мес: −20%. Сеть от 3 точек: 79 000 ₽/мес за 3 точки (≈ 26 300 ₽ за точку), с 4-й точки +19 900 ₽/мес; внедрение 290 000 ₽ за 3 точки + 70 000 ₽ за каждую следующую. Цены итоговые, НДС не облагается.</p>
+</div></section>
+
+<section class="sec-alt" id="calc"><div class="wrap grid g2" style="align-items:start">
+<div>
+<span class="eyebrow">Расчёт эффекта</span>
+<h2>Сколько стоят неявки в ваши пятницы</h2>
+<p class="muted">Подставьте свои цифры. Это <b>пример расчёта</b> на консервативных допущениях, а не обещание: реальный эффект фиксируем на пилоте.</p>
+<div class="br-switch" role="group" aria-label="Формат">
+<button type="button" data-mode="hookah" aria-pressed="true">Кальянная / бар</button>
+<button type="button" data-mode="karaoke" aria-pressed="false">Караоке</button>
+</div>
+<form class="card form" id="br-form" onsubmit="return false">
+<div class="field"><label for="br-bk">Броней за пт–сб на неделе <output id="o-bk"></output></label><input type="range" id="br-bk" min="10" max="200" step="5" value="60"></div>
+<div class="field"><label for="br-check"><span id="l-check">Средний чек на стол</span>, ₽ <output id="o-check"></output></label><input type="range" id="br-check" min="1500" max="40000" step="500" value="4000"></div>
+<div class="field"><label for="br-ns">Неявки сейчас, % <output id="o-ns"></output></label><input type="range" id="br-ns" min="5" max="40" step="1" value="20"></div>
+<div class="field"><label for="br-fill">Сколько освободившихся мест удаётся перепродать, % <output id="o-fill"></output></label><input type="range" id="br-fill" min="0" max="80" step="5" value="40"></div>
+</form>
+</div>
+<div class="card" aria-live="polite">
+<span class="est">пример расчёта</span>
+<h3 style="margin-top:10px" id="r-title">Предоплата СБП + бот броней</h3>
+<div id="r-rows"></div>
+<p class="br-total" id="r-total"></p>
+<p class="small muted" id="r-note"></p>
+<a class="btn btn-primary" href="../index.html#lead-sec" style="margin-top:8px">Проверить на моих данных</a>
+</div>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Примеры</span>
+<h2>Три типовых сценария</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card"><span class="est">пример расчёта</span><h3 style="margin-top:10px">Кальянная на 20 столов</h3><p>60 броней за выходные, чек 4 000 ₽ на стол, неявки 20%. Пакет «Рост».</p><p><b>Эффект:</b> предоплата снижает неявки до ~8%; 7 спасённых столов в неделю × 4 000 ₽ × 4,3 нед ≈ 120 тыс. ₽/мес выручки <span class="est">оценка</span>, плюс быстрее повторные заказы по кнопке вызова.</p><p><b>Стоимость:</b> 49 900 ₽ + 14 900 ₽/мес.</p></div>
+<div class="card"><span class="est">пример расчёта</span><h3 style="margin-top:10px">Караоке на 6 кабинок</h3><p>Кабинка 15 000 ₽ за вечер, звонки в шуме теряются. Пакет «Про» с голосовым администратором.</p><p><b>Эффект:</b> 2 дополнительно занятые кабинки в неделю × 15 000 ₽ × 4,3 нед ≈ 130 тыс. ₽/мес выручки <span class="est">оценка</span>; продление времени по QR без поиска администратора.</p><p><b>Стоимость:</b> 129 900 ₽ + 34 900 ₽/мес.</p></div>
+<div class="card"><span class="est">пример расчёта</span><h3 style="margin-top:10px">Бар с ивентами</h3><p>Квизы и DJ-сеты каждую неделю, корпоративы в ноябре–декабре дают 20–35% выручки <span class="est">оценка</span>. «Рост» + лендинги событий.</p><p><b>Эффект:</b> бронь и предоплата банкетов через бота, рассылки по базе согласившихся гостей, список гостей с QR на входе.</p><p><b>Стоимость:</b> 49 900 ₽ + 39 900 ₽ лендинг + 14 900 ₽/мес.</p></div>
+</div>
+</div></section>
+
+<section class="sec-alt"><div class="wrap grid g2" style="align-items:start">
+<div>
+<span class="eyebrow">Регулирование</span>
+<h2>Учитываем закон, а не обходим его</h2>
+<div class="br-legal">
+<p><b>542-ФЗ с 01.03.2025.</b> Бестабачные кальянные смеси подпадают под антитабачный закон: продажа несовершеннолетним запрещена. В QR-меню и на входе — подтверждение 18+.</p>
+<p><b>Реклама (38-ФЗ, 15-ФЗ).</b> Продвигать табак и алкоголь нельзя. Лояльность и рассылки строим на визитах и событиях, а не на скидке на кальян.</p>
+<p><b>Алкоголь.</b> ЕГАИС и маркировка; в меню корректный объём порции и 18+.</p>
+<p><b>Лицензирование.</b> Обсуждается законопроект № 1024775-8. Прозрачное меню, учёт и документы помогут подготовиться, а решения легко перенастроить.</p>
+</div>
+</div>
+<div>
+<span class="eyebrow">Возражения</span>
+<h2>Что обычно спрашивают</h2>
+<div class="card"><p><b>«Гости не будут сканировать».</b> Вызов кальянщика им самим выгоден — сканируют.</p><p><b>«Депозит отпугнёт».</b> Предоплату включаем только на пиковые слоты, и она засчитывается в счёт.</p><p style="margin:0"><b>«Нас могут закрыть по новому закону».</b> Самый вероятный сценарий — лицензирование и санитарные нормы; учёт и документы вам понадобятся в любом случае.</p></div>
+</div>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Как запускаем</span>
+<h2>До первой пятницы с предоплатой — 1–2 недели</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card step"><h3>1. Аудит за 48 часов</h3><p>Бесплатно смотрим брони, меню, отзывы и кассу. Считаем, сколько стоят неявки и ожидание кальянщика.</p></div>
+<div class="card step"><h3>2. Пилот 30 дней</h3><p>QR-меню с кнопкой вызова, ИИ-официант и бот броней с предоплатой по СБП на пиковые слоты. 9 900 ₽ с возвратом, если цели не достигнуты.</p></div>
+<div class="card step"><h3>3. Масштабируем</h3><p>Добавляем лояльность, лендинги событий, голосового администратора для караоке — по результатам пилота.</p></div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="faq"><div class="wrap">
+<span class="eyebrow">FAQ</span>
+<h2>Частые вопросы владельцев баров и кальянных</h2>
+<details><summary>У нас уже Restoplace или Leclick для броней. Зачем вы?</summary><p>Можем работать рядом: наш бот принимает заявки в Telegram, VK и MAX ночью и в пик, фиксирует условия депозита письменно и передаёт бронь в вашу систему или в POS.</p></details>
+<details><summary>Как работает предоплата?</summary><p>Гость оплачивает депозит по СБП при брони — только на те слоты, которые вы выберете (например, пт–сб после 20:00). Сумма засчитывается в счёт, условия возврата прописаны в сообщении бота.</p></details>
+<details><summary>Караоке: бронь кабинки на время поддерживается?</summary><p>Да, бот работает со слотами по времени (2–3 часа), учитывает почасовой тариф и предлагает продление. Заказ песен через QR — если это позволяет ваша караоке-система.</p></details>
+<details><summary>Не запрещено ли рекламировать кальяны в рассылке?</summary><p>Реклама табака и алкоголя запрещена, поэтому рассылки строим на событиях, визитах и днях рождения, только по согласию гостя (152-ФЗ, 38-ФЗ ст. 18). Тексты проверяем.</p></details>
+<details><summary>Где хранятся данные гостей?</summary><p>В РФ (Yandex Cloud / Selectel), согласия берём отдельным документом. Подробнее в <a href="../privacy.html">политике ПДн</a>.</p></details>
+</div></section>
+
+<section><div class="wrap" style="text-align:center">
+<h2>Узнайте, сколько ваш бар теряет в пятницу</h2>
+<p class="lead">Бесплатный экспресс-аудит броней, меню, отзывов и кассы. Результат за 48 часов.</p>
+<div class="cta" style="justify-content:center"><a class="btn btn-primary" href="../index.html#lead-sec">Получить аудит</a><a class="btn btn-ghost" href="../index.html#pricing">Все тарифы</a></div>
+</div></section>
+<div class="sticky-cta"><a class="btn btn-primary" href="../index.html#lead-sec">Пилот 30 дней за 9 900 ₽</a></div>
+</main>
+<footer><div class="wrap">
+<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="../index.html">Главная</a><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="../privacy.html">Политика ПДн</a><a href="../consent.html">Согласие на обработку ПДн</a><a href="../sitemap.xml">sitemap.xml</a></div></nav>
+<div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
+</div></footer>
+<script src="../assets/app.js"></script>
+<script>
+(function(){
+  var mode='hookah', $=function(id){return document.getElementById(id)};
+  var f=function(n){return Math.round(n).toLocaleString('ru-RU')+' ₽'};
+  function row(a,b){return '<div class="br-row"><span>'+a+'</span><span>'+b+'</span></div>'}
+  function calc(){
+    var bk=+$('br-bk').value, ch=+$('br-check').value, ns=+$('br-ns').value, fill=+$('br-fill').value;
+    $('o-bk').textContent=bk; $('o-check').textContent=ch.toLocaleString('ru-RU')+' ₽'; $('o-ns').textContent=ns+'%'; $('o-fill').textContent=fill+'%';
+    var lost=bk*ns/100*(1-fill/100)*ch*4.3;          // потери в месяц
+    var nsNew=ns/2.5;                                  // предоплата снижает в 2–3 раза
+    var saved=bk*(ns-nsNew)/100*(1-fill/100)*ch*4.3;
+    var margin=saved*0.6;                              // валовая маржа бара/кальянной ~60% (допущение)
+    var cost=mode==='hookah'?14900:34900, setup=mode==='hookah'?49900:129900;
+    var h=row('Неявки сейчас: потери выручки в месяц',f(lost))+row('Неявки после предоплаты','≈ '+nsNew.toFixed(1).replace('.',',')+'%')+row('Спасённая выручка в месяц',f(saved))+row('Валовая маржа (60%)',f(margin))+row('Абонентка «'+(mode==='hookah'?'Рост':'Про')+'»','−'+f(cost));
+    $('r-rows').innerHTML=h;
+    $('r-title').textContent=mode==='hookah'?'Кальянная / бар · пакет «Рост»':'Караоке · пакет «Про»';
+    var net=margin-cost; $('r-total').textContent='≈ '+(net<0?'−':'')+f(Math.abs(net))+' в месяц';
+    $('r-note').textContent='Внедрение '+setup.toLocaleString('ru-RU')+' ₽. '+(net>0?'Окупаемость внедрения ≈ '+Math.max(1,Math.ceil(setup/net))+' мес. ':'При таких цифрах начните с пилота за 9 900 ₽ или пакета «Старт». ')+'Учтены только неявки — без апсейла, быстрых повторных заказов и ночных броней. Пример расчёта.';
+  }
+  document.querySelectorAll('.br-switch button').forEach(function(b){b.addEventListener('click',function(){
+    mode=b.dataset.mode;
+    document.querySelectorAll('.br-switch button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});
+    if(mode==='karaoke'){$('br-bk').value=24;$('br-check').value=15000;$('l-check').textContent='Средний чек кабинки за вечер'}else{$('br-bk').value=60;$('br-check').value=4000;$('l-check').textContent='Средний чек на стол'}
+    calc();
+  })});
+  document.querySelectorAll('#br-form input').forEach(function(i){i.addEventListener('input',calc)});
+  calc();
+})();
+</script>
+</body>
+</html>

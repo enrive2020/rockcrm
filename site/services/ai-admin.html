@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ИИ-администратор для ресторана — брони в Telegram, VK, MAX и по телефону | Подача.AI</title>
+<meta name="description" content="ИИ-администратор принимает брони 24/7 в Telegram, VK, MAX, WhatsApp и голосом по телефону, отвечает на вопросы и пишет брони в iiko, r_keeper, Restoplace. Внедрение от 34 900 ₽.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="../assets/a11y.css">
+<style>
+.chan{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.dlg-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 16px}
+.dlg-tabs button{font:inherit;font-size:.9rem;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--text);cursor:pointer}
+.dlg-tabs button[aria-selected="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.dlg{display:grid;gap:20px;grid-template-columns:1fr}
+@media(min-width:860px){.dlg{grid-template-columns:1.2fr 1fr}}
+.dlg-panel[hidden]{display:none}
+.phone{max-width:420px;width:100%;border:1px solid var(--line);border-radius:22px;background:var(--surface);padding:14px;box-shadow:var(--shadow)}
+.phone-top{display:flex;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid var(--line);font-size:.9rem}
+.ava{width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-weight:700}
+.sys{align-self:center;font-size:.78rem;color:var(--muted);background:var(--surface-2);border-radius:999px;padding:3px 10px;text-align:center}
+.voice .msg.a:before{content:"ИИ: ";font-weight:600}.voice .msg.g:before{content:"Гость: ";font-weight:600}
+.why ul{padding-left:18px;margin:8px 0;color:var(--muted);font-size:.93rem}.why li{margin:6px 0}
+.ai-tbl{width:100%;border-collapse:collapse;font-size:.93rem}.ai-tbl th,.ai-tbl td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.ai-tbl th{font-weight:600;color:var(--muted);font-size:.82rem}
+.calc{font-variant-numeric:tabular-nums}.calc div{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.calc .tot{font-weight:700;border-bottom:0;color:var(--accent-2)}
+details{border-bottom:1px solid var(--line);padding:14px 0}summary{cursor:pointer;font-weight:600}details p{color:var(--muted);margin:8px 0 0}
+.final{text-align:center}.final .cta{justify-content:center}
+</style>
+</head>
+<body>
+<a class="skip" href="#top">К содержимому</a>
+<header class="hdr"><div class="wrap">
+<a class="logo" href="../index.html">Подача<span>.AI</span></a>
+<nav class="nav" id="nav" aria-label="Основное меню">
+<details class="dd"><summary>Услуги</summary><div class="dd-menu"><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html" aria-current="page">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div></details><details class="dd"><summary>Для кого</summary><div class="dd-menu"><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div></details><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Рынок</a>
+</nav>
+<a class="btn btn-primary btn-sm" href="../index.html#lead-sec">Бесплатный аудит</a>
+<button class="burger" aria-controls="nav" aria-expanded="false" aria-label="Меню"><span aria-hidden="true">☰</span></button>
+</div></header>
+
+<main id="top" tabindex="-1">
+<section class="hero"><div class="wrap hero-grid">
+<div>
+<span class="eyebrow">Услуга · ИИ-администратор</span>
+<h1>ИИ-администратор: брони 24/7 в мессенджерах и по телефону</h1>
+<p class="lead">Отвечает гостям за секунды в Telegram, VK, MAX, WhatsApp и голосом на входящие звонки. Принимает и переносит брони, рассказывает о меню и акциях, записывает бронь в кассу или CRM. Сложные вопросы сразу передаёт администратору.</p>
+<div class="cta"><a class="btn btn-primary" href="../index.html#lead-sec">Обсудить запуск</a><a class="btn btn-ghost" href="#dialogs">Посмотреть диалоги</a></div>
+<div class="chan"><span class="badge">Telegram</span><span class="badge">VK</span><span class="badge">MAX</span><span class="badge">WhatsApp</span><span class="badge">Виджет на сайте</span><span class="badge">Телефон (голос)</span></div>
+</div>
+<div class="hero-card">
+<div class="hero-kpi"><div><b>24/7</b><span class="small muted">ответ за секунды</span></div><div><b>1–2 нед.</b><span class="small muted">запуск в чатах</span></div><div><b>+10–20%</b><span class="small muted">броней <span class="est">оценка</span></span></div></div>
+<div class="chat" style="margin-top:16px">
+<div class="msg g">Можно столик на 6 человек в субботу в 19:00?</div>
+<div class="msg a">Да, есть стол в зале на втором этаже. Оформить бронь? Подскажите имя и телефон.</div>
+<div class="msg g">Мария, +7 900 000-00-00</div>
+<div class="msg a">Готово ✓ Суббота, 19:00, 6 гостей. Напомню за 3 часа. Если планы изменятся — просто напишите сюда.</div>
+</div>
+</div>
+</div></section>
+
+<section class="sec-alt"><div class="wrap">
+<span class="eyebrow">Проблема</span>
+<h2>Гость пишет ночью или звонит в пик — и уходит к соседям</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card pain"><div class="num">30–40%</div><h3>Звонков без ответа в пик</h3><p>Хостес занята залом, телефон звонит впустую <span class="est">оценка</span>.</p></div>
+<div class="card pain"><div class="num">22:00–10:00</div><h3>Заявки ждут до утра</h3><p>Сообщения в мессенджерах вечером и ночью читают на следующий день, когда гость уже выбрал другое место.</p></div>
+<div class="card pain"><div class="num">5 каналов</div><h3>Брони в разных местах</h3><p>Telegram, VK, звонки, сайт, тетрадь. Двойные брони и потерянные заявки.</p></div>
+</div>
+</div></section>
+
+<section><div class="wrap">
+<span class="eyebrow">Что умеет</span>
+<h2>Один администратор во всех каналах</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card"><h3>Бронирования</h3><p class="muted">Проверяет свободные столы, создаёт, переносит и отменяет брони, присылает напоминание, собирает депозит или предоплату по ссылке.</p></div>
+<div class="card"><h3>Ответы на вопросы</h3><p class="muted">Часы работы, парковка, детское меню, банкеты, доставка, акции. Отвечает только по вашей базе знаний и не выдумывает.</p></div>
+<div class="card"><h3>Меню и аллергены</h3><p class="muted">Показывает меню и стоп-лист, подбирает блюда. Аллергены берёт только из техкарт и всегда напоминает уточнить у официанта.</p></div>
+<div class="card"><h3>Голос по телефону</h3><p class="muted">Отвечает на входящие звонки естественным голосом, предупреждает о записи разговора, бронирует и переводит на человека по запросу.</p></div>
+<div class="card"><h3>Передача человеку</h3><p class="muted">Жалоба, банкет на 40 гостей, нестандартный вопрос — сразу уведомление администратору в Telegram с историей диалога.</p></div>
+<div class="card"><h3>Отчёты</h3><p class="muted">Сколько обращений, броней и пропущенных звонков, о чём спрашивают чаще всего. Ежедневная сводка в Telegram.</p></div>
+</div>
+</div></section>
+
+<section class="sec-alt" id="dialogs"><div class="wrap">
+<span class="eyebrow">Сценарии диалогов</span>
+<h2>Как это выглядит для гостя</h2>
+<p class="lead">Примеры сценариев. Тон, приветствие и правила (депозиты, лимиты по размеру компании, время удержания стола) настраиваем под ваше заведение.</p>
+<div class="dlg-tabs" role="tablist">
+<button role="tab" aria-selected="true" data-d="d1">Бронь в Telegram</button>
+<button role="tab" aria-selected="false" data-d="d2">Перенос в VK</button>
+<button role="tab" aria-selected="false" data-d="d3">Звонок по телефону</button>
+<button role="tab" aria-selected="false" data-d="d4">Банкет → человеку</button>
+<button role="tab" aria-selected="false" data-d="d5">Вопрос ночью в MAX</button>
+</div>
+
+<div class="dlg-panel" id="d1" role="tabpanel"><div class="dlg">
+<div class="phone"><div class="phone-top"><span class="ava">П</span><div><b>Бистро «Пример»</b><br><span class="small muted">Telegram · бот</span></div></div>
+<div class="chat">
+<div class="msg g">Привет! Есть стол на двоих завтра в 20:30?</div>
+<div class="msg a">Добрый вечер! На завтра в 20:30 свободны стол у окна и стол у барной стойки. Какой удобнее?</div>
+<div class="msg g">У окна</div>
+<div class="msg a">Отлично. На чьё имя оформить бронь и какой номер для связи?</div>
+<div class="msg g">Игорь, 8 912 000 00 00</div>
+<div class="msg a">Бронь подтверждена ✓<br>Завтра, 20:30, 2 гостя, стол у окна. Держим стол 15 минут. Есть повод — день рождения или годовщина?</div>
+<div class="msg g">Годовщина 🙂</div>
+<div class="msg a">Поздравляем! Передал команде — подготовим комплимент от шефа.</div>
+<div class="sys">Бронь записана в iiko · уведомление администратору</div>
+</div></div>
+<div class="why card"><h3>Что происходит</h3><ul><li>Свободные столы берутся из системы бронирования в реальном времени.</li><li>Бронь создаётся в кассе или CRM, без ручного переноса.</li><li>Повод визита сохраняется в карточке гостя — для сервиса и рассылок.</li><li>Напоминание гостю за 3 часа снижает неявки.</li></ul></div>
+</div></div>
+
+<div class="dlg-panel" id="d2" role="tabpanel" hidden><div class="dlg">
+<div class="phone"><div class="phone-top"><span class="ava">П</span><div><b>Бистро «Пример»</b><br><span class="small muted">VK · сообщения сообщества</span></div></div>
+<div class="chat">
+<div class="msg g">Здравствуйте, у меня бронь на пятницу на 19:00, можно перенести на 21:00?</div>
+<div class="msg a">Здравствуйте, Ольга! Нашёл вашу бронь: пятница, 19:00, 4 гостя. На 21:00 есть свободный стол на 4. Переносим?</div>
+<div class="msg g">Да. И нас будет 5</div>
+<div class="msg a">Перенёс на пятницу, 21:00, 5 гостей — подобрал стол побольше ✓ Напоминаю: после 22:00 на кухне действует ночное меню. Показать?</div>
+<div class="msg g">Да</div>
+<div class="msg a">Вот ночное меню: <u>ссылка на QR-меню</u>. До встречи!</div>
+<div class="sys">Бронь изменена · старый слот освобождён</div>
+</div></div>
+<div class="why card"><h3>Что происходит</h3><ul><li>Гость найден по номеру телефона из профиля или из прошлой брони.</li><li>Освободившийся слот сразу доступен другим гостям.</li><li>ИИ подсказывает полезное без навязчивых продаж.</li></ul></div>
+</div></div>
+
+<div class="dlg-panel" id="d3" role="tabpanel" hidden><div class="dlg">
+<div class="phone voice"><div class="phone-top"><span class="ava">☎</span><div><b>Входящий звонок</b><br><span class="small muted">Голосовой ИИ-администратор</span></div></div>
+<div class="chat">
+<div class="msg a">Ресторан «Пример», здравствуйте! Разговор записывается для качества обслуживания. Чем могу помочь?</div>
+<div class="msg g">Хочу забронировать стол на сегодня, на семь вечера, нас трое.</div>
+<div class="msg a">На сегодня в 19:00 на троих есть место. Подскажите, пожалуйста, имя.</div>
+<div class="msg g">Андрей.</div>
+<div class="msg a">Андрей, записал: сегодня, 19:00, три гостя. Отправлю подтверждение в СМС на этот номер. Что-нибудь ещё?</div>
+<div class="msg g">А детские стульчики есть?</div>
+<div class="msg a">Да, есть два детских стульчика. Отметил в брони, что нужен один. Ждём вас!</div>
+<div class="sys">Бронь записана · запись разговора в журнале</div>
+</div></div>
+<div class="why card"><h3>Что происходит</h3><ul><li>Отвечает с первого гудка, параллельно на несколько линий.</li><li>Говорит о записи разговора — требование закона.</li><li>Если гость просит человека или ИИ не уверен — переводит звонок на администратора.</li><li>Распознавание речи и синтез — российские сервисы (Yandex SpeechKit / SaluteSpeech).</li></ul></div>
+</div></div>
+
+<div class="dlg-panel" id="d4" role="tabpanel" hidden><div class="dlg">
+<div class="phone"><div class="phone-top"><span class="ava">П</span><div><b>Бистро «Пример»</b><br><span class="small muted">WhatsApp</span></div></div>
+<div class="chat">
+<div class="msg g">Добрый день, хотим провести корпоратив 14 декабря, человек 35. Что можете предложить?</div>
+<div class="msg a">Добрый день! Для компании от 20 гостей у нас банкетное меню от 3 500 ₽ на человека и закрытый зал до 40 мест. Уточню пару деталей для менеджера: удобное время и нужна ли программа или ведущий?</div>
+<div class="msg g">С 19:00, ведущий не нужен, но нужен проектор</div>
+<div class="msg a">Записал. Передаю заявку банкетному менеджеру — он свяжется с вами сегодня до 18:00 и пришлёт расчёт. Как к вам обращаться?</div>
+<div class="msg g">Светлана</div>
+<div class="sys">Заявка передана менеджеру в Telegram</div>
+</div></div>
+<div class="why card"><h3>Что происходит</h3><ul><li>ИИ собирает всё нужное: дату, число гостей, бюджет, пожелания.</li><li>Менеджер получает готовую заявку, а не «перезвоните мне».</li><li>Правила передачи задаёте вы: банкеты, жалобы, VIP-гости, всё непонятное.</li></ul><p class="small muted">Цены в диалоге — пример.</p></div>
+</div></div>
+
+<div class="dlg-panel" id="d5" role="tabpanel" hidden><div class="dlg">
+<div class="phone"><div class="phone-top"><span class="ava">П</span><div><b>Бистро «Пример»</b><br><span class="small muted">MAX · 01:47</span></div></div>
+<div class="chat">
+<div class="msg g">Вы завтра работаете? Есть веганские блюда? Можно с собакой?</div>
+<div class="msg a">Да, завтра работаем с 10:00 до 23:00. Веганские блюда: боул с киноа, суп-пюре из тыквы, овощные спринг-роллы. С собакой можно на летней веранде, принесём миску с водой 🐶</div>
+<div class="msg g">Супер, тогда забронируйте на веранде на 13:00, на двоих</div>
+<div class="msg a">Готово ✓ Завтра, 13:00, веранда, 2 гостя + собака. Хорошей ночи!</div>
+<div class="sys">Обращение в 01:47 · бронь без участия персонала</div>
+</div></div>
+<div class="why card"><h3>Что происходит</h3><ul><li>Ночные вопросы закрываются сразу, а не утром.</li><li>Ответы — только из вашей базы знаний: правила, меню, режим работы.</li><li>Если ответа в базе нет, ИИ честно говорит об этом и передаёт вопрос человеку.</li></ul></div>
+</div></div>
+</div></section>
+
+<section id="how"><div class="wrap">
+<span class="eyebrow">Как запускаем</span>
+<h2>От заявки до первых броней — 1–2 недели</h2>
+<div class="grid g4 steps" style="margin-top:24px">
+<div class="card step"><h3>Бриф и доступы</h3><p class="muted">Каналы, правила брони, схема зала, ответы на частые вопросы. Доступ к кассе или системе бронирования.</p></div>
+<div class="card step"><h3>База знаний и сценарии</h3><p class="muted">Собираем FAQ, меню, тон общения, правила передачи человеку.</p></div>
+<div class="card step"><h3>Тест на команде</h3><p class="muted">Ваши сотрудники «ломают» бота, мы правим сценарии.</p></div>
+<div class="card step"><h3>Запуск и сопровождение</h3><p class="muted">Подключаем каналы, следим за диалогами, раз в неделю улучшаем ответы.</p></div>
+</div>
+<p class="note" style="margin-top:12px">Голосовой администратор запускается за 2–3 недели: добавляются номер телефона, голос и сценарии звонков.</p>
+</div></section>
+
+<section class="sec-alt" id="integrations"><div class="wrap">
+<span class="eyebrow">Интеграции</span>
+<h2>Работает с тем, что у вас уже есть</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card"><h3>Каналы</h3><p class="muted">Telegram, VK, MAX, WhatsApp, виджет на сайте, Яндекс Карты (кнопка «Написать»), входящие звонки через вашу АТС или новый номер.</p></div>
+<div class="card"><h3>Касса и бронирование</h3><p class="muted">iiko, r_keeper, Saby Presto, Quick Resto, Poster, Frontpad; Restoplace, GuestMe, Leclick, ReMarked. Если API нет — брони в Google/Яндекс Таблицу и Telegram администратору.</p></div>
+<div class="card"><h3>CRM и лояльность</h3><p class="muted">amoCRM, Битрикс24, UDS, Loona. Гость, повод визита и согласия на рассылки попадают в базу.</p></div>
+<div class="card"><h3>Модели ИИ</h3><p class="muted">YandexGPT и GigaChat. Данные хранятся и обрабатываются в РФ (Yandex Cloud / Selectel).</p></div>
+<div class="card"><h3>Оплата</h3><p class="muted">Депозиты и предоплата по ссылке через СБП и ЮKassa.</p></div>
+<div class="card"><h3>152-ФЗ</h3><p class="muted">Согласие на обработку ПДн в первом сообщении, журнал согласий, предупреждение о записи звонков. При необходимости — ПДн-комплект за 9 900 ₽.</p></div>
+</div>
+<p class="note" style="margin-top:12px">Доступ к API кассы или системы бронирования оплачивается по тарифу вендора.</p>
+</div></section>
+
+<section id="price"><div class="wrap">
+<span class="eyebrow">Цены</span>
+<h2>Стоимость за одну точку</h2>
+<div class="grid g3" style="margin-top:24px">
+<div class="card plan"><h3>ИИ-администратор в чатах</h3><p class="muted small">Telegram / VK / MAX / сайт</p><p class="price">34 900 ₽ <small>внедрение</small></p><p class="price" style="font-size:1.4rem">5 900 ₽ <small>/ мес</small></p><ul><li>Брони, переносы, отмены, напоминания</li><li>FAQ, меню, акции</li><li>Передача человеку</li><li>Запись в POS/CRM</li><li>Запуск 1–2 недели</li></ul><a class="btn btn-ghost" href="../index.html#lead-sec">Оставить заявку</a></div>
+<div class="card plan hit"><span class="tag">Максимум броней</span><h3>Голосовой ИИ-администратор</h3><p class="muted small">Входящие звонки</p><p class="price">59 900 ₽ <small>внедрение</small></p><p class="price" style="font-size:1.4rem">9 900 ₽ <small>/ мес</small></p><ul><li>300 минут разговоров в месяц включено</li><li>Сверх лимита — 12 ₽/мин</li><li>Предупреждение о записи, перевод на человека</li><li>Запуск 2–3 недели</li></ul><a class="btn btn-primary" href="../index.html#lead-sec">Оставить заявку</a></div>
+<div class="card plan"><h3>Выгоднее в пакете</h3><p class="muted small">Цены пакетов как на главной</p><p style="margin:.6em 0 0"><b>«Рост»</b> — 49 900 ₽ + 14 900 ₽/мес: ИИ-администратор в TG/VK/MAX + QR-заказ и СБП, ИИ-официант, ИИ-аналитик.</p><p><b>«Про»</b> — 129 900 ₽ + 34 900 ₽/мес: всё из «Роста» + голосовой администратор (300 мин), фудкост, прогноз закупок и другое.</p><a class="btn btn-ghost" href="../index.html#pricing">Сравнить пакеты</a></div>
+</div>
+<p class="note" style="margin-top:12px">WhatsApp подключаем через официальный бизнес-API; доступ к нему оплачивается по тарифу провайдера. Оплата за 6 мес вперёд — −10%, за 12 мес — −20%.</p>
+</div></section>
+
+<section class="sec-alt"><div class="wrap">
+<span class="eyebrow">Окупаемость</span>
+<h2>Пример расчёта для голосового администратора</h2>
+<div class="grid g2" style="margin-top:24px">
+<div class="card calc">
+<div><span>Звонков в месяц</span><b>600</b></div>
+<div><span>Пропущено в пик</span><b>30% → 180</b></div>
+<div><span>Удаётся вернуть бронь</span><b>20% → 36 броней</b></div>
+<div><span>Средний счёт брони</span><b>4 000 ₽</b></div>
+<div><span>Маржа</span><b>30%</b></div>
+<div class="tot"><span>Дополнительная маржа</span><b>≈ 43 000 ₽/мес</b></div>
+<div><span>Абонентская плата</span><b>9 900 ₽/мес</b></div>
+</div>
+<div><p class="lead">Это пример расчёта, а не гарантия. Цифры зависят от формата заведения и потока звонков.</p><p class="muted">На пилоте мы фиксируем исходные показатели (пропущенные звонки, число броней) и сравниваем через 30 дней. Пилот 30 дней: возврат, если не достигнем целей из договора.</p><a class="btn btn-primary" href="../index.html#lead-sec">Посчитать для моего заведения</a></div>
+</div>
+</div></section>
+
+<section id="faq"><div class="wrap">
+<span class="eyebrow">FAQ</span>
+<h2>Частые вопросы</h2>
+<details><summary>Гости поймут, что говорят с ботом?</summary><p>Мы не скрываем этого: в приветствии ИИ представляется помощником заведения. По просьбе гостя в любой момент подключается человек.</p></details>
+<details><summary>А если ИИ ошибётся или придумает ответ?</summary><p>ИИ отвечает только по вашей базе знаний. Если ответа нет, он передаёт вопрос администратору. Аллергены — только из техкарт, с напоминанием уточнить у официанта.</p></details>
+<details><summary>Нужно ли менять кассу или систему бронирования?</summary><p>Нет. Подключаемся к iiko, r_keeper, Saby, Quick Resto, Poster и популярным системам бронирования. Если интеграции нет — брони приходят в таблицу и Telegram.</p></details>
+<details><summary>Можно оставить свой номер телефона?</summary><p>Да. Настраиваем переадресацию с вашего номера: в пик или в нерабочее время звонок уходит ИИ, остальное время — на хостес. Схему выбираете вы.</p></details>
+<details><summary>Как с персональными данными?</summary><p>Данные хранятся в РФ, гость даёт согласие в первом сообщении, звонки сопровождаются предупреждением о записи. Документы по 152-ФЗ подготовим.</p></details>
+</div></section>
+
+<section class="sec-alt final"><div class="wrap">
+<h2>Перестаньте терять брони ночью и в час пик</h2>
+<p class="lead">Бесплатный экспресс-аудит: посчитаем, сколько обращений и звонков вы теряете, и покажем сценарии для вашего заведения.</p>
+<div class="cta"><a class="btn btn-primary" href="../index.html#lead-sec">Получить бесплатный аудит</a><a class="btn btn-ghost" href="../index.html#services">Все услуги</a></div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+<div><b>Подача<span style="color:var(--accent)">.AI</span></b><br>ИИ для ресторанов и кафе<br><span class="op">Оператор ПДн: [ИП/ООО, ИНН, ОГРН, адрес — заполнить]</span></div>
+<nav class="fmap" aria-label="Карта сайта"><div><b>Услуги</b><a href="../services/qr-menu.html">QR-меню и ИИ-официант</a><a href="../services/ai-admin.html">ИИ-администратор</a><a href="../services/marketing.html">Маркетинг и отзывы</a><a href="../services/operations.html">Операционка и аналитика</a><a href="../services/staff.html">Персонал</a><a href="../services/audit.html">Аудит процессов</a></div><div><b>Для кого</b><a href="../segments/restaurants.html">Рестораны</a><a href="../segments/coffee.html">Кофейни и пекарни</a><a href="../segments/bars.html">Бары и кальянные</a><a href="../segments/delivery.html">Фастфуд и доставка</a><a href="../segments/hotels.html">Отели</a></div><div><b>Компания</b><a href="../index.html">Главная</a><a href="../pricing.html">Цены</a><a href="../demo.html">Демо</a><a href="../cases.html">Кейсы</a><a href="../market.html">Анализ рынка</a><a href="#lead" data-tg>Telegram</a></div><div><b>Документы</b><a href="../privacy.html">Политика ПДн</a><a href="../consent.html">Согласие на обработку ПДн</a><a href="../sitemap.xml">sitemap.xml</a></div></nav>
+<div>© 2026. НДС не облагается (УСН). Не является публичной офертой.</div>
+</div></footer>
+<script src="../assets/app.js"></script>
+<script>
+document.querySelectorAll('.dlg-tabs button').forEach(function(b){b.addEventListener('click',function(){
+document.querySelectorAll('.dlg-tabs button').forEach(function(x){x.setAttribute('aria-selected',x===b)});
+document.querySelectorAll('.dlg-panel').forEach(function(p){p.hidden=p.id!==b.dataset.d});});});
+</script>
+</body>
+</html>

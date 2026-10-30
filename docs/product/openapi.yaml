@@ -1,0 +1,935 @@
+openapi: 3.1.0
+info:
+  title: Подача.AI API
+  version: 1.0.0
+  description: |
+    REST API платформы Подача.AI. Пояснения: docs/product/api-contract.md.
+    Все данные хранятся и обрабатываются в РФ (152-ФЗ). Ошибки — RFC 9457 (application/problem+json).
+servers:
+  - url: https://api.podacha.ai/v1
+    description: production (Yandex Cloud, ru-central1)
+  - url: https://api.sandbox.podacha.ai/v1
+    description: sandbox
+tags:
+  - {name: auth, description: Аутентификация персонала}
+  - {name: guest, description: Публичные эндпоинты гостя по QR-токену стола}
+  - {name: admin-venues, description: Организация, точки, столы, QR}
+  - {name: admin-menu, description: Меню и стоп-лист}
+  - {name: admin-orders, description: Заказы и вызовы}
+  - {name: admin-bookings, description: Брони}
+  - {name: admin-reviews, description: Отзывы}
+  - {name: admin-crm, description: Гости и согласия}
+  - {name: admin-users, description: Пользователи и роли}
+  - {name: webhooks-in, description: Входящие вебхуки (платежи, POS)}
+  - {name: webhooks-out, description: Подписки на исходящие вебхуки}
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: Вход по телефону/email и паролю или OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LoginRequest'}
+      responses:
+        '200': {description: Токены, content: {application/json: {schema: {$ref: '#/components/schemas/TokenPair'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /auth/otp:
+    post:
+      tags: [auth]
+      security: []
+      summary: Запросить одноразовый код (SMS / Telegram / MAX)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, channel]
+              properties:
+                phone: {$ref: '#/components/schemas/Phone'}
+                channel: {type: string, enum: [sms, telegram, max]}
+      responses:
+        '202': {description: Код отправлен}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /auth/refresh:
+    post:
+      tags: [auth]
+      security: []
+      summary: Обновить access-токен (ротация refresh)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [refresh_token], properties: {refresh_token: {type: string}}}
+      responses:
+        '200': {description: Новая пара, content: {application/json: {schema: {$ref: '#/components/schemas/TokenPair'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Отозвать refresh-токен текущей сессии
+      responses:
+        '204': {description: OK}
+  /me:
+    get:
+      tags: [auth]
+      summary: Текущий пользователь и его роли
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Me'}}}}
+
+  # ---------------- GUEST ----------------
+  /guest/sessions:
+    post:
+      tags: [guest]
+      security: []
+      summary: Открыть гостевую сессию по QR-токену стола
+      description: QR содержит https://m.podacha.ai/t/{qr_token}. Ответ — короткоживущий guest JWT (4 ч), привязанный к столу.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [qr_token]
+              properties:
+                qr_token: {type: string, pattern: '^[A-Za-z0-9_-]{22}$'}
+                locale: {$ref: '#/components/schemas/Locale'}
+                device_id: {type: string, maxLength: 64, description: Случайный id из localStorage}
+      responses:
+        '201':
+          description: Сессия
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GuestSession'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '410': {description: QR-токен отозван, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /guest/menu:
+    get:
+      tags: [guest]
+      security: [{guestAuth: []}]
+      summary: Публичное меню точки с учётом стоп-листа
+      parameters:
+        - {name: locale, in: query, schema: {$ref: '#/components/schemas/Locale'}}
+        - {name: If-None-Match, in: header, schema: {type: string}}
+      responses:
+        '200':
+          description: Меню
+          headers: {ETag: {schema: {type: string}}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/PublicMenu'}}}
+        '304': {description: Не изменилось}
+  /guest/orders:
+    post:
+      tags: [guest]
+      security: [{guestAuth: []}]
+      summary: Создать заказ на стол
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/GuestOrderCreate'}}}
+      responses:
+        '201': {description: Создан, content: {application/json: {schema: {$ref: '#/components/schemas/Order'}}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+    get:
+      tags: [guest]
+      security: [{guestAuth: []}]
+      summary: Заказы текущей сессии стола
+      responses:
+        '200':
+          description: OK
+          content: {application/json: {schema: {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/Order'}}}}}}
+  /guest/orders/{order_id}:
+    get:
+      tags: [guest]
+      security: [{guestAuth: []}]
+      parameters: [{$ref: '#/components/parameters/OrderId'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Order'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /guest/bill:
+    get:
+      tags: [guest]
+      security: [{guestAuth: []}]
+      summary: Текущий счёт стола (из POS, если подключена)
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Bill'}}}}
+  /guest/payments:
+    post:
+      tags: [guest]
+      security: [{guestAuth: []}]
+      summary: Инициировать оплату счёта (СБП / Яндекс Пэй / карта) через эквайера заведения
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PaymentCreate'}}}
+      responses:
+        '201': {description: Платёж создан, content: {application/json: {schema: {$ref: '#/components/schemas/Payment'}}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+  /guest/payments/{payment_id}:
+    get:
+      tags: [guest]
+      security: [{guestAuth: []}]
+      parameters: [{name: payment_id, in: path, required: true, schema: {$ref: '#/components/schemas/Id'}}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Payment'}}}}
+  /guest/calls:
+    post:
+      tags: [guest]
+      security: [{guestAuth: []}]
+      summary: Позвать официанта / попросить счёт
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, enum: [waiter, bill, cutlery, other]}
+                comment: {type: string, maxLength: 200}
+      responses:
+        '201': {description: Вызов создан, content: {application/json: {schema: {$ref: '#/components/schemas/TableCall'}}}}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /guest/ai/messages:
+    post:
+      tags: [guest]
+      security: [{guestAuth: []}]
+      summary: Сообщение ИИ-официанту (ответ потоком SSE или JSON)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: {type: string, maxLength: 1000}
+                conversation_id: {$ref: '#/components/schemas/Id'}
+      responses:
+        '200':
+          description: Ответ
+          content:
+            text/event-stream: {schema: {type: string}}
+            application/json: {schema: {$ref: '#/components/schemas/AiReply'}}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /guest/reviews:
+    post:
+      tags: [guest]
+      security: [{guestAuth: []}]
+      summary: Оценка визита после оплаты
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating: {type: integer, minimum: 1, maximum: 5}
+                text: {type: string, maxLength: 2000}
+                order_id: {$ref: '#/components/schemas/Id'}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {type: object, properties: {id: {$ref: '#/components/schemas/Id'}, redirect_url: {type: [string, 'null'], format: uri, description: 'Ссылка на Яндекс Карты/2ГИС при rating >= 4'}}}}}}
+  /guest/consents:
+    post:
+      tags: [guest]
+      security: [{guestAuth: []}]
+      summary: Зафиксировать согласие гостя (152-ФЗ, 38-ФЗ)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ConsentCreate'}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Consent'}}}}
+
+  # ---------------- ADMIN ----------------
+  /venues:
+    get:
+      tags: [admin-venues]
+      summary: Точки организации (в пределах прав)
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/VenuePage'}}}}
+    post:
+      tags: [admin-venues]
+      summary: Создать точку (owner)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/VenueInput'}}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Venue'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /venues/{venue_id}:
+    parameters: [{$ref: '#/components/parameters/VenueId'}]
+    get:
+      tags: [admin-venues]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Venue'}}}}
+    patch:
+      tags: [admin-venues]
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody: {required: true, content: {application/merge-patch+json: {schema: {$ref: '#/components/schemas/VenueInput'}}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Venue'}}}}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+  /venues/{venue_id}/tables:
+    parameters: [{$ref: '#/components/parameters/VenueId'}]
+    get:
+      tags: [admin-venues]
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/TablePage'}}}}
+    post:
+      tags: [admin-venues]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/TableInput'}}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Table'}}}}
+  /venues/{venue_id}/tables/{table_id}/qr:rotate:
+    parameters: [{$ref: '#/components/parameters/VenueId'}, {name: table_id, in: path, required: true, schema: {$ref: '#/components/schemas/Id'}}]
+    post:
+      tags: [admin-venues]
+      summary: Перевыпустить QR-токен стола (старый — 410 Gone)
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Table'}}}}
+  /venues/{venue_id}/menu:
+    parameters: [{$ref: '#/components/parameters/VenueId'}]
+    get:
+      tags: [admin-menu]
+      summary: Полное меню (включая скрытые позиции)
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PublicMenu'}}}}
+  /venues/{venue_id}/menu/items:
+    parameters: [{$ref: '#/components/parameters/VenueId'}]
+    get:
+      tags: [admin-menu]
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {name: category_id, in: query, schema: {$ref: '#/components/schemas/Id'}}
+        - {name: q, in: query, schema: {type: string, maxLength: 100}}
+        - {name: updated_since, in: query, schema: {type: string, format: date-time}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MenuItemPage'}}}}
+    post:
+      tags: [admin-menu]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MenuItemInput'}}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MenuItem'}}}}
+        '409': {description: Меню синхронизируется из POS — правка запрещена, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /venues/{venue_id}/menu/items/{item_id}:
+    parameters: [{$ref: '#/components/parameters/VenueId'}, {name: item_id, in: path, required: true, schema: {$ref: '#/components/schemas/Id'}}]
+    patch:
+      tags: [admin-menu]
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody: {required: true, content: {application/merge-patch+json: {schema: {$ref: '#/components/schemas/MenuItemInput'}}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MenuItem'}}}}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+    delete:
+      tags: [admin-menu]
+      responses:
+        '204': {description: Архивировано (soft delete)}
+  /venues/{venue_id}/stop-list:
+    parameters: [{$ref: '#/components/parameters/VenueId'}]
+    put:
+      tags: [admin-menu]
+      summary: Заменить стоп-лист вручную (если нет POS)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/StopListEntry'}}}}
+      responses:
+        '200': {description: OK}
+  /venues/{venue_id}/orders:
+    parameters: [{$ref: '#/components/parameters/VenueId'}]
+    get:
+      tags: [admin-orders]
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {name: status, in: query, schema: {type: array, items: {$ref: '#/components/schemas/OrderStatus'}}, style: form, explode: false}
+        - {name: table_id, in: query, schema: {$ref: '#/components/schemas/Id'}}
+        - {name: created_from, in: query, schema: {type: string, format: date-time}}
+        - {name: created_to, in: query, schema: {type: string, format: date-time}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/OrderPage'}}}}
+  /venues/{venue_id}/orders/{order_id}:transition:
+    parameters: [{$ref: '#/components/parameters/VenueId'}, {$ref: '#/components/parameters/OrderId'}]
+    post:
+      tags: [admin-orders]
+      summary: Сменить статус заказа (accept, reject, serve, close)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: {type: string, enum: [accept, reject, serve, close]}
+                reason: {type: string, maxLength: 200}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Order'}}}}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /venues/{venue_id}/calls:
+    parameters: [{$ref: '#/components/parameters/VenueId'}]
+    get:
+      tags: [admin-orders]
+      parameters: [{name: status, in: query, schema: {type: string, enum: [open, acknowledged, closed]}}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/TableCall'}}}}}}}
+  /venues/{venue_id}/events:
+    parameters: [{$ref: '#/components/parameters/VenueId'}]
+    get:
+      tags: [admin-orders]
+      summary: Поток событий точки для панели официанта (SSE)
+      parameters: [{name: Last-Event-ID, in: header, schema: {type: string}}]
+      responses:
+        '200': {description: SSE-поток, content: {text/event-stream: {schema: {type: string}}}}
+  /venues/{venue_id}/bookings:
+    parameters: [{$ref: '#/components/parameters/VenueId'}]
+    get:
+      tags: [admin-bookings]
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {name: date, in: query, schema: {type: string, format: date}}
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/BookingStatus'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/BookingPage'}}}}
+    post:
+      tags: [admin-bookings]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/BookingInput'}}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Booking'}}}}
+        '409': {description: Нет свободных столов на слот, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /venues/{venue_id}/bookings/{booking_id}:
+    parameters: [{$ref: '#/components/parameters/VenueId'}, {name: booking_id, in: path, required: true, schema: {$ref: '#/components/schemas/Id'}}]
+    patch:
+      tags: [admin-bookings]
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody: {required: true, content: {application/merge-patch+json: {schema: {$ref: '#/components/schemas/BookingInput'}}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Booking'}}}}
+  /venues/{venue_id}/reviews:
+    parameters: [{$ref: '#/components/parameters/VenueId'}]
+    get:
+      tags: [admin-reviews]
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {name: source, in: query, schema: {type: string, enum: [yandex_maps, 2gis, internal, yandex_eda, other]}}
+        - {name: rating_max, in: query, schema: {type: integer, minimum: 1, maximum: 5}}
+        - {name: reply_status, in: query, schema: {type: string, enum: [none, draft, published]}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/ReviewPage'}}}}
+  /venues/{venue_id}/reviews/{review_id}/reply:
+    parameters: [{$ref: '#/components/parameters/VenueId'}, {name: review_id, in: path, required: true, schema: {$ref: '#/components/schemas/Id'}}]
+    post:
+      tags: [admin-reviews]
+      summary: Сгенерировать черновик (ai) или опубликовать ответ
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode: {type: string, enum: [ai_draft, publish]}
+                text: {type: string, maxLength: 4000}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Review'}}}}
+  /guests:
+    get:
+      tags: [admin-crm]
+      summary: Гости организации (ПДн маскируются для manager)
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {name: segment, in: query, schema: {type: string, enum: [new, regular, sleeping, lost, vip]}}
+        - {name: phone, in: query, schema: {$ref: '#/components/schemas/Phone'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/GuestPage'}}}}
+  /guests/{guest_id}:
+    parameters: [{name: guest_id, in: path, required: true, schema: {$ref: '#/components/schemas/Id'}}]
+    delete:
+      tags: [admin-crm]
+      summary: Удалить ПДн гостя по запросу субъекта (152-ФЗ ст. 21)
+      responses:
+        '202': {description: Удаление поставлено в очередь (≤ 10 рабочих дней)}
+  /guests/exports:
+    post:
+      tags: [admin-crm]
+      summary: Экспорт базы гостей (только owner, журналируется)
+      responses:
+        '202': {description: Задача создана, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
+  /users:
+    get:
+      tags: [admin-users]
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/UserPage'}}}}
+  /users/invitations:
+    post:
+      tags: [admin-users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, role]
+              properties:
+                phone: {$ref: '#/components/schemas/Phone'}
+                role: {$ref: '#/components/schemas/Role'}
+                venue_ids: {type: array, items: {$ref: '#/components/schemas/Id'}}
+      responses:
+        '201': {description: Приглашение отправлено}
+  /audit-log:
+    get:
+      tags: [admin-users]
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Cursor'}, {name: venue_id, in: query, schema: {$ref: '#/components/schemas/Id'}}]
+      responses:
+        '200': {description: OK}
+  /jobs/{job_id}:
+    get:
+      tags: [admin-crm]
+      parameters: [{name: job_id, in: path, required: true, schema: {$ref: '#/components/schemas/Id'}}]
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
+
+  # ---------------- WEBHOOKS IN ----------------
+  /webhooks/payments/{provider}/{integration_id}:
+    post:
+      tags: [webhooks-in]
+      security: []
+      summary: Уведомление эквайера о статусе платежа
+      description: |
+        provider: yookassa (проверка IP-allowlist + повторный GET /payments/{id}), tbank (поле Token SHA-256),
+        yandexpay (JWT ES256), sbp_bank (HMAC-SHA256 в X-Signature). Ответ 200 только после фиксации в БД.
+      parameters:
+        - {name: provider, in: path, required: true, schema: {type: string, enum: [yookassa, tbank, yandexpay, sbp_bank]}}
+        - {name: integration_id, in: path, required: true, schema: {$ref: '#/components/schemas/Id'}}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+      responses:
+        '200': {description: Принято (в т.ч. повторно — идемпотентно)}
+        '401': {description: Подпись не прошла}
+  /webhooks/pos/{provider}/{integration_id}:
+    post:
+      tags: [webhooks-in]
+      security: []
+      summary: События POS (iikoCloud, Poster, r_keeper)
+      description: iiko — заголовок Authorization с authToken, заданным в настройках вебхука; Poster — verify-подпись md5; r_keeper — HMAC.
+      parameters:
+        - {name: provider, in: path, required: true, schema: {type: string, enum: [iiko, poster, rkeeper]}}
+        - {name: integration_id, in: path, required: true, schema: {$ref: '#/components/schemas/Id'}}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: true}}}}
+      responses:
+        '200': {description: Принято}
+        '401': {description: Неверный токен}
+
+  # ---------------- WEBHOOKS OUT ----------------
+  /webhook-endpoints:
+    get:
+      tags: [webhooks-out]
+      responses:
+        '200': {description: OK}
+    post:
+      tags: [webhooks-out]
+      summary: Подписать URL партнёра/клиента на события
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, events]
+              properties:
+                url: {type: string, format: uri, pattern: '^https://'}
+                events: {type: array, items: {$ref: '#/components/schemas/EventType'}}
+                venue_ids: {type: array, items: {$ref: '#/components/schemas/Id'}}
+      responses:
+        '201':
+          description: Создано; secret показывается один раз
+          content:
+            application/json:
+              schema: {type: object, properties: {id: {$ref: '#/components/schemas/Id'}, secret: {type: string}}}
+
+webhooks:
+  order.created:
+    post:
+      summary: Исходящее событие (общий конверт)
+      parameters:
+        - {name: Webhook-Id, in: header, required: true, schema: {type: string}}
+        - {name: Webhook-Timestamp, in: header, required: true, schema: {type: integer}}
+        - {name: Webhook-Signature, in: header, required: true, schema: {type: string, example: 'v1,base64(hmac_sha256(secret, id.timestamp.body))'}}
+      requestBody:
+        content: {application/json: {schema: {$ref: '#/components/schemas/EventEnvelope'}}}
+      responses:
+        '2XX': {description: Доставлено}
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access JWT персонала, ES256, TTL 15 мин.
+    guestAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Guest JWT (aud=guest), выдаётся /guest/sessions, TTL 4 ч, привязан к table_id.
+  parameters:
+    VenueId: {name: venue_id, in: path, required: true, schema: {$ref: '#/components/schemas/Id'}}
+    OrderId: {name: order_id, in: path, required: true, schema: {$ref: '#/components/schemas/Id'}}
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+    Cursor: {name: cursor, in: query, schema: {type: string}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}}
+    IfMatch: {name: If-Match, in: header, schema: {type: string}}
+  responses:
+    Unauthorized: {description: Нет или неверный токен, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    Forbidden: {description: Недостаточно прав, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    NotFound: {description: Не найдено, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    Conflict: {description: Конфликт состояния, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    PreconditionFailed: {description: ETag не совпал, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    Unprocessable: {description: Ошибка валидации, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    TooManyRequests:
+      description: Превышен лимит
+      headers: {Retry-After: {schema: {type: integer}}}
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+  schemas:
+    Id: {type: string, pattern: '^[a-z]{2,4}_[0-9A-HJKMNP-TV-Z]{26}$', description: 'Префикс + ULID, напр. ord_01J...'}
+    Money: {type: integer, minimum: 0, description: Сумма в копейках (RUB)}
+    Phone: {type: string, pattern: '^\+[1-9][0-9]{7,14}$'}
+    Locale: {type: string, enum: [ru, en, zh, kk, uz, hy, ar, tr, de, fr], default: ru}
+    Role: {type: string, enum: [owner, manager, staff, partner, support]}
+    OrderStatus: {type: string, enum: [new, accepted, rejected, sent_to_pos, served, paid, closed, cancelled]}
+    BookingStatus: {type: string, enum: [pending, confirmed, seated, no_show, cancelled]}
+    EventType:
+      type: string
+      enum: [order.created, order.status_changed, call.created, payment.succeeded, payment.failed, payment.refunded, tip.paid, booking.created, booking.updated, booking.cancelled, review.received, review.negative, menu.updated, stop_list.updated, guest.consent_changed]
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: {type: string, format: uri, example: 'https://docs.podacha.ai/errors/order-item-unavailable'}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        instance: {type: string}
+        code: {type: string, example: ORDER_ITEM_UNAVAILABLE}
+        request_id: {type: string}
+        errors:
+          type: array
+          items: {type: object, properties: {pointer: {type: string}, code: {type: string}, message: {type: string}}}
+    PageMeta:
+      type: object
+      properties:
+        next_cursor: {type: [string, 'null']}
+        has_more: {type: boolean}
+    LoginRequest:
+      type: object
+      oneOf:
+        - required: [login, password]
+        - required: [phone, otp]
+      properties:
+        login: {type: string}
+        password: {type: string, minLength: 10}
+        phone: {$ref: '#/components/schemas/Phone'}
+        otp: {type: string, pattern: '^[0-9]{6}$'}
+    TokenPair:
+      type: object
+      required: [access_token, refresh_token, expires_in, token_type]
+      properties:
+        access_token: {type: string}
+        refresh_token: {type: string}
+        expires_in: {type: integer, example: 900}
+        token_type: {type: string, const: Bearer}
+    Me:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        name: {type: string}
+        org_id: {$ref: '#/components/schemas/Id'}
+        memberships:
+          type: array
+          items: {type: object, properties: {role: {$ref: '#/components/schemas/Role'}, venue_ids: {type: array, items: {$ref: '#/components/schemas/Id'}}}}
+    GuestSession:
+      type: object
+      properties:
+        access_token: {type: string}
+        expires_in: {type: integer, example: 14400}
+        venue: {type: object, properties: {id: {$ref: '#/components/schemas/Id'}, name: {type: string}, currency: {type: string, const: RUB}, features: {type: array, items: {type: string, enum: [ordering, payment, tips, ai_waiter, calls, reviews]}}}}
+        table: {type: object, properties: {id: {$ref: '#/components/schemas/Id'}, label: {type: string}}}
+    PublicMenu:
+      type: object
+      properties:
+        version: {type: string}
+        locale: {$ref: '#/components/schemas/Locale'}
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {$ref: '#/components/schemas/Id'}
+              name: {type: string}
+              items: {type: array, items: {$ref: '#/components/schemas/MenuItem'}}
+    MenuItem:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        external_id: {type: [string, 'null'], description: id в POS}
+        name: {type: string}
+        description: {type: string}
+        price: {$ref: '#/components/schemas/Money'}
+        weight_g: {type: [integer, 'null']}
+        kcal: {type: [integer, 'null']}
+        allergens: {type: array, items: {type: string, enum: [gluten, crustaceans, eggs, fish, peanuts, soy, milk, nuts, celery, mustard, sesame, sulphites, lupin, molluscs]}}
+        tags: {type: array, items: {type: string}}
+        photo_url: {type: [string, 'null'], format: uri}
+        available: {type: boolean}
+        modifier_groups:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {$ref: '#/components/schemas/Id'}
+              name: {type: string}
+              min: {type: integer}
+              max: {type: integer}
+              options: {type: array, items: {type: object, properties: {id: {$ref: '#/components/schemas/Id'}, name: {type: string}, price: {$ref: '#/components/schemas/Money'}}}}
+        updated_at: {type: string, format: date-time}
+    MenuItemInput:
+      type: object
+      properties:
+        category_id: {$ref: '#/components/schemas/Id'}
+        name: {type: string, maxLength: 120}
+        description: {type: string, maxLength: 1000}
+        price: {$ref: '#/components/schemas/Money'}
+        allergens: {type: array, items: {type: string}}
+        hidden: {type: boolean}
+    MenuItemPage:
+      type: object
+      properties: {data: {type: array, items: {$ref: '#/components/schemas/MenuItem'}}, page: {$ref: '#/components/schemas/PageMeta'}}
+    StopListEntry:
+      type: object
+      required: [item_id]
+      properties:
+        item_id: {$ref: '#/components/schemas/Id'}
+        balance: {type: [number, 'null'], description: null — полностью недоступно}
+    GuestOrderCreate:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            required: [item_id, qty]
+            properties:
+              item_id: {$ref: '#/components/schemas/Id'}
+              qty: {type: integer, minimum: 1, maximum: 20}
+              modifier_option_ids: {type: array, items: {$ref: '#/components/schemas/Id'}}
+              comment: {type: string, maxLength: 200}
+        comment: {type: string, maxLength: 500}
+        menu_version: {type: string, description: Версия меню, по которой собрана корзина}
+        source: {type: string, enum: [menu, ai_waiter], default: menu}
+    Order:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        number: {type: integer, description: Короткий номер на смену}
+        venue_id: {$ref: '#/components/schemas/Id'}
+        table_id: {$ref: '#/components/schemas/Id'}
+        status: {$ref: '#/components/schemas/OrderStatus'}
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              item_id: {$ref: '#/components/schemas/Id'}
+              name: {type: string}
+              qty: {type: integer}
+              unit_price: {$ref: '#/components/schemas/Money'}
+              total: {$ref: '#/components/schemas/Money'}
+        total: {$ref: '#/components/schemas/Money'}
+        pos_order_id: {type: [string, 'null']}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    OrderPage:
+      type: object
+      properties: {data: {type: array, items: {$ref: '#/components/schemas/Order'}}, page: {$ref: '#/components/schemas/PageMeta'}}
+    Bill:
+      type: object
+      properties:
+        source: {type: string, enum: [pos, platform]}
+        total: {$ref: '#/components/schemas/Money'}
+        paid: {$ref: '#/components/schemas/Money'}
+        due: {$ref: '#/components/schemas/Money'}
+        lines: {type: array, items: {type: object, properties: {line_id: {type: string}, name: {type: string}, qty: {type: number}, total: {$ref: '#/components/schemas/Money'}}}}
+        version: {type: string}
+    PaymentCreate:
+      type: object
+      required: [amount, method, bill_version]
+      properties:
+        amount: {$ref: '#/components/schemas/Money'}
+        method: {type: string, enum: [sbp, yandex_pay, card]}
+        split: {type: object, properties: {mode: {type: string, enum: [full, equal, lines]}, parts: {type: integer, minimum: 2, maximum: 20}, line_ids: {type: array, items: {type: string}}}}
+        tip: {type: object, properties: {amount: {$ref: '#/components/schemas/Money'}, staff_id: {$ref: '#/components/schemas/Id'}}}
+        bill_version: {type: string}
+        return_url: {type: string, format: uri}
+        receipt_contact: {type: string, description: email или телефон для электронного чека 54-ФЗ}
+    Payment:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        status: {type: string, enum: [pending, requires_action, succeeded, failed, cancelled, refunded, partially_refunded]}
+        amount: {$ref: '#/components/schemas/Money'}
+        tip_amount: {$ref: '#/components/schemas/Money'}
+        method: {type: string}
+        provider: {type: string}
+        confirmation: {type: object, properties: {type: {type: string, enum: [redirect, qr, deeplink]}, url: {type: string, format: uri}}}
+        receipt_url: {type: [string, 'null'], format: uri}
+        expires_at: {type: string, format: date-time}
+    TableCall:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        table_id: {$ref: '#/components/schemas/Id'}
+        reason: {type: string}
+        status: {type: string, enum: [open, acknowledged, closed]}
+        created_at: {type: string, format: date-time}
+    AiReply:
+      type: object
+      properties:
+        conversation_id: {$ref: '#/components/schemas/Id'}
+        text: {type: string}
+        suggestions: {type: array, items: {type: object, properties: {item_id: {$ref: '#/components/schemas/Id'}, reason: {type: string}}}}
+        handoff: {type: boolean, description: Нужен человек}
+    ConsentCreate:
+      type: object
+      required: [purpose, granted, document_version]
+      properties:
+        purpose: {type: string, enum: [pd_processing, marketing_messages, loyalty]}
+        granted: {type: boolean}
+        document_version: {type: string}
+        phone: {$ref: '#/components/schemas/Phone'}
+    Consent:
+      allOf:
+        - $ref: '#/components/schemas/ConsentCreate'
+        - type: object
+          properties: {id: {$ref: '#/components/schemas/Id'}, created_at: {type: string, format: date-time}}
+    Venue:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        name: {type: string}
+        address: {type: string}
+        timezone: {type: string, example: Europe/Moscow}
+        pos_provider: {type: [string, 'null'], enum: [iiko, poster, rkeeper, null]}
+        features: {type: array, items: {type: string}}
+        etag: {type: string}
+    VenueInput:
+      type: object
+      properties: {name: {type: string}, address: {type: string}, timezone: {type: string}}
+    VenuePage:
+      type: object
+      properties: {data: {type: array, items: {$ref: '#/components/schemas/Venue'}}, page: {$ref: '#/components/schemas/PageMeta'}}
+    Table:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        label: {type: string}
+        zone: {type: string}
+        seats: {type: integer}
+        qr_url: {type: string, format: uri}
+        qr_rotated_at: {type: string, format: date-time}
+    TableInput:
+      type: object
+      required: [label]
+      properties: {label: {type: string}, zone: {type: string}, seats: {type: integer}, external_id: {type: string}}
+    TablePage:
+      type: object
+      properties: {data: {type: array, items: {$ref: '#/components/schemas/Table'}}, page: {$ref: '#/components/schemas/PageMeta'}}
+    BookingInput:
+      type: object
+      properties:
+        starts_at: {type: string, format: date-time}
+        duration_min: {type: integer, default: 120}
+        party_size: {type: integer, minimum: 1, maximum: 100}
+        guest_name: {type: string}
+        guest_phone: {$ref: '#/components/schemas/Phone'}
+        table_ids: {type: array, items: {$ref: '#/components/schemas/Id'}}
+        channel: {type: string, enum: [telegram, vk, max, phone, web, admin]}
+        comment: {type: string}
+        status: {$ref: '#/components/schemas/BookingStatus'}
+    Booking:
+      allOf:
+        - $ref: '#/components/schemas/BookingInput'
+        - type: object
+          properties: {id: {$ref: '#/components/schemas/Id'}, created_at: {type: string, format: date-time}}
+    BookingPage:
+      type: object
+      properties: {data: {type: array, items: {$ref: '#/components/schemas/Booking'}}, page: {$ref: '#/components/schemas/PageMeta'}}
+    Review:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        source: {type: string}
+        rating: {type: integer}
+        text: {type: string}
+        author_name: {type: string}
+        reply: {type: [object, 'null'], properties: {status: {type: string, enum: [draft, published]}, text: {type: string}, by: {type: string, enum: [ai, user]}}}
+        created_at: {type: string, format: date-time}
+    ReviewPage:
+      type: object
+      properties: {data: {type: array, items: {$ref: '#/components/schemas/Review'}}, page: {$ref: '#/components/schemas/PageMeta'}}
+    GuestProfile:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        phone_masked: {type: string, example: '+7 *** ***-12-34'}
+        name: {type: string}
+        segment: {type: string}
+        visits: {type: integer}
+        ltv: {$ref: '#/components/schemas/Money'}
+        marketing_consent: {type: boolean}
+    GuestPage:
+      type: object
+      properties: {data: {type: array, items: {$ref: '#/components/schemas/GuestProfile'}}, page: {$ref: '#/components/schemas/PageMeta'}}
+    User:
+      type: object
+      properties: {id: {$ref: '#/components/schemas/Id'}, name: {type: string}, role: {$ref: '#/components/schemas/Role'}, venue_ids: {type: array, items: {$ref: '#/components/schemas/Id'}}}
+    UserPage:
+      type: object
+      properties: {data: {type: array, items: {$ref: '#/components/schemas/User'}}, page: {$ref: '#/components/schemas/PageMeta'}}
+    Job:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        status: {type: string, enum: [queued, running, succeeded, failed]}
+        result_url: {type: [string, 'null'], format: uri, description: Подписанная ссылка S3 (Yandex Object Storage), 1 ч}
+    EventEnvelope:
+      type: object
+      required: [id, type, created_at, org_id, data]
+      properties:
+        id: {type: string, example: evt_01J...}
+        type: {$ref: '#/components/schemas/EventType'}
+        api_version: {type: string, example: '2026-11-01'}
+        created_at: {type: string, format: date-time}
+        org_id: {$ref: '#/components/schemas/Id'}
+        venue_id: {$ref: '#/components/schemas/Id'}
+        data: {type: object, additionalProperties: true}

@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /404.html
+
+# При смене домена заменить podacha.ai здесь и в sitemap.xml
+Sitemap: https://podacha.ai/sitemap.xml
